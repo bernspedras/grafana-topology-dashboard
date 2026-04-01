@@ -1,5 +1,5 @@
 {
-  "name": "bernspedras-topology-dashboard-app",
+  "name": "bernspedras-topology-app",
   "version": "2.0.0",
   "scripts": {
     "build": "go run github.com/magefile/mage -v build:linuxARM64 && webpack -c ./.config/webpack/webpack.config.ts --env production",

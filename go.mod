@@ -1,4 +1,4 @@
-module github.com/bernspedras/topology-dashboard-app
+module github.com/bernspedras/topology-app
 
 go 1.25.7
 

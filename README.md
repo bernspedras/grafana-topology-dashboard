@@ -22,7 +22,7 @@ Grafana app plugin for interactive service topology visualization with live Prom
 Install from the [Grafana plugin catalog](https://grafana.com/grafana/plugins/) or manually:
 
 ```bash
-grafana-cli plugins install bernspedras-topology-dashboard-app
+grafana-cli plugins install bernspedras-topology-app
 ```
 
 ## Setup

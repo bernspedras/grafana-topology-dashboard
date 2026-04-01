@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "type": "app",
   "name": "Topology Dashboard",
-  "id": "bernspedras-topology-dashboard-app",
+  "id": "bernspedras-topology-app",
   "info": {
     "keywords": ["topology", "monitoring", "grafana", "prometheus"],
     "description": "Interactive service topology visualization with live Prometheus metrics",
@@ -41,7 +41,7 @@
     }
   ],
   "backend": true,
-  "executable": "gpx_bernspedras-topology-dashboard-app",
+  "executable": "gpx_bernspedras-topology-app",
   "dependencies": {
     "grafanaDependency": ">=11.0.0",
     "plugins": []
