@@ -24,3 +24,4 @@ services:
       GF_DATAPROXY_LOGGING: 1
       GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: bernspedras-topology-app
       GF_FEATURE_TOGGLES_ENABLE: externalServiceAccounts
+      TOPOLOGY_DEV_MODE: "true"
