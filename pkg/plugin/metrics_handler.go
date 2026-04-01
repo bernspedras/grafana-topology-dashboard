@@ -18,10 +18,13 @@ import (
 type MetricsBatchRequest struct {
 	// Queries grouped by logical datasource name. Each inner map is queryKey → PromQL.
 	Queries map[string]map[string]string `json:"queries"`
-	// DataSourceMap maps logical datasource names to Grafana datasource UIDs.
-	DataSourceMap map[string]string `json:"dataSourceMap"`
 	// IncludeBaseline requests week-ago comparison data (7 days before now).
 	IncludeBaseline bool `json:"includeBaseline"`
+}
+
+// pluginJSONData mirrors the jsonData stored in Grafana plugin settings.
+type pluginJSONData struct {
+	DataSourceMap map[string]string `json:"dataSourceMap"`
 }
 
 // MetricsBatchResponse is the JSON response returned to the frontend.
@@ -59,10 +62,17 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve datasource name→UID map from plugin settings (admin-configured).
+	dsMap := a.resolveDataSourceMap(r)
+	if len(dsMap) == 0 {
+		http.Error(w, "No datasource mapping configured in plugin settings", http.StatusBadRequest)
+		return
+	}
+
 	// Build current-time tasks.
 	var currentTasks []QueryTask
 	for dsName, queries := range req.Queries {
-		dsUID, ok := req.DataSourceMap[dsName]
+		dsUID, ok := dsMap[dsName]
 		if !ok || dsUID == "" {
 			continue
 		}
@@ -82,14 +92,14 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	// Handle baseline (week-ago) queries.
 	var baselineResults map[string]*float64
 	if req.IncludeBaseline {
-		cacheKey := a.baselineCacheKey(req)
+		cacheKey := a.baselineCacheKey(req, dsMap)
 		if cached, ok := a.baselineCache.Get(cacheKey); ok {
 			baselineResults = cached
 		} else {
 			weekAgo := time.Now().Unix() - 7*86400
 			var baselineTasks []QueryTask
 			for dsName, queries := range req.Queries {
-				dsUID, ok := req.DataSourceMap[dsName]
+				dsUID, ok := dsMap[dsName]
 				if !ok || dsUID == "" {
 					continue
 				}
@@ -167,8 +177,23 @@ func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string
 	return grafanaURL, "Basic " + basicAuth(user, pass)
 }
 
+// resolveDataSourceMap reads the admin-configured datasource name→UID mapping
+// from the plugin's jsonData in the Grafana database.
+func (a *App) resolveDataSourceMap(r *http.Request) map[string]string {
+	pluginCtx := backend.PluginConfigFromContext(r.Context())
+	if pluginCtx.AppInstanceSettings == nil || len(pluginCtx.AppInstanceSettings.JSONData) == 0 {
+		return nil
+	}
+	var data pluginJSONData
+	if err := json.Unmarshal(pluginCtx.AppInstanceSettings.JSONData, &data); err != nil {
+		a.logger.Warn("Failed to parse plugin jsonData for datasource map", "error", err)
+		return nil
+	}
+	return data.DataSourceMap
+}
+
 // baselineCacheKey computes a deterministic cache key from the query map.
-func (a *App) baselineCacheKey(req MetricsBatchRequest) string {
+func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string) string {
 	// Sort datasource names for deterministic ordering.
 	dsNames := make([]string, 0, len(req.Queries))
 	for name := range req.Queries {
@@ -178,7 +203,7 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest) string {
 
 	h := sha256.New()
 	for _, dsName := range dsNames {
-		uid := req.DataSourceMap[dsName]
+		uid := dsMap[dsName]
 		h.Write([]byte(dsName))
 		h.Write([]byte(uid))
 
