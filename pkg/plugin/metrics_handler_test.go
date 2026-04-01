@@ -14,10 +14,14 @@ import (
 )
 
 // withPluginContext injects a PluginContext into the request context so that
-// handleMetrics can extract Grafana URL and auth info.
-func withPluginContext(r *http.Request, grafanaURL string) *http.Request {
+// handleMetrics can extract Grafana URL, auth info, and the datasource map.
+func withPluginContext(r *http.Request, grafanaURL string, dsMap map[string]string) *http.Request {
+	jsonData, _ := json.Marshal(map[string]interface{}{
+		"dataSourceMap": dsMap,
+	})
 	pCtx := backend.PluginContext{
 		AppInstanceSettings: &backend.AppInstanceSettings{
+			JSONData: jsonData,
 			DecryptedSecureJSONData: map[string]string{
 				"serviceAccountToken": "test-token",
 			},
@@ -38,12 +42,11 @@ func TestHandleMetrics_EmptyQueries(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(MetricsBatchRequest{
-		Queries:       map[string]map[string]string{},
-		DataSourceMap: map[string]string{},
+		Queries: map[string]map[string]string{},
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
-	req = withPluginContext(req, "http://localhost:3000")
+	req = withPluginContext(req, "http://localhost:3000", map[string]string{})
 	rec := httptest.NewRecorder()
 
 	app.handleMetrics(rec, req)
@@ -106,13 +109,12 @@ func TestHandleMetrics_WithPrometheus(t *testing.T) {
 				"node:a:memory": "avg(memory)",
 			},
 		},
-		DataSourceMap:   map[string]string{"my-datasource": "ds-uid-1"},
 		IncludeBaseline: false,
 	}
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
-	req = withPluginContext(req, promServer.URL)
+	req = withPluginContext(req, promServer.URL, map[string]string{"my-datasource": "ds-uid-1"})
 	rec := httptest.NewRecorder()
 
 	app.handleMetrics(rec, req)
@@ -152,13 +154,12 @@ func TestHandleMetrics_WithBaseline(t *testing.T) {
 
 	reqBody := MetricsBatchRequest{
 		Queries:         map[string]map[string]string{"ds1": {"node:a:cpu": "avg(cpu)"}},
-		DataSourceMap:   map[string]string{"ds1": "uid1"},
 		IncludeBaseline: true,
 	}
 	body, _ := json.Marshal(reqBody)
 
 	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
-	req = withPluginContext(req, promServer.URL)
+	req = withPluginContext(req, promServer.URL, map[string]string{"ds1": "uid1"})
 	rec := httptest.NewRecorder()
 
 	app.handleMetrics(rec, req)
@@ -195,14 +196,14 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 
 	reqBody := MetricsBatchRequest{
 		Queries:         map[string]map[string]string{"ds1": {"k": "q"}},
-		DataSourceMap:   map[string]string{"ds1": "uid1"},
 		IncludeBaseline: true,
 	}
+	dsMap := map[string]string{"ds1": "uid1"}
 	body, _ := json.Marshal(reqBody)
 
 	// First request: should hit Prometheus for both current + baseline.
 	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
-	req = withPluginContext(req, promServer.URL)
+	req = withPluginContext(req, promServer.URL, dsMap)
 	rec := httptest.NewRecorder()
 	app.handleMetrics(rec, req)
 
@@ -211,7 +212,7 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 	// Second request: baseline should come from cache.
 	body, _ = json.Marshal(reqBody)
 	req = httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
-	req = withPluginContext(req, promServer.URL)
+	req = withPluginContext(req, promServer.URL, dsMap)
 	rec = httptest.NewRecorder()
 	app.handleMetrics(rec, req)
 

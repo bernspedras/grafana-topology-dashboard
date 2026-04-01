@@ -25,7 +25,6 @@ interface UseGrafanaMetricsResult {
 
 interface BackendMetricsRequest {
   readonly queries: Record<string, Record<string, string>>;
-  readonly dataSourceMap: Record<string, string>;
   readonly includeBaseline: boolean;
 }
 
@@ -156,7 +155,6 @@ export function useGrafanaMetrics(
         const includeBaseline = baselineCacheRef.current === undefined;
         const response = await fetchMetricsFromBackend({
           queries: groupedMapsToRecord(groupedMaps),
-          dataSourceMap,
           includeBaseline,
         });
 

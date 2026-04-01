@@ -51,3 +51,6 @@ CLAUDE.local.md
 
 # Go
 pkg/plugin/__debug_bin*
+
+# Temporary files
+/tmp/
