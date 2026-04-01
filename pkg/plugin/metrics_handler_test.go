@@ -1,0 +1,223 @@
+package plugin
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+)
+
+// withPluginContext injects a PluginContext into the request context so that
+// handleMetrics can extract Grafana URL and auth info.
+func withPluginContext(r *http.Request, grafanaURL string) *http.Request {
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{
+				"serviceAccountToken": "test-token",
+			},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{
+			backend.AppURL: grafanaURL,
+		}),
+	}
+	ctx := backend.WithPluginContext(r.Context(), pCtx)
+	return r.WithContext(ctx)
+}
+
+func TestHandleMetrics_EmptyQueries(t *testing.T) {
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+	}
+
+	body, _ := json.Marshal(MetricsBatchRequest{
+		Queries:       map[string]map[string]string{},
+		DataSourceMap: map[string]string{},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	req = withPluginContext(req, "http://localhost:3000")
+	rec := httptest.NewRecorder()
+
+	app.handleMetrics(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp MetricsBatchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(resp.Results) != 0 {
+		t.Errorf("expected empty results, got %v", resp.Results)
+	}
+}
+
+func TestHandleMetrics_MethodNotAllowed(t *testing.T) {
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	app.handleMetrics(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rec.Code)
+	}
+}
+
+func TestHandleMetrics_WithPrometheus(t *testing.T) {
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		promql := r.URL.Query().Get("query")
+		w.Header().Set("Content-Type", "application/json")
+		switch promql {
+		case "avg(cpu)":
+			fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"42.5"]}]}}`)
+		case "avg(memory)":
+			fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"67.3"]}]}}`)
+		default:
+			fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[]}}`)
+		}
+	}))
+	defer promServer.Close()
+
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+	}
+
+	reqBody := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"my-datasource": {
+				"node:a:cpu":    "avg(cpu)",
+				"node:a:memory": "avg(memory)",
+			},
+		},
+		DataSourceMap:   map[string]string{"my-datasource": "ds-uid-1"},
+		IncludeBaseline: false,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	req = withPluginContext(req, promServer.URL)
+	rec := httptest.NewRecorder()
+
+	app.handleMetrics(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp MetricsBatchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Results["node:a:cpu"] == nil || *resp.Results["node:a:cpu"] != 42.5 {
+		t.Errorf("expected cpu=42.5, got %v", resp.Results["node:a:cpu"])
+	}
+	if resp.Results["node:a:memory"] == nil || *resp.Results["node:a:memory"] != 67.3 {
+		t.Errorf("expected memory=67.3, got %v", resp.Results["node:a:memory"])
+	}
+	if resp.BaselineResults != nil {
+		t.Errorf("expected no baseline results, got %v", resp.BaselineResults)
+	}
+}
+
+func TestHandleMetrics_WithBaseline(t *testing.T) {
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"10"]}]}}`)
+	}))
+	defer promServer.Close()
+
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+	}
+
+	reqBody := MetricsBatchRequest{
+		Queries:         map[string]map[string]string{"ds1": {"node:a:cpu": "avg(cpu)"}},
+		DataSourceMap:   map[string]string{"ds1": "uid1"},
+		IncludeBaseline: true,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	req = withPluginContext(req, promServer.URL)
+	rec := httptest.NewRecorder()
+
+	app.handleMetrics(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp MetricsBatchResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.Results["node:a:cpu"] == nil {
+		t.Fatal("expected current result")
+	}
+	if resp.BaselineResults == nil || resp.BaselineResults["node:a:cpu"] == nil {
+		t.Fatal("expected baseline result")
+	}
+}
+
+func TestHandleMetrics_BaselineCaching(t *testing.T) {
+	callCount := 0
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"1"]}]}}`)
+	}))
+	defer promServer.Close()
+
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+	}
+
+	reqBody := MetricsBatchRequest{
+		Queries:         map[string]map[string]string{"ds1": {"k": "q"}},
+		DataSourceMap:   map[string]string{"ds1": "uid1"},
+		IncludeBaseline: true,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	// First request: should hit Prometheus for both current + baseline.
+	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	req = withPluginContext(req, promServer.URL)
+	rec := httptest.NewRecorder()
+	app.handleMetrics(rec, req)
+
+	firstCallCount := callCount // current (1) + baseline (1) = 2
+
+	// Second request: baseline should come from cache.
+	body, _ = json.Marshal(reqBody)
+	req = httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	req = withPluginContext(req, promServer.URL)
+	rec = httptest.NewRecorder()
+	app.handleMetrics(rec, req)
+
+	secondDelta := callCount - firstCallCount // Only current (1), baseline from cache
+
+	if secondDelta != 1 {
+		t.Errorf("expected only 1 new call (current only, baseline cached), got %d new calls", secondDelta)
+	}
+}
