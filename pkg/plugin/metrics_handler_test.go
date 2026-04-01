@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -180,9 +181,9 @@ func TestHandleMetrics_WithBaseline(t *testing.T) {
 }
 
 func TestHandleMetrics_BaselineCaching(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int32
 	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"1"]}]}}`)
 	}))
@@ -207,7 +208,7 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 	rec := httptest.NewRecorder()
 	app.handleMetrics(rec, req)
 
-	firstCallCount := callCount // current (1) + baseline (1) = 2
+	firstCallCount := callCount.Load() // current (1) + baseline (1) = 2
 
 	// Second request: baseline should come from cache.
 	body, _ = json.Marshal(reqBody)
@@ -216,7 +217,7 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 	rec = httptest.NewRecorder()
 	app.handleMetrics(rec, req)
 
-	secondDelta := callCount - firstCallCount // Only current (1), baseline from cache
+	secondDelta := callCount.Load() - firstCallCount // Only current (1), baseline from cache
 
 	if secondDelta != 1 {
 		t.Errorf("expected only 1 new call (current only, baseline cached), got %d new calls", secondDelta)

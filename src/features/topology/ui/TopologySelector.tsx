@@ -3,10 +3,10 @@ import { css } from '@emotion/css';
 import type { SelectableValue } from '@grafana/data';
  
 import { Select } from '@grafana/ui';
-import type { TopologyListItem } from '../application/useTopologies';
+import type { FlowListItem } from '../application/topologyApi';
 
 interface TopologySelectorProps {
-  readonly topologies: readonly TopologyListItem[];
+  readonly topologies: readonly FlowListItem[];
   readonly selectedId: string;
   readonly onChange: (id: string) => void;
 }

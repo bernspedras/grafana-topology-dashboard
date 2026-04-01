@@ -278,12 +278,14 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
     setEditDsName(originalDsName);
   };
 
-  const handleSave = (): void => {
+  const handleSave = async (): Promise<void> => {
     if (onSaveQuery === undefined) return;
     setSaving(true);
-    onSaveQuery(entityId, metricKey, editQuery, editDsName);
-    // Parent will trigger reload; saving state will reset via useEffect syncing originals
-    setSaving(false);
+    try {
+      await onSaveQuery(entityId, metricKey, editQuery, editDsName);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return createPortal(
@@ -383,7 +385,7 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
               <button
                 type="button"
                 className={styles.saveButton}
-                onClick={handleSave}
+                onClick={(): void => { void handleSave(); }}
                 disabled={!hasChanges || saving || onSaveQuery === undefined}
               >
                 {saving ? 'Saving...' : 'Save'}

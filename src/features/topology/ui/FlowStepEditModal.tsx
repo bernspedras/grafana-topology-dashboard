@@ -80,9 +80,11 @@ export function FlowStepEditModal({ topologyId, flowSteps, onClose, onSaved }: F
   }, []);
 
   const handleAdd = useCallback((): void => {
-    const maxStep = rows.reduce((max, r) => Math.max(max, r.step), 0);
-    setRows((prev) => [...prev, { key: makeKey(), id: undefined, step: maxStep + 1, text: '' }]);
-  }, [rows]);
+    setRows((prev) => {
+      const maxStep = prev.reduce((max, r) => Math.max(max, r.step), 0);
+      return [...prev, { key: makeKey(), id: undefined, step: maxStep + 1, text: '' }];
+    });
+  }, []);
 
   const handleSave = useCallback((): void => {
     const drafts = toDrafts(rows);
