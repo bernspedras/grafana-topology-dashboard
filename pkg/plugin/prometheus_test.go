@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,9 +78,9 @@ func TestExecuteQueries_EmptyResult(t *testing.T) {
 }
 
 func TestExecuteQueries_Deduplication(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"42.5"]}]}}`)
 	}))
@@ -95,8 +96,8 @@ func TestExecuteQueries_Deduplication(t *testing.T) {
 
 	results := app.executeQueries(context.Background(), tasks, server.URL, "Bearer test")
 
-	if callCount != 1 {
-		t.Errorf("expected 1 HTTP call (deduplication), got %d", callCount)
+	if got := callCount.Load(); got != 1 {
+		t.Errorf("expected 1 HTTP call (deduplication), got %d", got)
 	}
 	if results["key-a"] == nil || *results["key-a"] != 42.5 {
 		t.Errorf("expected key-a=42.5, got %v", results["key-a"])

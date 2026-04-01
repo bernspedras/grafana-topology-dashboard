@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-export type SaveMetricQueryFn = (entityId: string, metricKey: string, newQuery: string, newDataSource: string) => void;
+export type SaveMetricQueryFn = (entityId: string, metricKey: string, newQuery: string, newDataSource: string) => Promise<void>;
 
 const SaveMetricQueryContext = createContext<SaveMetricQueryFn | undefined>(undefined);
 

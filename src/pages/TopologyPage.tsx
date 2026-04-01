@@ -415,88 +415,86 @@ function TopologyPage(): React.JSX.Element {
   }, [nodeTemplates, edgeTemplates, reload]);
 
   /** Save an edited metric query to the node or edge template, then reload. */
-  const handleSaveMetricQuery = useCallback((entityId: string, metricKey: string, newQuery: string, newDataSource: string): void => {
-    void (async (): Promise<void> => {
-      try {
-        // Deep-clone to get mutable plain objects from readonly template types
-        const deepClone = (obj: unknown): Record<string, unknown> =>
-          JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
+  const handleSaveMetricQuery = useCallback(async (entityId: string, metricKey: string, newQuery: string, newDataSource: string): Promise<void> => {
+    try {
+      // Deep-clone to get mutable plain objects from readonly template types
+      const deepClone = (obj: unknown): Record<string, unknown> =>
+        JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
 
-        const buildMetricValue = (defaultDs: string): string | { query: string; dataSource: string } =>
-          newDataSource !== defaultDs ? { query: newQuery, dataSource: newDataSource } : newQuery;
+      const buildMetricValue = (defaultDs: string): string | { query: string; dataSource: string } =>
+        newDataSource !== defaultDs ? { query: newQuery, dataSource: newDataSource } : newQuery;
 
-        // Determine if entityId matches a node template or edge template
-        const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
-        if (nodeTemplate !== undefined) {
-          const updated = deepClone(nodeTemplate);
-          const metricValue = buildMetricValue(nodeTemplate.dataSource);
+      // Determine if entityId matches a node template or edge template
+      const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
+      if (nodeTemplate !== undefined) {
+        const updated = deepClone(nodeTemplate);
+        const metricValue = buildMetricValue(nodeTemplate.dataSource);
 
-          if (metricKey.startsWith('custom:')) {
-            const customKey = metricKey.slice('custom:'.length);
-            const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
-            if (customs !== undefined) {
-              const idx = customs.findIndex((cm) => cm.key === customKey);
-              if (idx >= 0) {
-                customs[idx] = { ...customs[idx], promql: newQuery, dataSource: newDataSource !== nodeTemplate.dataSource ? newDataSource : undefined };
-              }
+        if (metricKey.startsWith('custom:')) {
+          const customKey = metricKey.slice('custom:'.length);
+          const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
+          if (customs !== undefined) {
+            const idx = customs.findIndex((cm) => cm.key === customKey);
+            if (idx >= 0) {
+              customs[idx] = { ...customs[idx], promql: newQuery, dataSource: newDataSource !== nodeTemplate.dataSource ? newDataSource : undefined };
             }
-          } else {
-            const prometheus = updated.prometheus as Record<string, unknown>;
-            prometheus[metricKey] = metricValue;
           }
-          await saveNodeTemplate(entityId, updated);
-          reload();
-          return;
+        } else {
+          const prometheus = updated.prometheus as Record<string, unknown>;
+          prometheus[metricKey] = metricValue;
         }
-
-        const edgeTemplate = edgeTemplates.find((t) => t.id === entityId);
-        if (edgeTemplate !== undefined) {
-          const updated = deepClone(edgeTemplate);
-          const metricValue = buildMetricValue(edgeTemplate.dataSource);
-
-          if (metricKey.startsWith('custom:')) {
-            const customKey = metricKey.slice('custom:'.length);
-            const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
-            if (customs !== undefined) {
-              const idx = customs.findIndex((cm) => cm.key === customKey);
-              if (idx >= 0) {
-                customs[idx] = { ...customs[idx], promql: newQuery, dataSource: newDataSource !== edgeTemplate.dataSource ? newDataSource : undefined };
-              }
-            }
-          } else if (edgeTemplate.kind === 'amqp' || edgeTemplate.kind === 'kafka') {
-            const consumerKeys = ['consumerRps', 'e2eLatencyP95', 'e2eLatencyAvg', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg', 'queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'consumerLag'];
-            if (consumerKeys.includes(metricKey)) {
-              const consumerKeyMap: Record<string, string> = {
-                consumerRps: 'rps', e2eLatencyP95: 'latencyP95', e2eLatencyAvg: 'latencyAvg',
-                consumerErrorRate: 'errorRate', consumerProcessingTimeP95: 'processingTimeP95',
-                consumerProcessingTimeAvg: 'processingTimeAvg', queueDepth: 'queueDepth',
-                queueResidenceTimeP95: 'queueResidenceTimeP95', queueResidenceTimeAvg: 'queueResidenceTimeAvg',
-                consumerLag: 'consumerLag',
-              };
-              const consumer: Record<string, unknown> | undefined = updated.consumer as Record<string, unknown> | undefined;
-              if (consumer != null) {
-                const conPrometheus = consumer.prometheus as Record<string, unknown>;
-                conPrometheus[consumerKeyMap[metricKey] ?? metricKey] = metricValue;
-              }
-            } else {
-              const publish = updated.publish as Record<string, unknown>;
-              const publishPrometheus = publish.prometheus as Record<string, unknown>;
-              publishPrometheus[metricKey] = metricValue;
-            }
-          } else {
-            const prometheus = updated.prometheus as Record<string, unknown>;
-            prometheus[metricKey] = metricValue;
-          }
-          await saveEdgeTemplate(entityId, updated);
-          reload();
-          return;
-        }
-
-        console.warn('[topology] Could not find template for entity', entityId);
-      } catch (err) {
-        console.error('[topology] Failed to save metric query', err);
+        await saveNodeTemplate(entityId, updated);
+        reload();
+        return;
       }
-    })();
+
+      const edgeTemplate = edgeTemplates.find((t) => t.id === entityId);
+      if (edgeTemplate !== undefined) {
+        const updated = deepClone(edgeTemplate);
+        const metricValue = buildMetricValue(edgeTemplate.dataSource);
+
+        if (metricKey.startsWith('custom:')) {
+          const customKey = metricKey.slice('custom:'.length);
+          const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
+          if (customs !== undefined) {
+            const idx = customs.findIndex((cm) => cm.key === customKey);
+            if (idx >= 0) {
+              customs[idx] = { ...customs[idx], promql: newQuery, dataSource: newDataSource !== edgeTemplate.dataSource ? newDataSource : undefined };
+            }
+          }
+        } else if (edgeTemplate.kind === 'amqp' || edgeTemplate.kind === 'kafka') {
+          const consumerKeys = ['consumerRps', 'e2eLatencyP95', 'e2eLatencyAvg', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg', 'queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'consumerLag'];
+          if (consumerKeys.includes(metricKey)) {
+            const consumerKeyMap: Record<string, string> = {
+              consumerRps: 'rps', e2eLatencyP95: 'latencyP95', e2eLatencyAvg: 'latencyAvg',
+              consumerErrorRate: 'errorRate', consumerProcessingTimeP95: 'processingTimeP95',
+              consumerProcessingTimeAvg: 'processingTimeAvg', queueDepth: 'queueDepth',
+              queueResidenceTimeP95: 'queueResidenceTimeP95', queueResidenceTimeAvg: 'queueResidenceTimeAvg',
+              consumerLag: 'consumerLag',
+            };
+            const consumer: Record<string, unknown> | undefined = updated.consumer as Record<string, unknown> | undefined;
+            if (consumer != null) {
+              const conPrometheus = consumer.prometheus as Record<string, unknown>;
+              conPrometheus[consumerKeyMap[metricKey] ?? metricKey] = metricValue;
+            }
+          } else {
+            const publish = updated.publish as Record<string, unknown>;
+            const publishPrometheus = publish.prometheus as Record<string, unknown>;
+            publishPrometheus[metricKey] = metricValue;
+          }
+        } else {
+          const prometheus = updated.prometheus as Record<string, unknown>;
+          prometheus[metricKey] = metricValue;
+        }
+        await saveEdgeTemplate(entityId, updated);
+        reload();
+        return;
+      }
+
+      console.warn('[topology] Could not find template for entity', entityId);
+    } catch (err) {
+      console.error('[topology] Failed to save metric query', err);
+    }
   }, [nodeTemplates, edgeTemplates, reload]);
 
   if (topologyLoading) {

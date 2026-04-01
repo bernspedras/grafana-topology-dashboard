@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   EdgeLabelRenderer,
   getBezierPath,
@@ -316,7 +316,19 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const setEdgeLabelOffset = useTopologyPositionStore((s) => s.setEdgeLabelOffset);
   const savedOffset = useTopologyPositionStore((s) => s.getEdgeLabelOffset(edgeId));
   const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
+  const listenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | undefined>(undefined);
+
+  // Clean up document listeners if the component unmounts mid-drag.
+  useEffect(() => {
+    return (): void => {
+      if (listenersRef.current) {
+        document.removeEventListener('mousemove', listenersRef.current.move);
+        document.removeEventListener('mouseup', listenersRef.current.up);
+        listenersRef.current = null;
+      }
+    };
+  }, []);
 
   const labelX = baseLabelX + (dragOffset?.x ?? savedOffset?.x ?? 0);
   const labelY = baseLabelY + (dragOffset?.y ?? savedOffset?.y ?? 0);
@@ -353,8 +365,10 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
       }
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      listenersRef.current = null;
     };
 
+    listenersRef.current = { move: onMouseMove, up: onMouseUp };
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   }, [edgeId, savedOffset, setEdgeLabelOffset]);
