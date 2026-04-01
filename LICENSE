@@ -119,9 +119,9 @@
       You may add Your own license statement for Your modifications and
       may provide additional grant of rights to use, copy, modify, merge,
       publish, distribute, sublicense, and/or sell copies of those
-      modifications or of those Derivative Works as a whole, and to permit
-      persons to whom the Work is furnished to do so, subject to the
-      following conditions:
+      Modifications or of such Derivative Works as a whole, if and only if
+      Your use, reproduction, and distribution of the Work otherwise complies
+      with the conditions stated in this License.
 
    5. Submission of Contributions. Unless You explicitly state otherwise,
       any Contribution intentionally submitted for inclusion in the Work
@@ -140,7 +140,7 @@
       agreed to in writing, Licensor provides the Work (and each
       Contributor provides its Contributions) on an "AS IS" BASIS,
       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any conditions of title,
+      implied, including, without limitation, any Warranty of title,
       non-infringement, merchantability, or fitness for a particular
       purpose. You are solely responsible for determining the
       appropriateness of using or redistributing the Work and assume any
@@ -168,6 +168,17 @@
       any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format in use. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
 
    Copyright 2025 Topology Dashboard Contributors
 

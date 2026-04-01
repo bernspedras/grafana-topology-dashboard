@@ -15,7 +15,13 @@
     },
     "screenshots": [],
     "version": "%VERSION%",
-    "updated": "%TODAY%"
+    "updated": "%TODAY%",
+    "links": [
+      {
+        "name": "Source code",
+        "url": "https://github.com/bernspedras/grafana-topology-dashboard"
+      }
+    ]
   },
   "includes": [
     {
