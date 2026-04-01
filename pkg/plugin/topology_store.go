@@ -90,6 +90,14 @@ func (s *TopologyStore) GetBundle() (*TopologyBundle, error) {
 	return &TopologyBundle{Flows: flows, NodeTemplates: nodes, EdgeTemplates: edges, Datasources: datasources}, nil
 }
 
+// WriteDatasources replaces datasources.json in the data directory root.
+func (s *TopologyStore) WriteDatasources(data json.RawMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	path := filepath.Join(s.dataDir, "datasources.json")
+	return os.WriteFile(path, data, 0o644)
+}
+
 // readDatasources reads the datasources.json file from the data directory root.
 // Returns an empty slice if the file does not exist.
 func (s *TopologyStore) readDatasources() ([]json.RawMessage, error) {

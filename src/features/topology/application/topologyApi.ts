@@ -146,3 +146,16 @@ export async function deleteEdgeTemplate(id: string): Promise<void> {
   );
 }
 
+// ─── Datasources ─────────────────────────────────────────────────────────────
+
+export async function saveDatasources(data: unknown): Promise<void> {
+  await firstValueFrom(
+    getBackendSrv().fetch({
+      url: `${BASE}/datasources`,
+      method: 'PUT',
+      data,
+      showErrorAlert: false,
+    }),
+  );
+}
+

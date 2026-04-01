@@ -39,6 +39,9 @@ func (a *App) registerTopologyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /templates/edges", requireEdit(a.handleCreateEdgeTemplate))
 	mux.HandleFunc("PUT /templates/edges/{id}", requireEdit(a.handlePutEdgeTemplate))
 	mux.HandleFunc("DELETE /templates/edges/{id}", requireEdit(a.handleDeleteEdgeTemplate))
+
+	// Datasource definitions.
+	mux.HandleFunc("PUT /datasources", requireEdit(a.handlePutDatasources))
 }
 
 // ─── Bundle ─────────────────────────────────────────────────────────────────
@@ -229,6 +232,21 @@ func (a *App) handlePutEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleDeleteEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := a.topologyStore.DeleteEdgeTemplate(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ─── Datasources ────────────────────────────────────────────────────────────
+
+func (a *App) handlePutDatasources(w http.ResponseWriter, r *http.Request) {
+	raw, err := readBody(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := a.topologyStore.WriteDatasources(raw); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -13,6 +13,7 @@ import {
   deleteNodeTemplate,
   saveEdgeTemplate,
   deleteEdgeTemplate,
+  saveDatasources,
   createFlow,
 } from '../../features/topology/application/topologyApi';
 import type { TopologyBundleResponse } from '../../features/topology/application/topologyApi';
@@ -194,6 +195,9 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
   const onDownloadAll = (): void => {
     const files: Record<string, Uint8Array> = {};
 
+    if (datasourceDefinitions.length > 0) {
+      files['topologies/datasources.json'] = strToU8(JSON.stringify(datasourceDefinitions, null, 2));
+    }
     for (const t of topologies) {
       const filename = `topologies/flows/${t.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
       files[filename] = strToU8(JSON.stringify(t, null, 2));
@@ -224,30 +228,36 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
     const flows: ItemWithId[] = [];
     const nodes: ItemWithId[] = [];
     const edges: ItemWithId[] = [];
+    let datasourcesRaw: unknown[] | undefined;
 
     for (const [path, data] of Object.entries(unzipped)) {
       if (!path.endsWith('.json')) continue;
       try {
-        const parsed = JSON.parse(strFromU8(data)) as ItemWithId;
-        if (path.includes('/flows/') || (/^flows\//.exec(path))) {
-          flows.push(parsed);
-        } else if (path.includes('/templates/nodes/') || (/^templates\/nodes\//.exec(path))) {
-          nodes.push(parsed);
-        } else if (path.includes('/templates/edges/') || (/^templates\/edges\//.exec(path))) {
-          edges.push(parsed);
+        if (path.endsWith('datasources.json')) {
+          datasourcesRaw = JSON.parse(strFromU8(data)) as unknown[];
+        } else {
+          const parsed = JSON.parse(strFromU8(data)) as ItemWithId;
+          if (path.includes('/flows/') || (/^flows\//.exec(path))) {
+            flows.push(parsed);
+          } else if (path.includes('/templates/nodes/') || (/^templates\/nodes\//.exec(path))) {
+            nodes.push(parsed);
+          } else if (path.includes('/templates/edges/') || (/^templates\/edges\//.exec(path))) {
+            edges.push(parsed);
+          }
         }
       } catch {
         // skip invalid JSON files
       }
     }
 
-    if (flows.length === 0 && nodes.length === 0 && edges.length === 0) {
-      alert('No valid topology files found in ZIP. Expected paths: flows/*.json, templates/nodes/*.json, templates/edges/*.json');
+    if (flows.length === 0 && nodes.length === 0 && edges.length === 0 && datasourcesRaw === undefined) {
+      alert('No valid topology files found in ZIP. Expected paths: flows/*.json, templates/nodes/*.json, templates/edges/*.json, datasources.json');
       return;
     }
 
     // Write each item to the Go backend.
     const promises: Promise<unknown>[] = [];
+    if (datasourcesRaw !== undefined) { promises.push(saveDatasources(datasourcesRaw)); }
     for (const f of flows) { promises.push(saveFlow(f.id, f).catch(() => createFlow(f))); }
     for (const n of nodes) { promises.push(saveNodeTemplate(n.id, n)); }
     for (const e of edges) { promises.push(saveEdgeTemplate(e.id, e)); }
