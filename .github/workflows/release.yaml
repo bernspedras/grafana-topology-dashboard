@@ -31,7 +31,7 @@ jobs:
         run: npm run build:frontend
 
       - name: Build backend (linux/amd64)
-        run: go run github.com/magefile/mage -v build:linuxAMD64
+        run: go run github.com/magefile/mage -v build:linux
 
       - name: Build backend (linux/arm64)
         run: go run github.com/magefile/mage -v build:linuxARM64
