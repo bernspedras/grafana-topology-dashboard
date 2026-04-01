@@ -13,8 +13,8 @@
     "lint": "eslint --cache src/",
     "lint:fix": "npm run lint -- --fix",
     "rebuild": "npm run build:backend && npm run build:frontend && docker compose restart grafana",
-    "seed": "docker compose exec grafana rm -rf /var/lib/grafana/topology-data/flows /var/lib/grafana/topology-data/templates && docker compose cp topologies/. grafana:/var/lib/grafana/topology-data/",
-    "seed:pull": "rm -rf topologies/flows topologies/templates && docker compose cp grafana:/var/lib/grafana/topology-data/flows topologies/flows && docker compose cp grafana:/var/lib/grafana/topology-data/templates topologies/templates",
+    "seed": "docker compose exec grafana rm -rf /var/lib/grafana/topology-data/flows /var/lib/grafana/topology-data/templates && docker compose cp ../topology-dashboard/topologies/. grafana:/var/lib/grafana/topology-data/",
+    "seed:pull": "rm -rf ../topology-dashboard/topologies/flows ../topology-dashboard/topologies/templates && docker compose cp grafana:/var/lib/grafana/topology-data/flows ../topology-dashboard/topologies/flows && docker compose cp grafana:/var/lib/grafana/topology-data/templates ../topology-dashboard/topologies/templates",
     "server": "docker compose up --build",
     "sign": "npx --yes @grafana/sign-plugin@latest"
   },
