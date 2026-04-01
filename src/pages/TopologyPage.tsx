@@ -16,7 +16,7 @@ import { AddNodeModal } from '../features/topology/ui/AddNodeModal';
 import type { ExistingTemplate, NodeTemplatePayload } from '../features/topology/ui/AddNodeModal';
 import { AddEdgeModal } from '../features/topology/ui/AddEdgeModal';
 import type { ExistingEdgeTemplate, EdgeTemplatePayload } from '../features/topology/ui/AddEdgeModal';
-import { TopologyIdProvider } from '../features/topology/ui/TopologyIdContext';
+import { TopologyIdProvider } from '../features/topology/application/TopologyIdContext';
 import { PromqlQueriesProvider } from '../features/topology/ui/PromqlQueriesContext';
 import { SseRefreshProvider } from '../features/topology/ui/SseRefreshContext';
 import { ViewOptionsProvider } from '../features/topology/ui/ViewOptionsContext';

@@ -9,7 +9,7 @@ import { Select } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import { TimeRangePicker, loadTimeRange, saveTimeRange, resolveRange } from './TimeRangePicker';
 import type { TimeRange } from './TimeRangePicker';
-import { useTopologyId } from './TopologyIdContext';
+import { useTopologyId } from '../application/TopologyIdContext';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useSseRefreshTick } from './SseRefreshContext';
 import { useDataSourceMap } from './DataSourceMapContext';

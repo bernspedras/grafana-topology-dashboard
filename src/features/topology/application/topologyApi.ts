@@ -6,7 +6,7 @@
  */
 import { getBackendSrv } from '@grafana/runtime';
 import { firstValueFrom } from 'rxjs';
-import { PLUGIN_ID } from '../../../constants';
+import { PLUGIN_ID } from './pluginConstants';
 
 const BASE = `/api/plugins/${PLUGIN_ID}/resources`;
 

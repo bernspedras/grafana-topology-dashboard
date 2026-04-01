@@ -1,5 +1,5 @@
 import { getTopologyList, getSeedData, resolveTopologiesFromSettings } from './topologyRegistry';
-import type { AppSettings } from '../../../module';
+import type { AppSettings } from './pluginSettings';
 
 describe('topologyRegistry', () => {
   it('getSeedData returns empty arrays by default', () => {

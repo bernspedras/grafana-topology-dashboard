@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getBackendSrv } from '@grafana/runtime';
 import { firstValueFrom } from 'rxjs';
-import type { AppSettings, FlowLayout } from '../../../module';
-import { PLUGIN_ID } from '../../../constants';
+import type { AppSettings, FlowLayout } from './pluginSettings';
+import { PLUGIN_ID } from './pluginConstants';
 
 export interface PluginSettingsResult {
   readonly loading: boolean;

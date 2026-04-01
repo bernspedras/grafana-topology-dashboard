@@ -5,10 +5,10 @@
  * The datasource map is still read from Grafana plugin jsonData since it's
  * infrastructure config, not topology data.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getBackendSrv } from '@grafana/runtime';
 import { firstValueFrom } from 'rxjs';
-import { PLUGIN_ID } from '../../../constants';
+import { PLUGIN_ID } from './pluginConstants';
 import { resolveTopology } from './topologyResolver';
 import { saveFlow as apiSaveFlow } from './topologyApi';
 import type { TopologyBundleResponse, DatasourceDefinition } from './topologyApi';
@@ -17,7 +17,7 @@ import type {
   NodeTemplate,
   EdgeTemplate,
 } from './topologyDefinition';
-import type { FlowLayout } from '../../../module';
+import type { FlowLayout } from './pluginSettings';
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -92,6 +92,9 @@ interface ResolvedBundle {
 }
 
 function resolveBundle(bundle: TopologyBundleResponse): ResolvedBundle {
+  // Serialization boundary: bundle response from Go backend uses unknown[]
+  // because TypeScript cannot statically verify the JSON structure. Cast is
+  // required until runtime validation is added.
   const nodeTemplates = bundle.nodeTemplates as unknown as readonly NodeTemplate[];
   const edgeTemplates = bundle.edgeTemplates as unknown as readonly EdgeTemplate[];
 
@@ -126,6 +129,10 @@ export function useTopologyData(): TopologyDataResult {
     setTick((t) => t + 1);
   }, []);
 
+  // Track serialized snapshots to skip state updates when data is unchanged.
+  const prevBundleJson = useRef('');
+  const prevSettingsJson = useRef('');
+
   useEffect(() => {
     const controller = new AbortController();
 
@@ -135,13 +142,24 @@ export function useTopologyData(): TopologyDataResult {
         const [bundle, settings] = await Promise.all([fetchBundle(), readPluginSettings()]);
 
         if (!controller.signal.aborted) {
-          const resolved = resolveBundle(bundle);
-          setTopologies(resolved.topologies);
-          setNodeTemplates(resolved.nodeTemplates);
-          setEdgeTemplates(resolved.edgeTemplates);
-          setDatasourceDefinitions(resolved.datasourceDefinitions);
-          setDataSourceMap(settings.dataSourceMap);
-          setEditAllowList(settings.editAllowList);
+          const bundleJson = JSON.stringify(bundle);
+          const settingsJson = JSON.stringify(settings);
+
+          // Only resolve and update state when the fetched data actually changed.
+          // This keeps object references stable, preventing cascading re-renders
+          // through the nested context providers in TopologyPage.
+          if (bundleJson !== prevBundleJson.current || settingsJson !== prevSettingsJson.current) {
+            prevBundleJson.current = bundleJson;
+            prevSettingsJson.current = settingsJson;
+
+            const resolved = resolveBundle(bundle);
+            setTopologies(resolved.topologies);
+            setNodeTemplates(resolved.nodeTemplates);
+            setEdgeTemplates(resolved.edgeTemplates);
+            setDatasourceDefinitions(resolved.datasourceDefinitions);
+            setDataSourceMap(settings.dataSourceMap);
+            setEditAllowList(settings.editAllowList);
+          }
         }
       } catch (err) {
         if (!controller.signal.aborted) {
