@@ -94,8 +94,8 @@ The frontend builds a PromQL query map from the topology definition and sends it
 
 ## Contributing
 
-See [CLAUDE.md](CLAUDE.md) for conventions, testing requirements, and how to extend the plugin.
+See `CLAUDE.md` in the repository for conventions, testing requirements, and how to extend the plugin.
 
 ## License
 
-[Apache 2.0](LICENSE)
+Apache 2.0 — see the LICENSE file for details.
