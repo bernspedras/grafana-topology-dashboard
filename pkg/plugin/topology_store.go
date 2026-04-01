@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,9 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
+
+// ErrNotFound is returned when a requested resource does not exist on disk.
+var ErrNotFound = errors.New("not found")
 
 // TopologyStore manages topology JSON files (flows, node templates, edge
 // templates) on disk inside a data directory.
@@ -95,7 +99,11 @@ func (s *TopologyStore) WriteDatasources(data json.RawMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	path := filepath.Join(s.dataDir, "datasources.json")
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		s.logger.Error("Failed to write datasources", "error", err)
+		return fmt.Errorf("failed to write datasources")
+	}
+	return nil
 }
 
 // readDatasources reads the datasources.json file from the data directory root.
@@ -107,11 +115,12 @@ func (s *TopologyStore) readDatasources() ([]json.RawMessage, error) {
 		if os.IsNotExist(err) {
 			return []json.RawMessage{}, nil
 		}
-		return nil, fmt.Errorf("read datasources.json: %w", err)
+		s.logger.Error("Failed to read datasources", "error", err)
+		return nil, fmt.Errorf("failed to read datasources")
 	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(data, &items); err != nil {
-		return nil, fmt.Errorf("parse datasources.json: %w", err)
+		return nil, fmt.Errorf("failed to parse datasources")
 	}
 	return items, nil
 }
@@ -228,7 +237,8 @@ func (s *TopologyStore) readDir(subdir string) ([]json.RawMessage, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read dir %s: %w", dir, err)
+		s.logger.Error("Failed to read directory", "path", dir, "error", err)
+		return nil, fmt.Errorf("failed to list resources")
 	}
 	var result []json.RawMessage
 	for _, e := range entries {
@@ -249,9 +259,10 @@ func (s *TopologyStore) readFile(relPath string) (json.RawMessage, error) {
 	data, err := os.ReadFile(filepath.Join(s.dataDir, relPath))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("not found: %s", relPath)
+			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("read %s: %w", relPath, err)
+		s.logger.Error("Failed to read file", "path", relPath, "error", err)
+		return nil, fmt.Errorf("failed to read resource")
 	}
 	return json.RawMessage(data), nil
 }
@@ -259,12 +270,17 @@ func (s *TopologyStore) readFile(relPath string) (json.RawMessage, error) {
 func (s *TopologyStore) writeFile(relPath string, data json.RawMessage) error {
 	dest := filepath.Join(s.dataDir, relPath)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", filepath.Dir(dest), err)
+		s.logger.Error("Failed to create directory", "path", filepath.Dir(dest), "error", err)
+		return fmt.Errorf("failed to write resource")
 	}
 	// Remove any stale file in the same directory whose JSON "id" matches
 	// but whose filename differs (e.g. seed used underscores, PutFlow uses hyphens).
 	s.removeStaleByID(filepath.Dir(dest), filepath.Base(dest), data)
-	return os.WriteFile(dest, data, 0o644)
+	if err := os.WriteFile(dest, data, 0o644); err != nil {
+		s.logger.Error("Failed to write file", "path", relPath, "error", err)
+		return fmt.Errorf("failed to write resource")
+	}
+	return nil
 }
 
 // removeStaleByID scans dir for JSON files (other than canonical) that contain
@@ -302,7 +318,8 @@ func (s *TopologyStore) deleteFile(relPath string) error {
 	dest := filepath.Join(s.dataDir, relPath)
 	err := os.Remove(dest)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("delete %s: %w", relPath, err)
+		s.logger.Error("Failed to delete file", "path", relPath, "error", err)
+		return fmt.Errorf("failed to delete resource")
 	}
 	return nil
 }
