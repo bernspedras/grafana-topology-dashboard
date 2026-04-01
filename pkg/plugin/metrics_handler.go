@@ -62,6 +62,10 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot resolve Grafana URL", http.StatusInternalServerError)
 		return
 	}
+	if authHeader == "" {
+		http.Error(w, "No service account token configured. Set one in plugin settings or via GF_SA_TOKEN env var.", http.StatusServiceUnavailable)
+		return
+	}
 
 	// Resolve datasource name→UID map from plugin settings (admin-configured).
 	dsMap := a.resolveDataSourceMap(r)
@@ -165,17 +169,22 @@ func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string
 		return grafanaURL, "Bearer " + token
 	}
 
-	// Dev fallback: basic auth.
-	user := os.Getenv("GF_SECURITY_ADMIN_USER")
-	if user == "" {
-		user = "admin"
+	// Dev-only fallback: basic auth (requires explicit opt-in).
+	if os.Getenv("TOPOLOGY_DEV_MODE") == "true" {
+		user := os.Getenv("GF_SECURITY_ADMIN_USER")
+		if user == "" {
+			user = "admin"
+		}
+		pass := os.Getenv("GF_SECURITY_ADMIN_PASSWORD")
+		if pass == "" {
+			pass = "admin"
+		}
+		a.logger.Warn("DEV MODE: using basic auth fallback for Prometheus proxy — do not use in production")
+		return grafanaURL, "Basic " + basicAuth(user, pass)
 	}
-	pass := os.Getenv("GF_SECURITY_ADMIN_PASSWORD")
-	if pass == "" {
-		pass = "admin"
-	}
-	a.logger.Warn("Using basic auth fallback for Prometheus proxy — configure a service account token for production")
-	return grafanaURL, "Basic " + basicAuth(user, pass)
+
+	a.logger.Error("No service account token configured — set one in plugin settings or GF_SA_TOKEN env var")
+	return grafanaURL, ""
 }
 
 // resolveDataSourceMap reads the admin-configured datasource name→UID mapping
