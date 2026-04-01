@@ -1,19 +1,33 @@
 # Topology Dashboard
 
-Grafana app plugin for service topology visualization. Renders an interactive graph of nodes (systems) and edges (communication channels) with live Prometheus metrics.
-
-**Plugin ID**: `bernspedras-topology-dashboard-app`
+Grafana app plugin for interactive service topology visualization with live Prometheus metrics.
 
 ## Features
 
-- Interactive graph visualization of service topologies (ReactFlow)
-- Go backend for batch Prometheus queries (single request instead of hundreds)
+- Interactive graph of nodes (services, databases, external systems) and edges (HTTP, gRPC, Kafka, AMQP, TCP)
+- Go backend for batch Prometheus queries — single request fans out with 50 concurrent goroutines
 - Live metrics on nodes (CPU, memory, replicas) and edges (RPS, latency, error rate)
 - Week-ago baseline comparison for trend detection
 - Per-deployment and per-endpoint metric drill-down
 - Range query charts with configurable time windows
+- Edit mode: create/modify topologies directly in the UI
+
+## Requirements
+
+- Grafana 11.0+
+- Prometheus datasource
+
+## Installation
+
+Install from the [Grafana plugin catalog](https://grafana.com/grafana/plugins/) or manually:
+
+```bash
+grafana-cli plugins install bernspedras-topology-dashboard-app
+```
 
 ## Setup
+
+### 1. Build and run locally
 
 ```bash
 npm install
@@ -21,83 +35,42 @@ npm run build       # Builds Go backend + frontend → dist/
 npm run server      # Starts Grafana at http://localhost:3000 (admin/admin)
 ```
 
-## Configuration
+### 2. Configure the plugin
 
-All plugin configuration is managed at **Plugins > Topology Dashboard > Configuration** (requires Grafana Admin role).
+Go to **Plugins > Topology Dashboard > Configuration** (requires Grafana Admin role).
 
-### Plugin settings (Grafana database)
+| Setting | Purpose |
+|---|---|
+| Datasource mapping | Maps logical datasource names used in topology definitions to Grafana datasource UIDs |
+| Edit allow list | Email addresses of Editor-role users allowed to modify topology data |
+| Service account token | Token for the Go backend to query Prometheus via Grafana's datasource proxy |
 
-These settings are stored in Grafana's internal database via the plugin settings API (`jsonData` / `secureJsonData`).
+### 3. Create a service account token
 
-| Setting | `jsonData` field | Purpose |
-|---|---|---|
-| Datasource mapping | `dataSourceMap` | Maps logical datasource names to Grafana datasource UIDs |
-| Edit allow list | `editAllowList` | Email addresses of Editor-role users allowed to modify topology data |
-| Service account token | `secureJsonData.serviceAccountToken` | Token for Go backend to query Prometheus via Grafana proxy (encrypted) |
+The Go backend needs a token to proxy Prometheus queries through Grafana:
 
-Datasource mappings can also be provisioned via `provisioning/plugins/apps.yaml`.
+1. Go to **Administration > Service accounts**
+2. Create a service account with **Viewer** role and generate a token
+3. Paste it into the plugin config page under **Service Account Token**
 
-### Topology data (filesystem)
+Alternatively, set `GF_SA_TOKEN` in your environment for local development.
 
-Topology definitions (flows, node templates, edge templates) are stored as JSON files on the server filesystem by the Go backend's `TopologyStore`. The storage directory is resolved in order:
+### 4. Add topologies
+
+Topology definitions (flows, node templates, edge templates) are JSON files stored on the server filesystem. The storage directory is resolved in order:
 
 1. `TOPOLOGY_DATA_DIR` environment variable
-2. `GF_PATHS_DATA/topology-data` (standard Grafana data directory)
-3. `./data/topologies` (fallback for local development)
+2. `GF_PATHS_DATA/topology-data`
+3. `./data/topologies` (local dev fallback)
 
-Topology data can be managed through the config page (individual JSON editors), ZIP import/export, or the Go backend REST API (`/resources/topologies/*`, `/resources/templates/*`).
-
-### Edit permissions
-
-Edit access to topology data is controlled by:
-
-1. **Admin** users can always edit
-2. **Editor** users can edit only if their email is in the edit allow list
-3. **Viewer** users and unauthenticated requests are read-only
-
-This is enforced on both the frontend (edit controls are hidden) and the Go backend (mutating API endpoints return 403 Forbidden). The allow list is managed on the config page under "Edit Allow List".
-
-### Go backend authentication
-
-The Go backend queries Prometheus through Grafana's datasource proxy and needs authentication. Configure one of (checked in order):
-
-| Method | How to set | Recommended for |
-|---|---|---|
-| Plugin secure setting | Config page → "Service Account Token" field. Stored encrypted in Grafana DB. | Production |
-| `GF_SA_TOKEN` env var | Set in docker-compose or shell environment | CI / Docker dev |
-| Basic auth fallback | Uses `admin:admin` (or `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`) | Local dev only |
-
-To create a service account token:
-1. Go to **Administration > Service accounts** in Grafana
-2. Create a service account with **Viewer** role
-3. Generate a token
-4. Set it via one of the methods above
-
-### Docker environment variables
-
-Set in `.config/docker-compose-base.yaml` or `docker-compose.yaml`:
-
-```yaml
-environment:
-  GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: bernspedras-topology-dashboard-app
-  GF_FEATURE_TOGGLES_ENABLE: externalServiceAccounts  # Required for service accounts
-  GF_SA_TOKEN: <your-token>                            # Optional: backend auth token
-```
-
-### Provisioning
-
-Datasources and plugin settings are auto-provisioned from `provisioning/`:
-
-- `provisioning/datasources/datasources.yaml` — Prometheus datasource URLs and UIDs
-- `provisioning/plugins/apps.yaml` — Plugin enabled state and datasource map
+See [CLAUDE.md](CLAUDE.md) for the JSON schema and how to add new topologies.
 
 ## Development
 
 ```bash
 npm run dev           # Webpack watch (hot-reload frontend)
 npm run dev:backend   # Build Go backend for macOS (darwin/arm64)
-npm run rebuild       # Build everything + restart Grafana container
-npm run test          # Jest (frontend tests)
+npm run test          # Jest frontend tests
 go test ./pkg/...     # Go backend tests
 npm run lint          # ESLint
 npm run typecheck     # TypeScript check
@@ -117,4 +90,12 @@ Browser                              Go Backend (gRPC subprocess)
    │ ◄────────────────────────────          │
 ```
 
-The frontend builds a query map from the topology definition, sends it in a single POST, and the Go backend fans out all PromQL queries concurrently. Week-ago baseline data is cached server-side (5-min TTL). If the Go backend is unavailable, the frontend falls back to direct Prometheus proxy queries.
+The frontend builds a PromQL query map from the topology definition and sends it in a single POST. The Go backend fans out all queries concurrently and caches week-ago baseline data (5-min TTL). If the Go backend is unavailable, the frontend falls back to direct Prometheus proxy queries.
+
+## Contributing
+
+See [CLAUDE.md](CLAUDE.md) for conventions, testing requirements, and how to extend the plugin.
+
+## License
+
+[Apache 2.0](LICENSE)

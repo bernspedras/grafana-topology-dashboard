@@ -43,5 +43,8 @@ playwright/.auth/
 # Claude Code local settings
 .claude/
 
+# Local Claude instructions (not for public repo)
+CLAUDE.local.md
+
 # Go
 pkg/plugin/__debug_bin*
