@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build:frontend
+
+      - name: Build backend (linux/amd64)
+        run: go run github.com/magefile/mage -v build:linuxAMD64
+
+      - name: Build backend (linux/arm64)
+        run: go run github.com/magefile/mage -v build:linuxARM64
+
+      - name: Package plugin
+        run: |
+          PLUGIN_ID=$(jq -r '.id' src/plugin.json)
+          mv dist "$PLUGIN_ID"
+          zip -r "${PLUGIN_ID}.zip" "$PLUGIN_ID"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.zip"
+          generate_release_notes: true
