@@ -2,9 +2,9 @@ package plugin
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"strings"
 )
 
 // ─── Route registration ─────────────────────────────────────────────────────
@@ -49,7 +49,8 @@ func (a *App) registerTopologyRoutes(mux *http.ServeMux) {
 func (a *App) handleGetBundle(w http.ResponseWriter, _ *http.Request) {
 	bundle, err := a.topologyStore.GetBundle()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to get bundle", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, bundle)
@@ -60,7 +61,8 @@ func (a *App) handleGetBundle(w http.ResponseWriter, _ *http.Request) {
 func (a *App) handleListFlows(w http.ResponseWriter, _ *http.Request) {
 	items, err := a.topologyStore.ListFlows()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to list flows", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -70,10 +72,11 @@ func (a *App) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	raw, err := a.topologyStore.GetFlow(id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "flow not found", http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			a.logger.Error("Failed to get flow", "id", id, "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -87,7 +90,8 @@ func (a *App) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if putErr := a.topologyStore.PutFlow(id, raw); putErr != nil {
-		http.Error(w, putErr.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to create flow", "id", id, "error", putErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
@@ -101,7 +105,8 @@ func (a *App) handlePutFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if putErr := a.topologyStore.PutFlow(id, raw); putErr != nil {
-		http.Error(w, putErr.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to update flow", "id", id, "error", putErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -110,7 +115,8 @@ func (a *App) handlePutFlow(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := a.topologyStore.DeleteFlow(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to delete flow", "id", id, "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -121,7 +127,8 @@ func (a *App) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleListNodeTemplates(w http.ResponseWriter, _ *http.Request) {
 	items, err := a.topologyStore.ListNodeTemplates()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to list node templates", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -131,10 +138,11 @@ func (a *App) handleGetNodeTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	raw, err := a.topologyStore.GetNodeTemplate(id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "node template not found", http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			a.logger.Error("Failed to get node template", "id", id, "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -148,7 +156,8 @@ func (a *App) handleCreateNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if putErr := a.topologyStore.PutNodeTemplate(id, raw); putErr != nil {
-		http.Error(w, putErr.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to create node template", "id", id, "error", putErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
@@ -162,7 +171,8 @@ func (a *App) handlePutNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if putErr := a.topologyStore.PutNodeTemplate(id, raw); putErr != nil {
-		http.Error(w, putErr.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to update node template", "id", id, "error", putErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -171,7 +181,8 @@ func (a *App) handlePutNodeTemplate(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleDeleteNodeTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := a.topologyStore.DeleteNodeTemplate(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to delete node template", "id", id, "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -182,7 +193,8 @@ func (a *App) handleDeleteNodeTemplate(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleListEdgeTemplates(w http.ResponseWriter, _ *http.Request) {
 	items, err := a.topologyStore.ListEdgeTemplates()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to list edge templates", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -192,10 +204,11 @@ func (a *App) handleGetEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	raw, err := a.topologyStore.GetEdgeTemplate(id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "edge template not found", http.StatusNotFound)
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			a.logger.Error("Failed to get edge template", "id", id, "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -209,7 +222,8 @@ func (a *App) handleCreateEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if putErr := a.topologyStore.PutEdgeTemplate(id, raw); putErr != nil {
-		http.Error(w, putErr.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to create edge template", "id", id, "error", putErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
@@ -223,7 +237,8 @@ func (a *App) handlePutEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if putErr := a.topologyStore.PutEdgeTemplate(id, raw); putErr != nil {
-		http.Error(w, putErr.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to update edge template", "id", id, "error", putErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -232,7 +247,8 @@ func (a *App) handlePutEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleDeleteEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := a.topologyStore.DeleteEdgeTemplate(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to delete edge template", "id", id, "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -247,7 +263,8 @@ func (a *App) handlePutDatasources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.topologyStore.WriteDatasources(raw); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		a.logger.Error("Failed to write datasources", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
