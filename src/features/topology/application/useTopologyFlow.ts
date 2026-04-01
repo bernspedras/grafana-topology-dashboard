@@ -24,12 +24,18 @@ export function useTopologyFlow(graph: TopologyGraph, bundledLayout: FlowLayout 
   const storeReconnectEdge = useTopologyPositionStore((s) => s.reconnectEdge);
   const layoutVersion = useTopologyPositionStore((s) => s.layoutVersion);
 
-  // Set bundled layout AND initialize in the same effect to avoid race condition
-  const bundledAppliedRef = useRef('');
+  // Set bundled layout AND initialize in the same effect to avoid race condition.
+  // Track both topologyId and bundledLayout reference so that saving a new layout
+  // (which changes the bundledLayout prop) triggers setBundledLayout even when
+  // staying on the same topology.
+  const bundledAppliedRef = useRef<{ id: string; layout: FlowLayout | undefined }>({ id: '', layout: undefined });
   useEffect(() => {
     // Set bundled layout first (synchronously before initialize)
-    if (bundledLayout !== undefined && bundledAppliedRef.current !== topologyId) {
-      bundledAppliedRef.current = topologyId;
+    if (
+      bundledLayout !== undefined &&
+      (bundledAppliedRef.current.id !== topologyId || bundledAppliedRef.current.layout !== bundledLayout)
+    ) {
+      bundledAppliedRef.current = { id: topologyId, layout: bundledLayout };
       setBundledLayout(topologyId, {
         positions: bundledLayout.positions ?? {},
         handleOverrides: bundledLayout.handleOverrides ?? {},
