@@ -12,14 +12,14 @@ import { css } from '@emotion/css';
 import type { TopologyGraph } from '../domain';
 import { useTopologyFlow } from '../application/useTopologyFlow';
 import { useTopologyPositionStore } from '../application/topologyPositionStore';
-import type { FlowLayout } from '../../../module';
+import type { FlowLayout } from '../application/pluginSettings';
 import { TopologyNodeCard } from './TopologyNodeCard';
 import { TopologyFlowCard } from './TopologyFlowCard';
 import { TopologyFlowStepCard } from './TopologyFlowStepCard';
 import { TopologyEdgeCard } from './TopologyEdgeCard';
 import { FlowStepEditModal } from './FlowStepEditModal';
 import type { FlowStepDraft } from '../application/useFlowStepEditor';
-import { useTopologyId } from './TopologyIdContext';
+import { useTopologyId } from '../application/TopologyIdContext';
 import { useViewOptions } from './ViewOptionsContext';
 import type { ViewOptionKey } from './ViewOptionsContext';
 

@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type { TopologyGraph } from '../domain';
 import type { TopologyDefinition } from './topologyDefinition';
 import { buildGroupedQueryMaps, assembleTopologyGraph } from './assembleTopologyGraph';
-import { PLUGIN_ID } from '../../../constants';
+import { PLUGIN_ID } from './pluginConstants';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

@@ -22,7 +22,7 @@ import { usePromqlQueries } from './PromqlQueriesContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricChartModal } from './MetricChartModal';
-import { useTopologyId } from './TopologyIdContext';
+import { useTopologyId } from '../application/TopologyIdContext';
 import { useTopologyPositionStore } from '../application/topologyPositionStore';
 import { css } from '@emotion/css';
 
@@ -314,7 +314,9 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
 
   // 2. Edge label dragging offset
   const setEdgeLabelOffset = useTopologyPositionStore((s) => s.setEdgeLabelOffset);
-  const savedOffset = useTopologyPositionStore((s) => s.getEdgeLabelOffset(edgeId));
+  const savedOffset = useTopologyPositionStore(
+    useCallback((s) => s.perTopology[s.currentTopologyId]?.edgeLabelOffsets[edgeId], [edgeId])
+  );
   const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
   const listenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | undefined>(undefined);

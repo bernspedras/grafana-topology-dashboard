@@ -3,7 +3,7 @@ import type { Node, Edge, NodeChange, Connection } from '@xyflow/react';
 import type { TopologyGraph } from '../domain';
 import { useTopologyPositionStore } from './topologyPositionStore';
 import type { FlowLayout } from './topologyRegistry';
-import { useTopologyId } from '../ui/TopologyIdContext';
+import { useTopologyId } from './TopologyIdContext';
 
 interface UseTopologyFlowResult {
   readonly nodes: Node[];

@@ -18,6 +18,14 @@ export interface TopologyLayoutHandleOverride {
   readonly targetHandle: string;
 }
 
+/** Type-safe accessor for FlowStepNode data stored in React Flow nodes. */
+function getFlowStepData(node: Node): FlowStepNode | undefined {
+  if (node.type === 'topologyFlowStep' && 'domainFlowStep' in node.data) {
+    return (node.data as { domainFlowStep: FlowStepNode }).domainFlowStep;
+  }
+  return undefined;
+}
+
 type PositionMap = Record<string, TopologyLayoutPosition>;
 type HandleOverrideMap = Record<string, TopologyLayoutHandleOverride>;
 type EdgeLabelOffsetMap = Record<string, TopologyLayoutPosition>;
@@ -292,10 +300,10 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
         if (updateMap.size === 0) return;
 
         const updatedNodes = state.nodes.map((node) => {
-          if (node.type !== 'topologyFlowStep') return node;
           const update = updateMap.get(node.id);
           if (update === undefined) return node;
-          const prev = (node.data as { domainFlowStep: FlowStepNode }).domainFlowStep;
+          const prev = getFlowStepData(node);
+          if (prev === undefined) return node;
           const updated = new FlowStepNode({ id: prev.id, step: update.step, text: update.text });
           return { ...node, data: { ...node.data, domainFlowStep: updated } };
         });
