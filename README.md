@@ -63,7 +63,7 @@ Topology definitions (flows, node templates, edge templates) are JSON files stor
 2. `GF_PATHS_DATA/topology-data`
 3. `./data/topologies` (local dev fallback)
 
-See [CLAUDE.md](CLAUDE.md) for the JSON schema and how to add new topologies.
+See `CLAUDE.md` in the repository for the JSON schema and how to add new topologies.
 
 ## Development
 
