@@ -43,6 +43,9 @@ playwright/.auth/
 # Claude Code local settings
 .claude/
 
+# Serena
+.serena/
+
 # Local Claude instructions (not for public repo)
 CLAUDE.local.md
 
