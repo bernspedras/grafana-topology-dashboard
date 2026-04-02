@@ -5,14 +5,14 @@
 export type MetricQuery = string | { readonly query: string; readonly dataSource: string };
 
 /** Extract the PromQL string from a MetricQuery. */
-export function metricQueryPromql(m: MetricQuery | undefined): string | undefined {
-  if (m === undefined) return undefined;
+export function metricQueryPromql(m: MetricQuery | null | undefined): string | undefined {
+  if (m == null) return undefined;
   return typeof m === 'string' ? m : m.query;
 }
 
 /** Extract the per-metric dataSource override, if any. */
-export function metricQueryDataSource(m: MetricQuery | undefined): string | undefined {
-  if (m === undefined) return undefined;
+export function metricQueryDataSource(m: MetricQuery | null | undefined): string | undefined {
+  if (m == null) return undefined;
   return typeof m === 'string' ? undefined : m.dataSource;
 }
 
