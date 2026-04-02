@@ -3,11 +3,9 @@ import { HttpXmlEdge, TcpDbConnectionEdge, AmqpEdge, KafkaEdge, GrpcEdge } from 
 import type { TopologyEdge } from '../domain';
 import type { CSSProperties } from 'react';
 import type { ColoringMode } from './metricColor';
-import { baselineMetricStatus, worstOfStatuses } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
-import { compareToSla } from './slaThresholds';
-import type { SlaStatus } from './slaThresholds';
-import type { NodeStatus } from '../domain/metrics';
+import { edgeMetricRows } from './edgeDisplayData';
+import { healthFromMetricRows } from './healthFromMetricRows';
 
 // ─── Health assessment ───────────────────────────────────────────────────────
 
@@ -20,101 +18,9 @@ const HEALTH_COLORS: Record<EdgeHealth, string> = {
   unknown: '#9ca3af',
 };
 
-const SLA_TO_HEALTH: Readonly<Record<SlaStatus, EdgeHealth>> = {
-  critical: 'critical',
-  warning: 'warning',
-  ok: 'healthy',
-  'no-sla': 'unknown',
-};
-
-function evalSlaMetric(value: number | undefined, key: string, sla: SlaThresholdMap): EdgeHealth | undefined {
-  if (value === undefined || !(key in sla)) return undefined;
-  return SLA_TO_HEALTH[compareToSla(value, key, sla[key])];
-}
-
-function slaEdgeHealth(edge: TopologyEdge, sla: SlaThresholdMap | undefined): EdgeHealth {
-  if (sla === undefined || Object.keys(sla).length === 0) return 'unknown';
-
-  const results: EdgeHealth[] = [];
-  const m = edge.metrics;
-
-  // Base metrics (all edge types)
-  const errH = evalSlaMetric(m.errorRatePercent, 'errorRatePercent', sla);
-  if (errH !== undefined) results.push(errH);
-  const latH = evalSlaMetric(m.latencyP95Ms, 'latencyP95Ms', sla);
-  if (latH !== undefined) results.push(latH);
-
-  // DB-specific
-  if (edge instanceof TcpDbConnectionEdge) {
-    const dm = edge.metrics;
-    const ptH = evalSlaMetric(dm.poolTimeoutsPerMin, 'poolTimeoutsPerMin', sla);
-    if (ptH !== undefined) results.push(ptH);
-    const scH = evalSlaMetric(dm.staleConnectionsPerMin, 'staleConnectionsPerMin', sla);
-    if (scH !== undefined) results.push(scH);
-    const qtH = evalSlaMetric(dm.avgQueryTimeMs, 'avgQueryTimeMs', sla);
-    if (qtH !== undefined) results.push(qtH);
-  }
-
-  // AMQP-specific
-  if (edge instanceof AmqpEdge) {
-    const am = edge.metrics;
-    const qdH = evalSlaMetric(am.queueDepth, 'queueDepth', sla);
-    if (qdH !== undefined) results.push(qdH);
-    const ceH = evalSlaMetric(am.consumerErrorRatePercent, 'consumerErrorRatePercent', sla);
-    if (ceH !== undefined) results.push(ceH);
-    const e2eH = evalSlaMetric(am.e2eLatencyP95Ms, 'e2eLatencyP95Ms', sla);
-    if (e2eH !== undefined) results.push(e2eH);
-  }
-
-  // Kafka-specific
-  if (edge instanceof KafkaEdge) {
-    const km = edge.metrics;
-    const clH = evalSlaMetric(km.consumerLag, 'consumerLag', sla);
-    if (clH !== undefined) results.push(clH);
-    const ceH = evalSlaMetric(km.consumerErrorRatePercent, 'consumerErrorRatePercent', sla);
-    if (ceH !== undefined) results.push(ceH);
-    const e2eH = evalSlaMetric(km.e2eLatencyP95Ms, 'e2eLatencyP95Ms', sla);
-    if (e2eH !== undefined) results.push(e2eH);
-  }
-
-  if (results.length === 0) return 'healthy';
-  if (results.includes('critical')) return 'critical';
-  if (results.includes('warning')) return 'warning';
-  return 'healthy';
-}
-
-function baselineEdgeHealth(edge: TopologyEdge): EdgeHealth {
-  const m = edge.metrics;
-  const statuses: NodeStatus[] = [
-    baselineMetricStatus(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent'),
-    baselineMetricStatus(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms'),
-    baselineMetricStatus(m.rps, m.rpsWeekAgo, 'rps'),
-  ];
-
-  if (edge instanceof TcpDbConnectionEdge) {
-    statuses.push(baselineMetricStatus(edge.metrics.poolTimeoutsPerMin, edge.metrics.poolTimeoutsPerMinWeekAgo, 'poolTimeoutsPerMin'));
-    statuses.push(baselineMetricStatus(edge.metrics.avgQueryTimeMs, edge.metrics.avgQueryTimeMsWeekAgo, 'avgQueryTimeMs'));
-  }
-  if (edge instanceof AmqpEdge) {
-    statuses.push(baselineMetricStatus(edge.metrics.queueDepth, edge.metrics.queueDepthWeekAgo, 'queueDepth'));
-    statuses.push(baselineMetricStatus(edge.metrics.consumerErrorRatePercent, edge.metrics.consumerErrorRatePercentWeekAgo, 'consumerErrorRatePercent'));
-    statuses.push(baselineMetricStatus(edge.metrics.e2eLatencyP95Ms, edge.metrics.e2eLatencyP95MsWeekAgo, 'e2eLatencyP95Ms'));
-  }
-  if (edge instanceof KafkaEdge) {
-    statuses.push(baselineMetricStatus(edge.metrics.consumerLag, edge.metrics.consumerLagWeekAgo, 'consumerLag'));
-    statuses.push(baselineMetricStatus(edge.metrics.consumerErrorRatePercent, edge.metrics.consumerErrorRatePercentWeekAgo, 'consumerErrorRatePercent'));
-    statuses.push(baselineMetricStatus(edge.metrics.e2eLatencyP95Ms, edge.metrics.e2eLatencyP95MsWeekAgo, 'e2eLatencyP95Ms'));
-  }
-
-  const worst = worstOfStatuses(statuses);
-  if (worst === 'critical') return 'critical';
-  if (worst === 'warning') return 'warning';
-  return 'healthy';
-}
-
 export function edgeHealth(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): EdgeHealth {
-  if (mode === 'baseline') return baselineEdgeHealth(edge);
-  return slaEdgeHealth(edge, sla);
+  const rows = edgeMetricRows(edge, undefined, mode, sla);
+  return healthFromMetricRows(rows);
 }
 
 export function edgeHealthColor(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): string {

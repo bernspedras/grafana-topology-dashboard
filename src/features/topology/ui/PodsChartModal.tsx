@@ -20,57 +20,16 @@ import { useMetricDatasource } from './MetricDatasourceContext';
 import { useSaveMetricQuery } from './SaveMetricQueryContext';
 import { metricDescription } from '../application/metricDescriptions';
 
-// ─── Query key resolution ───────────────────────────────────────────────────
-
-/**
- * Resolves the effective PromQL query key based on the current deployment or
- * endpoint/routing-key selection so the chart fetches scoped data instead of
- * always using the aggregate query.
- */
-function resolveChartQueryKey(
-  metricKey: string,
-  deployment: string | undefined,
-  endpointFilter: string | undefined,
-  queries: Record<string, string> | undefined,
-): string {
-  // Deployment-specific (EKS nodes)
-  if (deployment !== undefined) {
-    const deployKey = `deploy:${deployment}:${metricKey}`;
-    if (queries?.[deployKey] !== undefined) return deployKey;
-  }
-  // Endpoint-path–specific (HTTP edges with endpointPaths selector)
-  if (endpointFilter?.startsWith('ep:')) {
-    const ep = endpointFilter.slice(3);
-    const epKey = `ep:${ep}:${metricKey}`;
-    if (queries?.[epKey] !== undefined) return epKey;
-  }
-  // Routing-key–specific (AMQP edges with routingKeyFilters selector)
-  if (endpointFilter?.startsWith('rk:')) {
-    const rk = endpointFilter.slice(3);
-    const rkKey = `rk:${rk}:${metricKey}`;
-    if (queries?.[rkKey] !== undefined) return rkKey;
-  }
-  // Aggregate (edge with "All" selected)
-  if (endpointFilter === 'all') {
-    const aggKey = `agg:${metricKey}`;
-    if (queries?.[aggKey] !== undefined) return aggKey;
-  }
-  return metricKey;
-}
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface MetricChartModalProps {
+interface PodsChartModalProps {
   readonly title: string;
   readonly entityId: string;
-  readonly metricKey: string;
-  readonly description: string | undefined;
   readonly deployment: string | undefined;
-  readonly endpointFilter: string | undefined;
   readonly onClose: () => void;
 }
 
-interface MetricRangeData {
+interface SeriesData {
   readonly timestamps: readonly number[];
   readonly values: readonly number[];
   readonly promql: string;
@@ -79,19 +38,15 @@ interface MetricRangeData {
 type FetchState =
   | { readonly status: 'loading' }
   | { readonly status: 'error'; readonly message: string }
-  | { readonly status: 'success'; readonly data: MetricRangeData };
+  | { readonly status: 'success'; readonly ready: SeriesData | undefined; readonly desired: SeriesData | undefined };
 
 // ─── Chart component ────────────────────────────────────────────────────────
 
 const CHART_HEIGHT = 280;
 
-const CHART_OPTS: Omit<uPlot.Options, 'width' | 'height'> = {
-  cursor: {
-    drag: { x: false, y: false },
-  },
-  scales: {
-    x: { time: true },
-  },
+const PODS_CHART_OPTS: Omit<uPlot.Options, 'width' | 'height'> = {
+  cursor: { drag: { x: false, y: false } },
+  scales: { x: { time: true }, y: { auto: true } },
   axes: [
     {
       stroke: '#94a3b8',
@@ -110,33 +65,47 @@ const CHART_OPTS: Omit<uPlot.Options, 'width' | 'height'> = {
   series: [
     { label: 'Time' },
     {
-      label: 'Value',
+      label: 'Ready',
+      stroke: '#22c55e',
+      width: 2,
+      fill: 'rgba(34, 197, 94, 0.08)',
+    },
+    {
+      label: 'Desired',
       stroke: '#3b82f6',
       width: 2,
-      fill: 'rgba(59, 130, 246, 0.08)',
+      dash: [6, 3],
     },
   ],
 };
 
-function toAlignedData(data: MetricRangeData): uPlot.AlignedData {
-  return [
-    Float64Array.from(data.timestamps),
-    Float64Array.from(data.values),
-  ];
+function toAlignedData(ready: SeriesData | undefined, desired: SeriesData | undefined): uPlot.AlignedData {
+  const primary = ready ?? desired;
+  if (primary === undefined) return [new Float64Array(0), new Float64Array(0), new Float64Array(0)];
+
+  const ts = Float64Array.from(primary.timestamps);
+  const readyVals = ready !== undefined
+    ? Float64Array.from(ready.values)
+    : new Float64Array(ts.length);
+  const desiredVals = desired !== undefined
+    ? Float64Array.from(desired.values)
+    : new Float64Array(ts.length);
+
+  return [ts, readyVals, desiredVals];
 }
 
-function TimeSeriesChart({ data }: { readonly data: MetricRangeData }): React.JSX.Element {
+function PodsTimeSeriesChart({ ready, desired }: { readonly ready: SeriesData | undefined; readonly desired: SeriesData | undefined }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
+  const alignedData = useMemo((): uPlot.AlignedData => toAlignedData(ready, desired), [ready, desired]);
 
-  // Create chart once on mount
   useEffect((): (() => void) => {
     const container = containerRef.current;
     if (container === null) return (): void => { /* noop */ };
 
     const chart = new uPlot(
-      { ...CHART_OPTS, width: container.clientWidth, height: CHART_HEIGHT },
-      toAlignedData(data),
+      { ...PODS_CHART_OPTS, width: container.clientWidth, height: CHART_HEIGHT },
+      alignedData,
       container,
     );
     chartRef.current = chart;
@@ -153,19 +122,62 @@ function TimeSeriesChart({ data }: { readonly data: MetricRangeData }): React.JS
     };
   }, []);
 
-  // Update data smoothly without recreating the chart
   useEffect((): void => {
     if (chartRef.current !== null) {
-      chartRef.current.setData(toAlignedData(data));
+      chartRef.current.setData(alignedData);
     }
-  }, [data]);
+  }, [alignedData]);
 
-  return <div ref={containerRef} className={styles.chartContainer} />;
+  return <div ref={containerRef} className={s.chartContainer} />;
+}
+
+// ─── Fetch helper ───────────────────────────────────────────────────────────
+
+interface RangeResult {
+  readonly status: string;
+  readonly data: {
+    readonly resultType: string;
+    readonly result: readonly {
+      readonly values: readonly [number, string][];
+    }[];
+  };
+}
+
+async function fetchSeries(
+  dsUid: string,
+  promql: string,
+  start: number,
+  end: number,
+  step: number,
+  requestId: string,
+  signal: AbortSignal,
+): Promise<SeriesData | undefined> {
+  const response = await firstValueFrom(getBackendSrv()
+    .fetch<RangeResult>({
+      url: `/api/datasources/proxy/uid/${dsUid}/api/v1/query_range`,
+      params: { query: promql, start: String(start), end: String(end), step: String(step) },
+      method: 'GET',
+      requestId,
+      showErrorAlert: false,
+    }));
+
+  if (signal.aborted) return undefined;
+
+  const series = response.data.data.result;
+  if (series.length === 0) return undefined;
+
+  const timestamps: number[] = [];
+  const values: number[] = [];
+  for (const [ts, val] of series[0].values) {
+    timestamps.push(ts);
+    values.push(parseFloat(val));
+  }
+  return { timestamps, values, promql };
 }
 
 // ─── Modal component ────────────────────────────────────────────────────────
 
-export function MetricChartModal({ title, entityId, metricKey, description, deployment, endpointFilter, onClose }: MetricChartModalProps): React.JSX.Element {
+export function PodsChartModal({ title, entityId, deployment, onClose }: PodsChartModalProps): React.JSX.Element {
   const backdropRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<FetchState>({ status: 'loading' });
   const [timeRange, setTimeRange] = useState<TimeRange>(loadTimeRange);
@@ -176,27 +188,31 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
   const dsMap = useDataSourceMap();
   const isEditing = useEditMode();
   const datasourceDefs = useDatasourceDefs();
-  const metricDsName = useMetricDatasource(entityId, metricKey);
+  const readyDsName = useMetricDatasource(entityId, 'readyReplicas');
+  const desiredDsName = useMetricDatasource(entityId, 'desiredReplicas');
   const onSaveQuery = useSaveMetricQuery();
 
+  // Use readyReplicas datasource as the shared datasource
+  const metricDsName = readyDsName ?? desiredDsName;
+
   // ── Edit state (uses raw template with placeholders like {{deployment}}) ──
-  const rawPromql = rawPromqlQueries?.[metricKey] ?? '';
+  const rawReadyPromql = rawPromqlQueries?.readyReplicas ?? '';
+  const rawDesiredPromql = rawPromqlQueries?.desiredReplicas ?? '';
   const originalDsName = metricDsName ?? '';
-  const [editQuery, setEditQuery] = useState(rawPromql);
+  const [editReadyQuery, setEditReadyQuery] = useState(rawReadyPromql);
+  const [editDesiredQuery, setEditDesiredQuery] = useState(rawDesiredPromql);
   const [editDsName, setEditDsName] = useState(originalDsName);
   const [saving, setSaving] = useState(false);
 
-  // Sync edit state when originals change (e.g. after save + reload)
-  useEffect((): void => {
-    setEditQuery(rawPromql);
-  }, [rawPromql]);
-  useEffect((): void => {
-    setEditDsName(originalDsName);
-  }, [originalDsName]);
+  useEffect((): void => { setEditReadyQuery(rawReadyPromql); }, [rawReadyPromql]);
+  useEffect((): void => { setEditDesiredQuery(rawDesiredPromql); }, [rawDesiredPromql]);
+  useEffect((): void => { setEditDsName(originalDsName); }, [originalDsName]);
 
-  const hasChanges = editQuery !== rawPromql || editDsName !== originalDsName;
+  const hasChanges =
+    editReadyQuery !== rawReadyPromql ||
+    editDesiredQuery !== rawDesiredPromql ||
+    editDsName !== originalDsName;
 
-  // ── Datasource options for the picker ──
   const dsOptions = useMemo((): SelectableValue<string>[] => {
     return datasourceDefs.map((ds): SelectableValue<string> => ({
       label: `${ds.name} (${ds.type})`,
@@ -205,12 +221,10 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
     }));
   }, [datasourceDefs]);
 
-  // ── Resolve datasource UID ──
   const resolveDsUid = useCallback((dsName: string): string | undefined => {
     const dsMapRecord: Readonly<Record<string, string | undefined>> = dsMap;
     const uid = dsMapRecord[dsName];
     if (uid !== undefined && uid !== '') return uid;
-    // Fallback: first available
     return Object.values(dsMap).find((v): boolean => v !== '');
   }, [dsMap]);
 
@@ -222,94 +236,71 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
     return (): void => { document.removeEventListener('keydown', handleEsc); };
   }, [onClose]);
 
-  const fetchRangeData = useCallback(async (signal: AbortSignal, showLoading: boolean): Promise<void> => {
+  const fetchData = useCallback(async (signal: AbortSignal, showLoading: boolean): Promise<void> => {
     // In edit mode, don't fetch — the user edits the raw template query
     if (isEditing) {
       setState({ status: 'error', message: 'Chart not available in edit mode' });
       return;
     }
 
-    if (showLoading) {
-      setState({ status: 'loading' });
+    if (showLoading) setState({ status: 'loading' });
+
+    // Resolve deployment-specific queries when a deployment is selected
+    const readyKey = deployment !== undefined ? `deploy:${deployment}:readyReplicas` : 'readyReplicas';
+    const desiredKey = deployment !== undefined ? `deploy:${deployment}:desiredReplicas` : 'desiredReplicas';
+    const readyPromql = promqlQueries?.[readyKey];
+    const desiredPromql = promqlQueries?.[desiredKey];
+
+    if (readyPromql === undefined && desiredPromql === undefined) {
+      setState({ status: 'error', message: 'No PromQL queries found for readyReplicas or desiredReplicas' });
+      return;
+    }
+
+    const dsUid = resolveDsUid(metricDsName ?? '');
+    if (dsUid === undefined || dsUid === '') {
+      setState({ status: 'error', message: 'No Prometheus datasource configured in plugin settings' });
+      return;
     }
 
     const { start, end, step } = resolveRange(timeRange);
 
     try {
-      // Look up PromQL from context, resolving deployment/endpoint selection
-      const effectiveKey = resolveChartQueryKey(metricKey, deployment, endpointFilter, promqlQueries);
-      const promql = promqlQueries?.[effectiveKey];
-      if (promql === undefined) {
-        setState({ status: 'error', message: 'No PromQL query found for this metric' });
-        return;
-      }
-
-      // Resolve datasource UID using the metric's datasource name
-      const dsUid = resolveDsUid(metricDsName ?? '');
-      if (dsUid === undefined || dsUid === '') {
-        setState({ status: 'error', message: 'No Prometheus datasource configured in plugin settings' });
-        return;
-      }
-
-      interface RangeResult {
-        readonly status: string;
-        readonly data: {
-          readonly resultType: string;
-          readonly result: readonly {
-            readonly values: readonly [number, string][];
-          }[];
-        };
-      }
-
-      const response = await firstValueFrom(getBackendSrv()
-        .fetch<RangeResult>({
-          url: `/api/datasources/proxy/uid/${dsUid}/api/v1/query_range`,
-          params: { query: promql, start: String(start), end: String(end), step: String(step) },
-          method: 'GET',
-          requestId: `metric-chart-${entityId}-${metricKey}`,
-          showErrorAlert: false,
-        }));
+      const [readyData, desiredData] = await Promise.all([
+        readyPromql !== undefined
+          ? fetchSeries(dsUid, readyPromql, start, end, step, `pods-ready-${entityId}`, signal)
+          : Promise.resolve(undefined),
+        desiredPromql !== undefined
+          ? fetchSeries(dsUid, desiredPromql, start, end, step, `pods-desired-${entityId}`, signal)
+          : Promise.resolve(undefined),
+      ]);
 
       if (signal.aborted) return;
 
-      const series = response.data.data.result;
-      if (series.length === 0) {
-        setState({ status: 'error', message: 'No data returned for this metric' });
+      if (readyData === undefined && desiredData === undefined) {
+        setState({ status: 'error', message: 'No data returned for replica metrics' });
         return;
       }
 
-      const timestamps: number[] = [];
-      const values: number[] = [];
-      for (const [ts, val] of series[0].values) {
-        timestamps.push(ts);
-        values.push(parseFloat(val));
-      }
-
-      setState({ status: 'success', data: { timestamps, values, promql } });
+      setState({ status: 'success', ready: readyData, desired: desiredData });
     } catch (err: unknown) {
       if (signal.aborted) return;
-      setState({
-        status: 'error',
-        message: err instanceof Error ? err.message : 'Unknown error',
-      });
+      setState({ status: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
     }
-  }, [entityId, metricKey, deployment, endpointFilter, timeRange, topologyId, dsMap, metricDsName, resolveDsUid, promqlQueries, isEditing]);
+  }, [entityId, deployment, timeRange, topologyId, dsMap, metricDsName, resolveDsUid, promqlQueries, isEditing]);
 
-  // Initial fetch + re-fetch on param/time-range changes (shows loading spinner)
   useEffect((): (() => void) => {
     const controller = new AbortController();
-    void fetchRangeData(controller.signal, true);
+    void fetchData(controller.signal, true);
     return (): void => { controller.abort(); };
-  }, [fetchRangeData]);
+  }, [fetchData]);
 
-  // Silent re-fetch on SSE updates (no loading spinner)
   const initialTickRef = useRef(refreshTick);
   useEffect((): (() => void) => {
     if (refreshTick === initialTickRef.current) return (): void => { /* noop */ };
     const controller = new AbortController();
-    void fetchRangeData(controller.signal, false);
+    void fetchData(controller.signal, false);
     return (): void => { controller.abort(); };
-  }, [refreshTick, fetchRangeData]);
+  }, [refreshTick, fetchData]);
 
   const handleTimeRangeChange = (range: TimeRange): void => {
     saveTimeRange(range);
@@ -321,7 +312,8 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
   };
 
   const handleCancel = (): void => {
-    setEditQuery(rawPromql);
+    setEditReadyQuery(rawReadyPromql);
+    setEditDesiredQuery(rawDesiredPromql);
     setEditDsName(originalDsName);
   };
 
@@ -329,31 +321,32 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
     if (onSaveQuery === undefined) return;
     setSaving(true);
     try {
-      await onSaveQuery(entityId, metricKey, editQuery, editDsName);
+      const saves: Promise<void>[] = [];
+      if (editReadyQuery !== rawReadyPromql || editDsName !== originalDsName) {
+        saves.push(onSaveQuery(entityId, 'readyReplicas', editReadyQuery, editDsName));
+      }
+      if (editDesiredQuery !== rawDesiredPromql || editDsName !== originalDsName) {
+        saves.push(onSaveQuery(entityId, 'desiredReplicas', editDesiredQuery, editDsName));
+      }
+      await Promise.all(saves);
     } finally {
       setSaving(false);
     }
   };
 
+  const readyDesc = metricDescription('readyReplicas');
+  const desiredDesc = metricDescription('desiredReplicas');
+  const loaded = state.status !== 'loading';
+
   return createPortal(
-    <div
-      ref={backdropRef}
-      onClick={handleBackdropClick}
-      className={styles.backdrop}
-    >
-      <div className={styles.modal}>
+    <div ref={backdropRef} onClick={handleBackdropClick} className={s.backdrop}>
+      <div className={s.modal}>
         {/* Header */}
-        <div className={styles.header}>
-          <h2 className={styles.headerTitle}>
-            {title} — {metricKey}
-          </h2>
-          <div className={styles.headerActions}>
+        <div className={s.header}>
+          <h2 className={s.headerTitle}>{title} — Pods</h2>
+          <div className={s.headerActions}>
             <TimeRangePicker value={timeRange} onChange={handleTimeRangeChange} />
-            <button
-              type="button"
-              onClick={onClose}
-              className={styles.closeButton}
-            >
+            <button type="button" onClick={onClose} className={s.closeButton}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
@@ -362,28 +355,33 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
         </div>
 
         {/* Body */}
-        <div className={styles.body}>
+        <div className={s.body}>
           {state.status === 'loading' && (
-            <div className={styles.centerBox}>
-              <div className={styles.spinner} />
-            </div>
+            <div className={s.centerBox}><div className={s.spinner} /></div>
           )}
 
           {state.status === 'error' && (
-            <div className={styles.centerBox}>
-              <p className={styles.errorText}>{state.message}</p>
+            <div className={s.centerBox}>
+              <p className={s.errorText}>{state.message}</p>
             </div>
           )}
 
           {state.status === 'success' && (
-            <TimeSeriesChart data={state.data} />
+            <>
+              {/* Legend */}
+              <div className={s.legend}>
+                <span className={s.legendItem}><span className={s.legendDotReady} /> Ready replicas</span>
+                <span className={s.legendItem}><span className={s.legendDotDesired} /> Desired replicas</span>
+              </div>
+              <PodsTimeSeriesChart ready={state.ready} desired={state.desired} />
+            </>
           )}
 
-          {/* Datasource picker — always visible, disabled when not editing */}
-          {state.status !== 'loading' && (
-            <div className={styles.datasourceSection}>
-              <span className={styles.sectionLabel}>Datasource</span>
-              <div className={isEditing ? undefined : styles.disabledOverlay}>
+          {/* Datasource picker */}
+          {loaded && (
+            <div className={s.section}>
+              <span className={s.sectionLabel}>Datasource</span>
+              <div className={isEditing ? undefined : s.disabledOverlay}>
                 {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
                 <Select<string>
                   options={dsOptions}
@@ -398,40 +396,55 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
             </div>
           )}
 
-          {/* PromQL section — editable when in edit mode */}
-          {state.status !== 'loading' && (
-            <div className={styles.promqlSection}>
-              <span className={styles.sectionLabel}>PromQL</span>
+          {/* Ready replicas PromQL */}
+          {loaded && (
+            <div className={s.section}>
+              <span className={s.sectionLabel}>PromQL — Ready Replicas</span>
               {isEditing ? (
                 <textarea
-                  className={styles.promqlTextarea}
-                  value={editQuery}
-                  onChange={(e): void => { setEditQuery(e.target.value); }}
-                  rows={4}
+                  className={s.promqlTextarea}
+                  value={editReadyQuery}
+                  onChange={(e): void => { setEditReadyQuery(e.target.value); }}
+                  rows={3}
                   spellCheck={false}
                 />
               ) : (
-                <pre className={styles.promqlPre}>
-                  {state.status === 'success' ? state.data.promql : rawPromql}
+                <pre className={s.promqlPre}>
+                  {state.status === 'success' && state.ready !== undefined ? state.ready.promql : rawReadyPromql || 'Not configured'}
                 </pre>
               )}
             </div>
           )}
 
-          {/* Save / Cancel buttons — only in edit mode */}
-          {isEditing && state.status !== 'loading' && (
-            <div className={styles.editActions}>
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={handleCancel}
-                disabled={!hasChanges || saving}
-              >
+          {/* Desired replicas PromQL */}
+          {loaded && (
+            <div className={s.section}>
+              <span className={s.sectionLabel}>PromQL — Desired Replicas</span>
+              {isEditing ? (
+                <textarea
+                  className={s.promqlTextarea}
+                  value={editDesiredQuery}
+                  onChange={(e): void => { setEditDesiredQuery(e.target.value); }}
+                  rows={3}
+                  spellCheck={false}
+                />
+              ) : (
+                <pre className={s.promqlPre}>
+                  {state.status === 'success' && state.desired !== undefined ? state.desired.promql : rawDesiredPromql || 'Not configured'}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {/* Save / Cancel */}
+          {isEditing && loaded && (
+            <div className={s.editActions}>
+              <button type="button" className={s.cancelButton} onClick={handleCancel} disabled={!hasChanges || saving}>
                 Cancel
               </button>
               <button
                 type="button"
-                className={styles.saveButton}
+                className={s.saveButton}
                 onClick={(): void => { void handleSave(); }}
                 disabled={!hasChanges || saving || onSaveQuery === undefined}
               >
@@ -440,14 +453,20 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
             </div>
           )}
 
-          {state.status !== 'loading' && (description ?? metricDescription(metricKey)) !== undefined && (
-            <div className={styles.descriptionSection}>
-              <span className={styles.sectionLabel}>
-                What this metric measures
-              </span>
-              <p className={styles.descriptionText}>
-                {description ?? metricDescription(metricKey)}
-              </p>
+          {/* Descriptions */}
+          {loaded && (readyDesc !== undefined || desiredDesc !== undefined) && (
+            <div className={s.section}>
+              <span className={s.sectionLabel}>What these metrics measure</span>
+              {readyDesc !== undefined && (
+                <p className={s.descriptionText}>
+                  <strong>Ready replicas:</strong> {readyDesc}
+                </p>
+              )}
+              {desiredDesc !== undefined && (
+                <p className={s.descriptionText}>
+                  <strong>Desired replicas:</strong> {desiredDesc}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -457,22 +476,18 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Styles ─────────────────────────────────────────────────────────────────
 
 const spin = keyframes({
   from: { transform: 'rotate(0deg)' },
   to: { transform: 'rotate(360deg)' },
 });
 
-const styles = {
+const s = {
   chartContainer: css({
     width: '100%',
-    '& .u-legend': {
-      color: '#cbd5e1',
-    },
-    '& .u-legend .u-value': {
-      color: '#f1f5f9',
-    },
+    '& .u-legend': { color: '#cbd5e1' },
+    '& .u-legend .u-value': { color: '#f1f5f9' },
   }),
 
   backdrop: css({
@@ -502,10 +517,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottom: '1px solid #334155',
-    paddingLeft: '1.5rem',
-    paddingRight: '1.5rem',
-    paddingTop: '1rem',
-    paddingBottom: '1rem',
+    padding: '1rem 1.5rem',
   }),
 
   headerTitle: css({
@@ -531,17 +543,11 @@ const styles = {
     padding: '0.25rem',
     color: '#94a3b8',
     transition: 'color 150ms, background-color 150ms',
-    '&:hover': {
-      backgroundColor: '#334155',
-      color: '#fff',
-    },
+    '&:hover': { backgroundColor: '#334155', color: '#fff' },
   }),
 
   body: css({
-    paddingLeft: '1.5rem',
-    paddingRight: '1.5rem',
-    paddingTop: '1rem',
-    paddingBottom: '1rem',
+    padding: '1rem 1.5rem',
   }),
 
   centerBox: css({
@@ -566,17 +572,43 @@ const styles = {
     color: '#94a3b8',
   }),
 
-  datasourceSection: css({
+  legend: css({
+    display: 'flex',
+    gap: '1rem',
+    marginBottom: '0.5rem',
+    fontSize: '12px',
+    color: '#94a3b8',
+  }),
+
+  legendItem: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.375rem',
+  }),
+
+  legendDotReady: css({
+    display: 'inline-block',
+    width: '10px',
+    height: '10px',
+    borderRadius: '2px',
+    backgroundColor: '#22c55e',
+  }),
+
+  legendDotDesired: css({
+    display: 'inline-block',
+    width: '10px',
+    height: '10px',
+    borderRadius: '2px',
+    backgroundColor: '#3b82f6',
+  }),
+
+  section: css({
     marginTop: '1rem',
   }),
 
   disabledOverlay: css({
     opacity: 0.5,
     pointerEvents: 'none' as const,
-  }),
-
-  promqlSection: css({
-    marginTop: '1rem',
   }),
 
   sectionLabel: css({
@@ -593,10 +625,7 @@ const styles = {
     overflowX: 'auto',
     borderRadius: '0.5rem',
     backgroundColor: '#0f172a',
-    paddingLeft: '1rem',
-    paddingRight: '1rem',
-    paddingTop: '0.75rem',
-    paddingBottom: '0.75rem',
+    padding: '0.75rem 1rem',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
     fontSize: '12px',
     lineHeight: 1.625,
@@ -605,23 +634,18 @@ const styles = {
 
   promqlTextarea: css({
     width: '100%',
-    minHeight: '80px',
+    minHeight: '60px',
     resize: 'vertical',
     borderRadius: '0.5rem',
     backgroundColor: '#0f172a',
     border: '1px solid #475569',
-    paddingLeft: '1rem',
-    paddingRight: '1rem',
-    paddingTop: '0.75rem',
-    paddingBottom: '0.75rem',
+    padding: '0.75rem 1rem',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
     fontSize: '12px',
     lineHeight: 1.625,
     color: '#34d399',
     outline: 'none',
-    '&:focus': {
-      borderColor: '#3b82f6',
-    },
+    '&:focus': { borderColor: '#3b82f6' },
   }),
 
   editActions: css({
@@ -641,14 +665,8 @@ const styles = {
     border: '1px solid #475569',
     cursor: 'pointer',
     transition: 'all 150ms',
-    '&:hover:not(:disabled)': {
-      backgroundColor: '#334155',
-      color: '#fff',
-    },
-    '&:disabled': {
-      opacity: 0.4,
-      cursor: 'default',
-    },
+    '&:hover:not(:disabled)': { backgroundColor: '#334155', color: '#fff' },
+    '&:disabled': { opacity: 0.4, cursor: 'default' },
   }),
 
   saveButton: css({
@@ -661,22 +679,14 @@ const styles = {
     border: '1px solid #3b82f6',
     cursor: 'pointer',
     transition: 'all 150ms',
-    '&:hover:not(:disabled)': {
-      backgroundColor: '#2563eb',
-    },
-    '&:disabled': {
-      opacity: 0.4,
-      cursor: 'default',
-    },
-  }),
-
-  descriptionSection: css({
-    marginTop: '0.75rem',
+    '&:hover:not(:disabled)': { backgroundColor: '#2563eb' },
+    '&:disabled': { opacity: 0.4, cursor: 'default' },
   }),
 
   descriptionText: css({
     fontSize: '13px',
     lineHeight: 1.625,
     color: '#cbd5e1',
+    marginTop: '0.25rem',
   }),
 };

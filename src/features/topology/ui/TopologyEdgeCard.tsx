@@ -446,13 +446,6 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
 
   // If no endpoint/routing key defined, force "all"
   const effectiveEndpoint = edgeHasEndpoint ? selectedEndpoint : 'all';
-  const endpointFilterForChart = effectiveEndpoint === 'all'
-    ? 'all'
-    : effectiveEndpoint.startsWith('rk:')
-      ? effectiveEndpoint.slice(3)
-      : effectiveEndpoint.startsWith('ep:')
-        ? effectiveEndpoint.slice(3)
-        : undefined;
   const allMetrics = edgeMetricRows(edge, effectiveEndpoint, viewOptions.coloringMode, sla);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
 
@@ -652,7 +645,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
               metricKey={chartMetric.key}
               description={chartMetric.description}
               deployment={undefined}
-              endpointFilter={endpointFilterForChart}
+              endpointFilter={effectiveEndpoint}
               onClose={(): void => { setChartMetric(undefined); }}
             />
           )}

@@ -55,8 +55,8 @@ export interface CustomMetricValueDto {
 
 export interface DeploymentMetricsDto {
   readonly name: string;
-  readonly readyReplicas: number;
-  readonly desiredReplicas: number;
+  readonly readyReplicas: number | undefined;
+  readonly desiredReplicas: number | undefined;
   readonly cpuPercent: number;
   readonly memoryPercent: number;
   readonly cpuPercentWeekAgo: number | undefined;

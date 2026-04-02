@@ -105,3 +105,45 @@ export function slaMetricStatus(
   if (value === undefined || sla === undefined) return 'unknown';
   return SLA_STATUS_TO_NODE_STATUS[compareToSla(value, metricKey, sla[metricKey], explicitDirection)];
 }
+
+// ─── Unified metric status (parallels metricColor but returns NodeStatus) ───
+
+export function metricStatus(
+  value: number | undefined,
+  weekAgo: number | undefined,
+  metricKey: string,
+  mode: ColoringMode,
+  slaThreshold: MetricSlaThreshold | undefined,
+  explicitDirection?: MetricDirection,
+): NodeStatus {
+  if (value === undefined) return 'unknown';
+  if (mode === 'baseline') {
+    return baselineMetricStatus(value, weekAgo, metricKey, explicitDirection);
+  }
+  if (slaThreshold === undefined) return 'unknown';
+  return SLA_STATUS_TO_NODE_STATUS[compareToSla(value, metricKey, slaThreshold, explicitDirection)];
+}
+
+// ─── Combined color + status (single-pass) ──────────────────────────────────
+
+export function metricColorAndStatus(
+  value: number | undefined,
+  weekAgo: number | undefined,
+  metricKey: string,
+  mode: ColoringMode,
+  slaThreshold: MetricSlaThreshold | undefined,
+  explicitDirection?: MetricDirection,
+): { color: string; status: NodeStatus } {
+  if (value === undefined) return { color: '#6b7280', status: 'unknown' };
+  if (mode === 'baseline') {
+    return {
+      color: baselineColor(value, weekAgo, metricKey, explicitDirection),
+      status: baselineMetricStatus(value, weekAgo, metricKey, explicitDirection),
+    };
+  }
+  const slaStatus = compareToSla(value, metricKey, slaThreshold, explicitDirection);
+  return {
+    color: SLA_COLORS[slaStatus],
+    status: slaThreshold === undefined ? 'unknown' : SLA_STATUS_TO_NODE_STATUS[slaStatus],
+  };
+}

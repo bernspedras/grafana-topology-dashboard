@@ -7,13 +7,15 @@ import { Select } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import type { TopologyNode, NodeStatus } from '../domain';
 import { EKSServiceNode, EC2ServiceNode, DatabaseNode, ExternalNode } from '../domain';
-import { statusBorderColor, nodeColor } from '../application/nodeStyles';
+import { statusColor, nodeColor } from '../application/nodeStyles';
+import { healthFromMetricRows } from '../application/healthFromMetricRows';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricChartModal } from './MetricChartModal';
+import { PodsChartModal } from './PodsChartModal';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -119,8 +121,8 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const sla = useSla(node.id);
   const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
-  const borderColor = statusBorderColor(node, viewOptions.coloringMode);
-  const activeStatus = viewOptions.coloringMode === 'baseline' ? node.baselineStatus : node.status;
+  const activeStatus = healthFromMetricRows(allMetrics);
+  const borderColor = statusColor(activeStatus);
   const dotColor = STATUS_DOT[activeStatus];
   const isCritical = activeStatus === 'critical';
   const isEKS = node instanceof EKSServiceNode;
@@ -212,8 +214,9 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
         {isEKS && (
           <div className={styles.deploymentWrapper}>
             <span className={styles.deploymentLabel}>Deployment:</span>
-            <div className="nodrag">
-              {/* eslint-disable-next-line @typescript-eslint/no-deprecated */}
+            {/* nodrag + nopan + stopPropagation prevent ReactFlow from consuming click/pointer events */}
+            <div className="nodrag nopan nowheel" onPointerDown={(e): void => { e.stopPropagation(); }}>
+              {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
               <Select<string>
                 options={[
                   { label: 'All', value: '' },
@@ -281,7 +284,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
       )}
 
       {/* Metric Chart Modal */}
-      {chartMetric !== undefined && (
+      {chartMetric !== undefined && chartMetric.key !== 'pods' && (
         <MetricChartModal
           title={node.label + (selectedDeployment !== '' ? ' (' + selectedDeployment + ')' : '') + ' — ' + chartMetric.label}
           entityId={node.id}
@@ -289,6 +292,16 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
           description={chartMetric.description}
           deployment={selectedDeployment !== '' ? selectedDeployment : undefined}
           endpointFilter={undefined}
+          onClose={(): void => { setChartMetric(undefined); }}
+        />
+      )}
+
+      {/* Pods Chart Modal (dual-series: ready + desired) */}
+      {chartMetric?.key === 'pods' && (
+        <PodsChartModal
+          title={node.label + (selectedDeployment !== '' ? ' (' + selectedDeployment + ')' : '')}
+          entityId={node.id}
+          deployment={selectedDeployment !== '' ? selectedDeployment : undefined}
           onClose={(): void => { setChartMetric(undefined); }}
         />
       )}

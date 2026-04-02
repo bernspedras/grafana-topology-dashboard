@@ -30,3 +30,4 @@ export function statusBorderColor(node: TopologyNode, mode?: ColoringMode): stri
   const status = mode === 'baseline' ? node.baselineStatus : node.status;
   return statusColor(status);
 }
+
