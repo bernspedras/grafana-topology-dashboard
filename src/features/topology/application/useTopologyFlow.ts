@@ -1,9 +1,12 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Node, Edge, NodeChange, Connection } from '@xyflow/react';
-import type { TopologyGraph } from '../domain';
+import type { TopologyGraph, TopologyEdge } from '../domain';
 import { useTopologyPositionStore } from './topologyPositionStore';
 import type { FlowLayout } from './topologyRegistry';
 import { useTopologyId } from './TopologyIdContext';
+import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
+import type { ColoringMode } from './metricColor';
+import type { SlaThresholdMap } from './slaThresholds';
 
 interface UseTopologyFlowResult {
   readonly nodes: Node[];
@@ -13,11 +16,16 @@ interface UseTopologyFlowResult {
   readonly getCurrentLayout: () => FlowLayout;
 }
 
-export function useTopologyFlow(graph: TopologyGraph, bundledLayout: FlowLayout | undefined): UseTopologyFlowResult {
+export function useTopologyFlow(
+  graph: TopologyGraph,
+  bundledLayout: FlowLayout | undefined,
+  coloringMode?: ColoringMode,
+  slaMap?: Readonly<Record<string, SlaThresholdMap>>,
+): UseTopologyFlowResult {
   const topologyId = useTopologyId();
 
   const nodes = useTopologyPositionStore((s) => s.nodes);
-  const edges = useTopologyPositionStore((s) => s.edges);
+  const storeEdges = useTopologyPositionStore((s) => s.edges);
   const onNodesChange = useTopologyPositionStore((s) => s.onNodesChange);
   const initialize = useTopologyPositionStore((s) => s.initialize);
   const setBundledLayout = useTopologyPositionStore((s) => s.setBundledLayout);
@@ -46,6 +54,20 @@ export function useTopologyFlow(graph: TopologyGraph, bundledLayout: FlowLayout 
     // Then initialize (reads from bundledLayouts which was just set above)
     initialize(graph, topologyId);
   }, [graph, topologyId, initialize, layoutVersion, bundledLayout, setBundledLayout]);
+
+  // Re-derive edge styles when coloringMode or slaMap changes
+  const edges = useMemo((): Edge[] => {
+    if (coloringMode === undefined) return storeEdges;
+    return storeEdges.map((edge) => {
+      const domainEdge = (edge.data as { domainEdge?: TopologyEdge } | undefined)?.domainEdge;
+      if (domainEdge === undefined) return edge;
+      return {
+        ...edge,
+        style: edgeStrokeStyle(domainEdge, coloringMode, slaMap?.[domainEdge.id]),
+        markerEnd: edgeMarkerEnd(domainEdge, coloringMode, slaMap?.[domainEdge.id]),
+      };
+    });
+  }, [storeEdges, coloringMode, slaMap]);
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {

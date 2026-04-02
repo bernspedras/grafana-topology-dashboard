@@ -5,6 +5,7 @@ import type { TopologyGraph } from '../domain';
 import type { TopologyDefinition } from './topologyDefinition';
 import { buildGroupedQueryMaps, assembleTopologyGraph } from './assembleTopologyGraph';
 import { PLUGIN_ID } from './pluginConstants';
+import type { ParsedSlaDefaults } from './slaThresholds';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +124,7 @@ export function useGrafanaMetrics(
   definition: TopologyDefinition | undefined,
   dataSourceMap: Record<string, string>,
   pollIntervalMs = 30000,
+  slaDefaults?: ParsedSlaDefaults,
 ): UseGrafanaMetricsResult {
   const [graph, setGraph] = useState<TopologyGraph | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -145,11 +147,11 @@ export function useGrafanaMetrics(
       return;
     }
     const empty = new Map<string, number | undefined>();
-    setGraph(assembleTopologyGraph(definition, empty, empty));
+    setGraph(assembleTopologyGraph(definition, empty, empty, slaDefaults));
     // Reset baseline cache on topology change.
     baselineCacheRef.current = undefined;
     baselineFetchedAtRef.current = 0;
-  }, [definition]);
+  }, [definition, slaDefaults]);
 
   const poll = useCallback(async (id: number): Promise<void> => {
     if (definition === undefined || groupedMaps === undefined) return;
@@ -179,7 +181,7 @@ export function useGrafanaMetrics(
           weekAgoResults = baselineCacheRef.current ?? new Map<string, number | undefined>();
         }
 
-        const assembled = assembleTopologyGraph(definition, mergedResults, weekAgoResults);
+        const assembled = assembleTopologyGraph(definition, mergedResults, weekAgoResults, slaDefaults);
         setGraph(assembled);
         setError(undefined);
         setLastRefreshAt(Date.now());
@@ -238,7 +240,7 @@ export function useGrafanaMetrics(
         } else {
           effectiveBaseline = baselineCacheRef.current ?? new Map<string, number | undefined>();
         }
-        const assembled = assembleTopologyGraph(definition, mergedResults, effectiveBaseline);
+        const assembled = assembleTopologyGraph(definition, mergedResults, effectiveBaseline, slaDefaults);
         setGraph(assembled);
         setError(undefined);
         setLastRefreshAt(Date.now());

@@ -71,6 +71,7 @@ export interface EKSServiceNodeDto {
   readonly id: string;
   readonly label: string;
   readonly status: string;
+  readonly baselineStatus?: string;
   readonly metrics: NodeMetricsDto;
   readonly namespace: string;
   readonly deployments: readonly DeploymentMetricsDto[];
@@ -83,6 +84,7 @@ export interface EC2ServiceNodeDto {
   readonly id: string;
   readonly label: string;
   readonly status: string;
+  readonly baselineStatus?: string;
   readonly metrics: NodeMetricsDto;
   readonly instanceId: string;
   readonly instanceType: string;
@@ -96,6 +98,7 @@ export interface DatabaseNodeDto {
   readonly id: string;
   readonly label: string;
   readonly status: string;
+  readonly baselineStatus?: string;
   readonly metrics: NodeMetricsDto;
   readonly engine: string;
   readonly isReadReplica: boolean;
@@ -108,6 +111,7 @@ export interface ExternalNodeDto {
   readonly id: string;
   readonly label: string;
   readonly status: string;
+  readonly baselineStatus?: string;
   readonly metrics: NodeMetricsDto;
   readonly provider: string;
   readonly contactEmail: string | undefined;
@@ -120,6 +124,7 @@ export interface FlowSummaryNodeDto {
   readonly id: string;
   readonly label: string;
   readonly status: string;
+  readonly baselineStatus?: string;
   readonly metrics: NodeMetricsDto;
   readonly customMetrics?: readonly CustomMetricValueDto[];
 }

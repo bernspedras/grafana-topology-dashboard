@@ -6,19 +6,23 @@ import {
   FlowSummaryNode,
 } from '../domain';
 import type { TopologyNode, CustomMetricValue } from '../domain';
-import { baselineColor } from './baselineComparison';
+import { metricColor as unifiedMetricColor } from './metricColor';
+import type { ColoringMode } from './metricColor';
+import type { SlaThresholdMap } from './slaThresholds';
 
 // ─── Custom metric rows ─────────────────────────────────────────────────────
 
-function customMetricRows(source: { readonly customMetrics: readonly CustomMetricValue[] }): readonly MetricRow[] {
+function customMetricRows(
+  source: { readonly customMetrics: readonly CustomMetricValue[] },
+  mode: ColoringMode,
+  sla: SlaThresholdMap | undefined,
+): readonly MetricRow[] {
   return source.customMetrics.map((cm): MetricRow => ({
     label: cm.label,
     value: cm.value !== undefined
       ? round2(cm.value) + (cm.unit !== undefined ? ' ' + cm.unit : '')
       : 'N/A',
-    color: cm.value !== undefined
-      ? baselineColor(cm.value, cm.valueWeekAgo, cm.key, cm.direction)
-      : '#6b7280',
+    color: unifiedMetricColor(cm.value, cm.valueWeekAgo, cm.key, mode, sla?.['custom:' + cm.key], cm.direction),
     metricKey: 'custom:' + cm.key,
   }));
 }
@@ -42,8 +46,8 @@ function pct(value: number | undefined): string {
   return value !== undefined ? round2(value) + '%' : 'N/A';
 }
 
-function metricColor(value: number | undefined, weekAgo: number | undefined, key: string): string {
-  return value !== undefined ? baselineColor(value, weekAgo, key) : '#6b7280';
+function mc(value: number | undefined, weekAgo: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined): string {
+  return unifiedMetricColor(value, weekAgo, key, mode, sla?.[key], undefined);
 }
 
 // ─── Type tag ───────────────────────────────────────────────────────────────
@@ -59,7 +63,14 @@ export function nodeTypeTag(node: TopologyNode): string {
 
 // ─── Metric rows ────────────────────────────────────────────────────────────
 
-export function nodeMetricRows(node: TopologyNode, selectedDeployment?: string): readonly MetricRow[] {
+export function nodeMetricRows(
+  node: TopologyNode,
+  selectedDeployment?: string,
+  coloringMode?: ColoringMode,
+  sla?: SlaThresholdMap,
+): readonly MetricRow[] {
+  const mode: ColoringMode = coloringMode ?? 'baseline';
+
   if (node instanceof EKSServiceNode) {
     const dep = selectedDeployment !== undefined
       ? node.deployments.find((d) => d.name === selectedDeployment)
@@ -68,9 +79,9 @@ export function nodeMetricRows(node: TopologyNode, selectedDeployment?: string):
     if (dep !== undefined) {
       return [
         { label: 'Pods', value: String(dep.readyReplicas) + ' / ' + String(dep.desiredReplicas), color: '#22c55e', metricKey: undefined },
-        { label: 'Avg CPU', value: pct(dep.cpuPercent), color: baselineColor(dep.cpuPercent, dep.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
-        { label: 'Memory', value: pct(dep.memoryPercent), color: baselineColor(dep.memoryPercent, dep.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
-        ...customMetricRows(dep.customMetrics.length > 0 ? dep : node),
+        { label: 'Avg CPU', value: pct(dep.cpuPercent), color: mc(dep.cpuPercent, dep.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
+        { label: 'Memory', value: pct(dep.memoryPercent), color: mc(dep.memoryPercent, dep.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
+        ...customMetricRows(dep.customMetrics.length > 0 ? dep : node, mode, sla),
       ];
     }
 
@@ -79,48 +90,48 @@ export function nodeMetricRows(node: TopologyNode, selectedDeployment?: string):
 
     return [
       { label: 'Pods', value: String(totalReady) + ' / ' + String(totalDesired), color: '#22c55e', metricKey: undefined },
-      { label: 'Avg CPU', value: pct(node.metrics.cpuPercent), color: metricColor(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
-      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: metricColor(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
-      ...customMetricRows(node),
+      { label: 'Avg CPU', value: pct(node.metrics.cpuPercent), color: mc(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
+      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: mc(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
+      ...customMetricRows(node, mode, sla),
     ];
   }
 
   if (node instanceof EC2ServiceNode) {
     return [
-      { label: 'CPU', value: pct(node.metrics.cpuPercent), color: metricColor(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
-      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: metricColor(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
+      { label: 'CPU', value: pct(node.metrics.cpuPercent), color: mc(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
+      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: mc(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
       { label: 'Instance', value: node.instanceType, color: '#94a3b8', metricKey: undefined },
       { label: 'AZ', value: node.availabilityZone, color: '#94a3b8', metricKey: undefined },
-      ...customMetricRows(node),
+      ...customMetricRows(node, mode, sla),
     ];
   }
 
   if (node instanceof DatabaseNode) {
     const rows: MetricRow[] = [
-      { label: 'CPU', value: pct(node.metrics.cpuPercent), color: metricColor(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
-      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: metricColor(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
+      { label: 'CPU', value: pct(node.metrics.cpuPercent), color: mc(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
+      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: mc(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
       { label: 'Engine', value: node.engine, color: '#94a3b8', metricKey: undefined },
     ];
     if (node.storageGb !== undefined) {
       rows.push({ label: 'Storage', value: round2(node.storageGb) + ' GB', color: '#22c55e', metricKey: undefined });
     }
-    return [...rows, ...customMetricRows(node)];
+    return [...rows, ...customMetricRows(node, mode, sla)];
   }
 
   if (node instanceof ExternalNode) {
     const rows: MetricRow[] = [
-      { label: 'CPU', value: pct(node.metrics.cpuPercent), color: metricColor(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
-      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: metricColor(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
+      { label: 'CPU', value: pct(node.metrics.cpuPercent), color: mc(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
+      { label: 'Memory', value: pct(node.metrics.memoryPercent), color: mc(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
       { label: 'Provider', value: node.provider, color: '#94a3b8', metricKey: undefined },
     ];
     if (node.slaPercent !== undefined) {
       rows.push({ label: 'SLA', value: round2(node.slaPercent) + '%', color: '#22c55e', metricKey: undefined });
     }
-    return [...rows, ...customMetricRows(node)];
+    return [...rows, ...customMetricRows(node, mode, sla)];
   }
 
   if (node instanceof FlowSummaryNode) {
-    return customMetricRows(node);
+    return customMetricRows(node, mode, sla);
   }
 
   return [];

@@ -20,6 +20,7 @@ import {
 } from '../application/edgeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useViewOptions } from './ViewOptionsContext';
+import { useSla } from './SlaContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricChartModal } from './MetricChartModal';
 import { useTopologyId } from '../application/TopologyIdContext';
@@ -42,6 +43,7 @@ const HEALTH_DOT: Record<EdgeHealth, string> = {
   healthy: '#22c55e',
   warning: '#eab308',
   critical: '#ef4444',
+  unknown: '#9ca3af',
 };
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -434,7 +436,9 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const edge = data.domainEdge;
   const tag = edgeProtocolTag(edge);
   const protocolColor = edgeProtocolColor(edge);
-  const health = edgeHealth(edge);
+  const { options: viewOptions } = useViewOptions();
+  const sla = useSla(edge.id);
+  const health = edgeHealth(edge, viewOptions.coloringMode, sla);
   const dotColor = HEALTH_DOT[health];
   const endpoint = edgeEndpointLabel(edge);
   const showEndpointSelect = isHttpEdge(edge) || hasSelectableRoutingKeys(edge) || hasSelectableEndpointPaths(edge);
@@ -449,8 +453,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
       : effectiveEndpoint.startsWith('ep:')
         ? effectiveEndpoint.slice(3)
         : undefined;
-  const { options: viewOptions } = useViewOptions();
-  const allMetrics = edgeMetricRows(edge, effectiveEndpoint);
+  const allMetrics = edgeMetricRows(edge, effectiveEndpoint, viewOptions.coloringMode, sla);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
 
   return (

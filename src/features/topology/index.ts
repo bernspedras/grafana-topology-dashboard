@@ -2,7 +2,7 @@ export * from './domain';
 export { TopologyView } from './ui/TopologyView';
 export type { AddableNodeKind } from './ui/TopologyView';
 export { layoutGraph } from './application/layoutGraph';
-export { nodeColor, statusBorderColor } from './application/nodeStyles';
+export { nodeColor, statusBorderColor, statusColor } from './application/nodeStyles';
 export { nodeTypeTag, nodeMetricRows } from './application/nodeDisplayData';
 export type { MetricRow } from './application/nodeDisplayData';
 export { edgeLabel } from './application/edgeLabel';
@@ -26,3 +26,7 @@ export { assembleTopologyGraph, buildGroupedQueryMaps } from './application/asse
 export { buildPromqlQueriesMap } from './application/promqlQueriesMap';
 export * from './application/topologyApi';
 export { canEditTopology } from './application/permissions';
+export type { ColoringMode } from './application/metricColor';
+export type { MetricSlaThreshold, SlaThresholdMap } from './application/slaThresholds';
+export { buildSlaMap } from './application/slaThresholds';
+export { SlaProvider, useSla, useSlaMap } from './ui/SlaContext';

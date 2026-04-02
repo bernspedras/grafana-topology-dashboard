@@ -21,6 +21,8 @@ import { FlowStepDetailsModal } from './FlowStepDetailsModal';
 import { useTopologyId } from '../application/TopologyIdContext';
 import { useViewOptions } from './ViewOptionsContext';
 import type { ViewOptionKey } from './ViewOptionsContext';
+import { useSlaMap } from './SlaContext';
+import type { ColoringMode } from '../application/metricColor';
 
 interface TopologyViewProps {
   graph: TopologyGraph;
@@ -170,10 +172,15 @@ function AddMenu({ onSelectNode, onAddFlowStep }: AddMenuProps): React.JSX.Eleme
 
 // ─── Settings Menu ───────────────────────────────────────────────────────────
 
+const COLORING_MODE_OPTIONS: readonly { readonly value: ColoringMode; readonly label: string }[] = [
+  { value: 'baseline', label: 'Compare to last week' },
+  { value: 'sla', label: 'Compare to SLA' },
+];
+
 function SettingsMenu(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { options, toggle } = useViewOptions();
+  const { options, toggle, setColoringMode } = useViewOptions();
 
   useEffect(() => {
     if (!open) {
@@ -216,6 +223,20 @@ function SettingsMenu(): React.JSX.Element {
               {label}
             </label>
           ))}
+          <div className={settingsStyles.divider} />
+          <div className={settingsStyles.sectionLabel}>Metric colors</div>
+          {COLORING_MODE_OPTIONS.map(({ value, label }) => (
+            <label key={value} className={settingsStyles.option}>
+              <input
+                type="radio"
+                name="coloringMode"
+                checked={options.coloringMode === value}
+                onChange={(): void => { setColoringMode(value); }}
+                className={settingsStyles.checkbox}
+              />
+              {label}
+            </label>
+          ))}
         </div>
       )}
     </div>
@@ -223,8 +244,10 @@ function SettingsMenu(): React.JSX.Element {
 }
 
 export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson }: TopologyViewProps): React.JSX.Element {
+  const { options: viewOpts } = useViewOptions();
+  const slaMap = useSlaMap();
   const { nodes, edges, onNodesChange, onReconnect, getCurrentLayout } =
-    useTopologyFlow(graph, bundledLayout);
+    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap);
 
   const topologyId = useTopologyId();
   const toast = useToast();
@@ -526,6 +549,19 @@ const settingsStyles = {
     width: '14px',
     height: '14px',
     cursor: 'pointer',
+  }),
+  divider: css({
+    height: '1px',
+    backgroundColor: '#334155',
+    margin: '6px 0',
+  }),
+  sectionLabel: css({
+    padding: '4px 12px 2px',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#94a3b8',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
   }),
 };
 

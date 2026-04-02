@@ -18,3 +18,16 @@ export interface AppSettings {
   nodeTemplates?: unknown[];
   edgeTemplates?: unknown[];
 }
+
+/** Shape of the SLA defaults JSON — per-kind SLA threshold maps.
+ *  Stored on disk as sla-defaults.json in the topology data directory
+ *  and served via the Go backend bundle endpoint. */
+export interface SlaDefaultsJson {
+  readonly node?: Record<string, { readonly warning: number; readonly critical: number }>;
+  readonly 'http-json'?: Record<string, { readonly warning: number; readonly critical: number }>;
+  readonly 'http-xml'?: Record<string, { readonly warning: number; readonly critical: number }>;
+  readonly 'tcp-db'?: Record<string, { readonly warning: number; readonly critical: number }>;
+  readonly amqp?: Record<string, { readonly warning: number; readonly critical: number }>;
+  readonly kafka?: Record<string, { readonly warning: number; readonly critical: number }>;
+  readonly grpc?: Record<string, { readonly warning: number; readonly critical: number }>;
+}

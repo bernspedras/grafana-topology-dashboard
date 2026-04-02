@@ -181,6 +181,7 @@ function toCustomMetrics(dtos: readonly CustomMetricValueDto[] | undefined): rea
 function deserializeNode(dto: TopologyNodeDto): TopologyNode {
   const metrics = toNodeMetrics(dto.metrics);
   const status = toNodeStatus(dto.status);
+  const baselineStatus = dto.baselineStatus !== undefined ? toNodeStatus(dto.baselineStatus) : 'unknown' as const;
 
   switch (dto._type) {
     case 'EKSServiceNode':
@@ -188,6 +189,7 @@ function deserializeNode(dto: TopologyNodeDto): TopologyNode {
         id: dto.id,
         label: dto.label,
         status,
+        baselineStatus,
         metrics,
         customMetrics: toCustomMetrics(dto.customMetrics),
         namespace: dto.namespace,
@@ -212,6 +214,7 @@ function deserializeNode(dto: TopologyNodeDto): TopologyNode {
         id: dto.id,
         label: dto.label,
         status,
+        baselineStatus,
         metrics,
         customMetrics: toCustomMetrics(dto.customMetrics),
         instanceId: dto.instanceId,
@@ -225,6 +228,7 @@ function deserializeNode(dto: TopologyNodeDto): TopologyNode {
         id: dto.id,
         label: dto.label,
         status,
+        baselineStatus,
         metrics,
         customMetrics: toCustomMetrics(dto.customMetrics),
         engine: dto.engine,
@@ -237,6 +241,7 @@ function deserializeNode(dto: TopologyNodeDto): TopologyNode {
         id: dto.id,
         label: dto.label,
         status,
+        baselineStatus,
         metrics,
         customMetrics: toCustomMetrics(dto.customMetrics),
         provider: dto.provider,
@@ -249,6 +254,7 @@ function deserializeNode(dto: TopologyNodeDto): TopologyNode {
         id: dto.id,
         label: dto.label,
         status,
+        baselineStatus,
         metrics,
         customMetrics: toCustomMetrics(dto.customMetrics),
       });

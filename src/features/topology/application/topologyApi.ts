@@ -23,6 +23,7 @@ export interface TopologyBundleResponse {
   readonly nodeTemplates: readonly unknown[];
   readonly edgeTemplates: readonly unknown[];
   readonly datasources?: readonly DatasourceDefinition[];
+  readonly slaDefaults?: unknown;
 }
 
 export interface FlowListItem {
@@ -154,6 +155,29 @@ export async function saveDatasources(data: unknown): Promise<void> {
       url: `${BASE}/datasources`,
       method: 'PUT',
       data,
+      showErrorAlert: false,
+    }),
+  );
+}
+
+// ─── SLA defaults ────────────────────────────────────────────────────────────
+
+export async function saveSlaDefaults(data: unknown): Promise<void> {
+  await firstValueFrom(
+    getBackendSrv().fetch({
+      url: `${BASE}/sla-defaults`,
+      method: 'PUT',
+      data,
+      showErrorAlert: false,
+    }),
+  );
+}
+
+export async function deleteSlaDefaults(): Promise<void> {
+  await firstValueFrom(
+    getBackendSrv().fetch({
+      url: `${BASE}/sla-defaults`,
+      method: 'DELETE',
       showErrorAlert: false,
     }),
   );

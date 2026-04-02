@@ -11,6 +11,7 @@ import { statusBorderColor, nodeColor } from '../application/nodeStyles';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useViewOptions } from './ViewOptionsContext';
+import { useSla } from './SlaContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricChartModal } from './MetricChartModal';
 
@@ -115,11 +116,13 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const queries = usePromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
-  const allMetrics = nodeMetricRows(node, selectedDeployment || undefined);
+  const sla = useSla(node.id);
+  const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
-  const borderColor = statusBorderColor(node);
-  const dotColor = STATUS_DOT[node.status];
-  const isCritical = node.status === 'critical';
+  const borderColor = statusBorderColor(node, viewOptions.coloringMode);
+  const activeStatus = viewOptions.coloringMode === 'baseline' ? node.baselineStatus : node.status;
+  const dotColor = STATUS_DOT[activeStatus];
+  const isCritical = activeStatus === 'critical';
   const isEKS = node instanceof EKSServiceNode;
   const hasDeployments = isEKS && node.deployments.length > 0;
 

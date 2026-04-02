@@ -1,20 +1,24 @@
 import { createContext, useContext } from 'react';
+import type { ColoringMode } from '../application/metricColor';
 
 export interface ViewOptions {
   readonly showNAMetrics: boolean;
   readonly showFlowStepCards: boolean;
+  readonly coloringMode: ColoringMode;
 }
 
-export type ViewOptionKey = keyof ViewOptions;
+export type ViewOptionKey = 'showNAMetrics' | 'showFlowStepCards';
 
 export interface ViewOptionsContextValue {
   readonly options: ViewOptions;
   readonly toggle: (key: ViewOptionKey) => void;
+  readonly setColoringMode: (mode: ColoringMode) => void;
 }
 
 const ViewOptionsContext = createContext<ViewOptionsContextValue>({
-  options: { showNAMetrics: true, showFlowStepCards: true },
+  options: { showNAMetrics: true, showFlowStepCards: true, coloringMode: 'baseline' },
   toggle: () => { /* noop default */ },
+  setColoringMode: () => { /* noop default */ },
 });
 
 export const ViewOptionsProvider = ViewOptionsContext.Provider;
