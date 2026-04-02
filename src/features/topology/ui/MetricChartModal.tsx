@@ -181,6 +181,7 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
 
   // ── Edit state (uses raw template with placeholders like {{deployment}}) ──
   const rawPromql = rawPromqlQueries?.[metricKey] ?? '';
+  const resolvedPromql = promqlQueries?.[resolveChartQueryKey(metricKey, deployment, endpointFilter, promqlQueries)] ?? rawPromql;
   const originalDsName = metricDsName ?? '';
   const [editQuery, setEditQuery] = useState(rawPromql);
   const [editDsName, setEditDsName] = useState(originalDsName);
@@ -412,7 +413,7 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
                 />
               ) : (
                 <pre className={styles.promqlPre}>
-                  {state.status === 'success' ? state.data.promql : rawPromql}
+                  {state.status === 'success' ? state.data.promql : resolvedPromql}
                 </pre>
               )}
             </div>

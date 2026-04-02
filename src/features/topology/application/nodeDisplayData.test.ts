@@ -210,17 +210,17 @@ describe('nodeMetricRows', (): void => {
       expect(rows[1]?.color).toBe('#e2e8f0');
     });
 
-    it('returns worse color when current is >15% higher than weekAgo (lower-is-better)', (): void => {
+    it('returns worse color when current is >20% higher than weekAgo (lower-is-better)', (): void => {
       const rows = nodeMetricRows(makeEksNode({ cpuPercent: 60, cpuPercentWeekAgo: 40 }));
       expect(rows[1]?.color).toBe('#ef4444');
     });
 
-    it('returns better color when current is >15% lower than weekAgo (lower-is-better)', (): void => {
+    it('returns better color when current is >20% lower than weekAgo (lower-is-better)', (): void => {
       const rows = nodeMetricRows(makeEksNode({ cpuPercent: 30, cpuPercentWeekAgo: 50 }));
       expect(rows[1]?.color).toBe('#22c55e');
     });
 
-    it('returns neutral color when current is within ±15% of weekAgo', (): void => {
+    it('returns neutral color when current is within ±20% of weekAgo', (): void => {
       const rows = nodeMetricRows(makeEksNode({ cpuPercent: 52, cpuPercentWeekAgo: 50 }));
       expect(rows[1]?.color).toBe('#e2e8f0');
     });

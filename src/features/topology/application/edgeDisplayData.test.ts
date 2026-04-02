@@ -236,18 +236,23 @@ describe('edgeMetricRows', (): void => {
       expect(rows[1]?.color).toBe('#e2e8f0');
     });
 
-    it('uses worse color when latency is >15% higher than weekAgo (lower-is-better)', (): void => {
-      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 120, latencyP95MsWeekAgo: 100 }));
+    it('uses yellow (warning) when latency is 20-50% higher than weekAgo (lower-is-better)', (): void => {
+      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 125, latencyP95MsWeekAgo: 100 }));
+      expect(rows[1]?.color).toBe('#eab308');
+    });
+
+    it('uses red (critical) when latency is >50% higher than weekAgo (lower-is-better)', (): void => {
+      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 160, latencyP95MsWeekAgo: 100 }));
       expect(rows[1]?.color).toBe('#ef4444');
     });
 
-    it('uses better color when latency is >15% lower than weekAgo (lower-is-better)', (): void => {
-      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 80, latencyP95MsWeekAgo: 100 }));
+    it('uses better color when latency is >20% lower than weekAgo (lower-is-better)', (): void => {
+      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 75, latencyP95MsWeekAgo: 100 }));
       expect(rows[1]?.color).toBe('#22c55e');
     });
 
-    it('uses neutral color when latency is within ±15% of weekAgo', (): void => {
-      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 105, latencyP95MsWeekAgo: 100 }));
+    it('uses neutral color when latency is within ±20% of weekAgo', (): void => {
+      const rows = edgeMetricRows(makeJsonEdge({ latencyP95Ms: 115, latencyP95MsWeekAgo: 100 }));
       expect(rows[1]?.color).toBe('#e2e8f0');
     });
 
@@ -256,12 +261,12 @@ describe('edgeMetricRows', (): void => {
       expect(rows[3]?.color).toBe('#e2e8f0');
     });
 
-    it('uses worse color when error rate is >15% higher than weekAgo (lower-is-better)', (): void => {
+    it('uses worse color when error rate is >20% higher than weekAgo (lower-is-better)', (): void => {
       const rows = edgeMetricRows(makeJsonEdge({ errorRatePercent: 5, errorRatePercentWeekAgo: 2 }));
       expect(rows[3]?.color).toBe('#ef4444');
     });
 
-    it('uses better color when error rate is >15% lower than weekAgo (lower-is-better)', (): void => {
+    it('uses better color when error rate is >20% lower than weekAgo (lower-is-better)', (): void => {
       const rows = edgeMetricRows(makeJsonEdge({ errorRatePercent: 1, errorRatePercentWeekAgo: 5 }));
       expect(rows[3]?.color).toBe('#22c55e');
     });
@@ -298,13 +303,18 @@ describe('edgeMetricRows', (): void => {
       expect(rows[3]?.color).toBe('#e2e8f0');
     });
 
-    it('uses worse color for Query P50 when >15% higher than weekAgo (lower-is-better)', (): void => {
-      const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 120, avgQueryTimeMsWeekAgo: 100 }));
+    it('uses yellow (warning) for Query P50 when 20-50% higher than weekAgo (lower-is-better)', (): void => {
+      const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 125, avgQueryTimeMsWeekAgo: 100 }));
+      expect(rows[3]?.color).toBe('#eab308');
+    });
+
+    it('uses red (critical) for Query P50 when >50% higher than weekAgo (lower-is-better)', (): void => {
+      const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 160, avgQueryTimeMsWeekAgo: 100 }));
       expect(rows[3]?.color).toBe('#ef4444');
     });
 
-    it('uses better color for Query P50 when >15% lower than weekAgo (lower-is-better)', (): void => {
-      const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 80, avgQueryTimeMsWeekAgo: 100 }));
+    it('uses better color for Query P50 when >20% lower than weekAgo (lower-is-better)', (): void => {
+      const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 75, avgQueryTimeMsWeekAgo: 100 }));
       expect(rows[3]?.color).toBe('#22c55e');
     });
   });

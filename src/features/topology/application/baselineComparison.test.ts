@@ -1,13 +1,19 @@
 
 import { compareToBaseline, baselineColor, BASELINE_COLORS } from './baselineComparison';
+import { setBaselineThresholds, DEFAULT_BASELINE_THRESHOLDS } from './baselineThresholdConfig';
 
 // ─── compareToBaseline ──────────────────────────────────────────────────────
 
 describe('compareToBaseline', (): void => {
+  // Reset to defaults before each test
+  beforeEach((): void => {
+    setBaselineThresholds(DEFAULT_BASELINE_THRESHOLDS);
+  });
+
   // ─── lower-is-better metrics ────────────────────────────────────────────────
 
   it('returns "worse" when a lower-is-better metric increases significantly', (): void => {
-    // cpuPercent is lower-is-better; 100 vs 50 → ratio = 1.0 (>0.15)
+    // cpuPercent is lower-is-better; 100 vs 50 → ratio = 1.0 (>0.20)
     expect(compareToBaseline(100, 50, 'cpuPercent')).toBe('worse');
   });
 
@@ -30,14 +36,24 @@ describe('compareToBaseline', (): void => {
 
   // ─── neutral (within threshold) ─────────────────────────────────────────────
 
-  it('returns "neutral" when delta is within 15% threshold', (): void => {
-    // 105 vs 100 → ratio = 0.05 (≤ 0.15)
+  it('returns "neutral" when delta is within 20% default threshold', (): void => {
+    // 105 vs 100 → ratio = 0.05 (≤ 0.20)
     expect(compareToBaseline(105, 100, 'cpuPercent')).toBe('neutral');
   });
 
   it('returns "neutral" at exactly the threshold boundary', (): void => {
-    // 115 vs 100 → ratio = 0.15 (= 0.15 threshold)
-    expect(compareToBaseline(115, 100, 'cpuPercent')).toBe('neutral');
+    // 120 vs 100 → ratio = 0.20 (= 0.20 threshold)
+    expect(compareToBaseline(120, 100, 'cpuPercent')).toBe('neutral');
+  });
+
+  // ─── configurable thresholds ───────────────────────────────────────────────
+
+  it('uses custom threshold when configured', (): void => {
+    setBaselineThresholds({ warningPercent: 10, criticalPercent: 30 });
+    // 115 vs 100 → ratio = 0.15 (> 0.10 warning, < 0.30 critical → warning-worse)
+    expect(compareToBaseline(115, 100, 'cpuPercent')).toBe('warning-worse');
+    // 140 vs 100 → ratio = 0.40 (> 0.30 critical → worse)
+    expect(compareToBaseline(140, 100, 'cpuPercent')).toBe('worse');
   });
 
   // ─── edge case: weekAgo === 0 ───────────────────────────────────────────────
@@ -62,6 +78,10 @@ describe('compareToBaseline', (): void => {
 // ─── baselineColor ──────────────────────────────────────────────────────────
 
 describe('baselineColor', (): void => {
+  beforeEach((): void => {
+    setBaselineThresholds(DEFAULT_BASELINE_THRESHOLDS);
+  });
+
   it('returns green for "better" (lower-is-better metric decreased)', (): void => {
     // errorRatePercent is lower-is-better; 1 vs 10 → better
     const color = baselineColor(1, 10, 'errorRatePercent');

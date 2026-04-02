@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getBackendSrv } from '@grafana/runtime';
 import { firstValueFrom } from 'rxjs';
 import { PLUGIN_ID } from './pluginConstants';
+import { DEFAULT_BASELINE_THRESHOLDS, setBaselineThresholds } from './baselineThresholdConfig';
 import { resolveTopology } from './topologyResolver';
 import { saveFlow as apiSaveFlow } from './topologyApi';
 import type { TopologyBundleResponse, DatasourceDefinition } from './topologyApi';
@@ -46,6 +47,8 @@ export interface TopologyDataResult {
 interface PluginJsonData {
   dataSourceMap?: Record<string, string>;
   editAllowList?: readonly string[];
+  baselineWarningPercent?: number;
+  baselineCriticalPercent?: number;
 }
 
 interface PluginSettings {
@@ -62,9 +65,19 @@ async function readPluginSettings(): Promise<PluginSettings> {
         showErrorAlert: false,
       }),
     );
+    const jsonData = res.data.jsonData;
+
+    // Apply baseline thresholds from plugin settings (or keep defaults)
+    if (jsonData?.baselineWarningPercent !== undefined || jsonData?.baselineCriticalPercent !== undefined) {
+      setBaselineThresholds({
+        warningPercent: jsonData.baselineWarningPercent ?? DEFAULT_BASELINE_THRESHOLDS.warningPercent,
+        criticalPercent: jsonData.baselineCriticalPercent ?? DEFAULT_BASELINE_THRESHOLDS.criticalPercent,
+      });
+    }
+
     return {
-      dataSourceMap: res.data.jsonData?.dataSourceMap ?? {},
-      editAllowList: res.data.jsonData?.editAllowList,
+      dataSourceMap: jsonData?.dataSourceMap ?? {},
+      editAllowList: jsonData?.editAllowList,
     };
   } catch {
     return { dataSourceMap: {}, editAllowList: undefined };
