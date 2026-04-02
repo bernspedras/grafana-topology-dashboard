@@ -11,6 +11,8 @@ import { statusColor, nodeColor } from '../application/nodeStyles';
 import { healthFromMetricRows } from '../application/healthFromMetricRows';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
+import { useRawPromqlQueries } from './RawPromqlQueriesContext';
+import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { PromQLModal } from './PromQLModal';
@@ -106,16 +108,44 @@ function nodeTypeIcon(node: TopologyNode): React.JSX.Element {
   return <></>;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Filter resolved queries to match the current deployment selection. */
+function filterNodeQueries(
+  allQueries: Record<string, string> | undefined,
+  selectedDeployment: string,
+): Record<string, string> {
+  if (allQueries === undefined) return {};
+  const result: Record<string, string> = {};
+  if (selectedDeployment !== '') {
+    const prefix = `deploy:${selectedDeployment}:`;
+    for (const [key, value] of Object.entries(allQueries)) {
+      if (key.startsWith(prefix)) {
+        result[key.slice(prefix.length)] = value;
+      }
+    }
+  } else {
+    for (const [key, value] of Object.entries(allQueries)) {
+      if (!key.startsWith('deploy:') && !key.startsWith('agg:')) {
+        result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React.JSX.Element {
   const node = data.domainNode;
+  const editMode = useEditMode();
   const currentDeployment = node instanceof EKSServiceNode ? (node.usedDeployment ?? '') : '';
   const [selectedDeployment, setSelectedDeployment] = useState(currentDeployment);
   useEffect(() => { setSelectedDeployment(currentDeployment); }, [currentDeployment]);
   const [showQueries, setShowQueries] = useState(false);
   const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined } | undefined>(undefined);
-  const queries = usePromqlQueries(node.id);
+  const resolvedQueries = usePromqlQueries(node.id);
+  const rawQueries = useRawPromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(node.id);
@@ -278,7 +308,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
         <PromQLModal
           title={node.label}
           entityId={node.id}
-          queries={queries ?? {}}
+          queries={editMode ? (rawQueries ?? {}) : filterNodeQueries(resolvedQueries, selectedDeployment)}
           onClose={(): void => { setShowQueries(false); }}
         />
       )}

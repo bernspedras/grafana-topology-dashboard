@@ -19,6 +19,8 @@ import {
   edgeMetricRows,
 } from '../application/edgeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
+import { useRawPromqlQueries } from './RawPromqlQueriesContext';
+import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { PromQLModal } from './PromQLModal';
@@ -308,6 +310,39 @@ function normalEdgePath(
   return `M ${String(sx)},${String(sy)} Q ${String(cx)},${String(cy)} ${String(tx)},${String(ty)}`;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Filter resolved queries to match the current endpoint / routing key selection. */
+function filterEdgeQueries(
+  allQueries: Record<string, string> | undefined,
+  selectedEndpoint: string,
+): Record<string, string> {
+  if (allQueries === undefined) return {};
+  const result: Record<string, string> = {};
+  if (selectedEndpoint.startsWith('ep:')) {
+    const prefix = `ep:${selectedEndpoint.slice(3)}:`;
+    for (const [key, value] of Object.entries(allQueries)) {
+      if (key.startsWith(prefix)) {
+        result[key.slice(prefix.length)] = value;
+      }
+    }
+  } else if (selectedEndpoint.startsWith('rk:')) {
+    const prefix = `rk:${selectedEndpoint.slice(3)}:`;
+    for (const [key, value] of Object.entries(allQueries)) {
+      if (key.startsWith(prefix)) {
+        result[key.slice(prefix.length)] = value;
+      }
+    }
+  } else {
+    for (const [key, value] of Object.entries(allQueries)) {
+      if (!key.startsWith('ep:') && !key.startsWith('rk:') && !key.startsWith('agg:') && !key.startsWith('deploy:')) {
+        result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JSX.Element {
@@ -427,7 +462,9 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     document.addEventListener('mouseup', onMouseUp);
   }, [edgeId, savedOffset, setEdgeLabelOffset]);
 
-  const queries = usePromqlQueries(data?.domainEdge.id ?? '');
+  const editMode = useEditMode();
+  const resolvedQueries = usePromqlQueries(data?.domainEdge.id ?? '');
+  const rawQueries = useRawPromqlQueries(data?.domainEdge.id ?? '');
 
   if (data === undefined) {
     return <path id={id} className="react-flow__edge-path" d={edgePath} />;
@@ -632,7 +669,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
             <PromQLModal
               title={edge.source + ' → ' + edge.target}
               entityId={edgeId}
-              queries={queries ?? {}}
+              queries={editMode ? (rawQueries ?? {}) : filterEdgeQueries(resolvedQueries, selectedEndpoint)}
               onClose={(): void => { setShowQueries(false); }}
             />
           )}
