@@ -164,7 +164,7 @@ function lookupKafkaQuery(
   // Consumer-side metrics — per-metric dataSource determines the datasource
   if (KAFKA_CONSUMER_METRIC_KEYS.has(metricKey) && edge.consumer != null) {
     const con = edge.consumer.prometheus;
-    let m: MetricQuery | null = null;
+    let m: MetricQuery | undefined;
     if (metricKey === 'consumerRps') m = con.rps;
     else if (metricKey === 'e2eLatencyP95') m = con.latencyP95;
     else if (metricKey === 'e2eLatencyAvg') m = con.latencyAvg;
@@ -188,20 +188,20 @@ function edgeDataSource(edge: EdgeDefinition, metricKey: string): string {
   if (edge.kind === 'amqp' && edge.consumer != null && AMQP_CONSUMER_METRIC_KEYS.has(metricKey)) {
     const con = edge.consumer.prometheus;
     let m: MetricQuery | undefined;
-    if (metricKey === 'consumerRps') m = con.rps ?? undefined;
-    else if (metricKey === 'e2eLatencyP95') m = con.latencyP95 ?? undefined;
-    else if (metricKey === 'e2eLatencyAvg') m = con.latencyAvg ?? undefined;
-    else if (metricKey === 'consumerErrorRate') m = con.errorRate ?? undefined;
-    else if (metricKey === 'consumerProcessingTimeP95') m = con.processingTimeP95 ?? undefined;
-    else if (metricKey === 'consumerProcessingTimeAvg') m = con.processingTimeAvg ?? undefined;
-    else if (metricKey === 'queueDepth') m = con.queueDepth ?? undefined;
-    else if (metricKey === 'queueResidenceTimeP95') m = con.queueResidenceTimeP95 ?? undefined;
-    else if (metricKey === 'queueResidenceTimeAvg') m = con.queueResidenceTimeAvg ?? undefined;
+    if (metricKey === 'consumerRps') m = con.rps;
+    else if (metricKey === 'e2eLatencyP95') m = con.latencyP95;
+    else if (metricKey === 'e2eLatencyAvg') m = con.latencyAvg;
+    else if (metricKey === 'consumerErrorRate') m = con.errorRate;
+    else if (metricKey === 'consumerProcessingTimeP95') m = con.processingTimeP95;
+    else if (metricKey === 'consumerProcessingTimeAvg') m = con.processingTimeAvg;
+    else if (metricKey === 'queueDepth') m = con.queueDepth;
+    else if (metricKey === 'queueResidenceTimeP95') m = con.queueResidenceTimeP95;
+    else if (metricKey === 'queueResidenceTimeAvg') m = con.queueResidenceTimeAvg;
     if (m != null) return metricQueryDataSource(m) ?? edge.dataSource;
   }
   if (edge.kind === 'kafka' && edge.consumer != null && KAFKA_CONSUMER_METRIC_KEYS.has(metricKey)) {
     const con = edge.consumer.prometheus;
-    let m: MetricQuery | null = null;
+    let m: MetricQuery | undefined;
     if (metricKey === 'consumerRps') m = con.rps;
     else if (metricKey === 'e2eLatencyP95') m = con.latencyP95;
     else if (metricKey === 'e2eLatencyAvg') m = con.latencyAvg;

@@ -18,14 +18,11 @@ import type {
   EdgeTemplate,
 } from './topologyDefinition';
 import type { FlowLayout } from './pluginSettings';
+import type { TopologyEntry as BaseTopologyEntry } from './topologyRegistry';
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
-export interface TopologyEntry {
-  readonly id: string;
-  readonly name: string;
-  readonly layout: FlowLayout | undefined;
-  readonly definition: ReturnType<typeof resolveTopology>;
+export interface TopologyEntry extends BaseTopologyEntry {
   /** The raw flow JSON as received from the backend (for clipboard export). */
   readonly raw: unknown;
 }

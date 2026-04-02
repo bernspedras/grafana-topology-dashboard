@@ -396,7 +396,7 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
           {state.status !== 'loading' && (description ?? metricDescription(metricKey)) !== undefined && (
             <div className={styles.descriptionSection}>
               <span className={styles.sectionLabel}>
-                O que esta métrica mede
+                What this metric measures
               </span>
               <p className={styles.descriptionText}>
                 {description ?? metricDescription(metricKey)}

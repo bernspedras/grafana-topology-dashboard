@@ -107,8 +107,8 @@ export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): r
     }
     return [
       { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Latência P95', value: m.latencyP95Ms !== undefined ? String(round2(m.latencyP95Ms)) + ' ms' : 'N/A', color: m.latencyP95Ms !== undefined ? baselineColor(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms') : NA_COLOR, metricKey: 'latencyP95' },
-      { label: 'Latência Avg', value: m.latencyAvgMs !== undefined ? String(round2(m.latencyAvgMs)) + ' ms' : 'N/A', color: m.latencyAvgMs !== undefined ? baselineColor(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs') : NA_COLOR, metricKey: 'latencyAvg' },
+      { label: 'Latency P95', value: m.latencyP95Ms !== undefined ? String(round2(m.latencyP95Ms)) + ' ms' : 'N/A', color: m.latencyP95Ms !== undefined ? baselineColor(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms') : NA_COLOR, metricKey: 'latencyP95' },
+      { label: 'Latency Avg', value: m.latencyAvgMs !== undefined ? String(round2(m.latencyAvgMs)) + ' ms' : 'N/A', color: m.latencyAvgMs !== undefined ? baselineColor(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs') : NA_COLOR, metricKey: 'latencyAvg' },
       { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
       ...customMetricRows(edge),
     ];
@@ -190,8 +190,8 @@ export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): r
       : edge.metrics;
     return [
       { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Latência P95', value: m.latencyP95Ms !== undefined ? String(round2(m.latencyP95Ms)) + ' ms' : 'N/A', color: m.latencyP95Ms !== undefined ? baselineColor(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms') : NA_COLOR, metricKey: 'latencyP95' },
-      { label: 'Latência Avg', value: m.latencyAvgMs !== undefined ? String(round2(m.latencyAvgMs)) + ' ms' : 'N/A', color: m.latencyAvgMs !== undefined ? baselineColor(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs') : NA_COLOR, metricKey: 'latencyAvg' },
+      { label: 'Latency P95', value: m.latencyP95Ms !== undefined ? String(round2(m.latencyP95Ms)) + ' ms' : 'N/A', color: m.latencyP95Ms !== undefined ? baselineColor(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms') : NA_COLOR, metricKey: 'latencyP95' },
+      { label: 'Latency Avg', value: m.latencyAvgMs !== undefined ? String(round2(m.latencyAvgMs)) + ' ms' : 'N/A', color: m.latencyAvgMs !== undefined ? baselineColor(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs') : NA_COLOR, metricKey: 'latencyAvg' },
       { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
       ...customMetricRows(edge),
     ];

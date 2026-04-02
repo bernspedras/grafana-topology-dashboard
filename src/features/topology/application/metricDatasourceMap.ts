@@ -16,7 +16,7 @@ export function buildEntityDefaultDatasourceMap(definition: TopologyDefinition |
   return map;
 }
 /** Resolve the datasource name for a MetricQuery, falling back to the entity default. */
-function resolveDsName(m: MetricQuery | null | undefined, defaultDs: string): string {
+function resolveDsName(m: MetricQuery | undefined, defaultDs: string): string {
   return metricQueryDataSource(m) ?? defaultDs;
 }
 
