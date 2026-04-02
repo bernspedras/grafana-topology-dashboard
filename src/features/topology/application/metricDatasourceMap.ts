@@ -46,6 +46,12 @@ export function buildMetricDatasourceMap(definition: TopologyDefinition | undefi
     if (node.prometheus.memory != null) {
       entityDs.memory = resolveDsName(node.prometheus.memory, node.dataSource);
     }
+    if (node.prometheus.readyReplicas != null) {
+      entityDs.readyReplicas = resolveDsName(node.prometheus.readyReplicas, node.dataSource);
+    }
+    if (node.prometheus.desiredReplicas != null) {
+      entityDs.desiredReplicas = resolveDsName(node.prometheus.desiredReplicas, node.dataSource);
+    }
     if (node.customMetrics !== undefined) {
       for (const cm of node.customMetrics) {
         entityDs['custom:' + cm.key] = cm.dataSource ?? node.dataSource;

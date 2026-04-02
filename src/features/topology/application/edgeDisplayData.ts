@@ -8,8 +8,9 @@ import {
 } from '../domain';
 import type { TopologyEdge, AmqpEdgeMetrics } from '../domain';
 import type { MetricRow } from './nodeDisplayData';
-import { metricColor as unifiedMetricColor } from './metricColor';
+import { metricColorAndStatus } from './metricColor';
 import type { ColoringMode } from './metricColor';
+import type { NodeStatus } from '../domain/metrics';
 import type { SlaThresholdMap } from './slaThresholds';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -19,21 +20,24 @@ function round2(n: number): number {
 }
 
 function fmtNum(n: number): string {
-  return round2(n).toLocaleString('pt-BR');
+  return round2(n).toLocaleString('en-US');
 }
 
 const NA_COLOR = '#6b7280';
 
-function numOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined, suffix = ''): { value: string; color: string } {
-  return v !== undefined
-    ? { value: fmtNum(v) + suffix, color: unifiedMetricColor(v, wa, key, mode, sla?.[key], undefined) }
-    : { value: 'N/A', color: NA_COLOR };
+function numOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined, suffix = ''): { value: string; color: string; status: NodeStatus } {
+  if (v === undefined) return { value: 'N/A', color: NA_COLOR, status: 'unknown' };
+  return { value: fmtNum(v) + suffix, ...metricColorAndStatus(v, wa, key, mode, sla?.[key], undefined) };
 }
 
-function msOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined): { value: string; color: string } {
-  return v !== undefined
-    ? { value: String(round2(v)) + ' ms', color: unifiedMetricColor(v, wa, key, mode, sla?.[key], undefined) }
-    : { value: 'N/A', color: NA_COLOR };
+function msOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined): { value: string; color: string; status: NodeStatus } {
+  if (v === undefined) return { value: 'N/A', color: NA_COLOR, status: 'unknown' };
+  return { value: String(round2(v)) + ' ms', ...metricColorAndStatus(v, wa, key, mode, sla?.[key], undefined) };
+}
+
+function intOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined): { value: string; color: string; status: NodeStatus } {
+  if (v === undefined) return { value: 'N/A', color: NA_COLOR, status: 'unknown' };
+  return { value: String(Math.round(v)), ...metricColorAndStatus(v, wa, key, mode, sla?.[key], undefined) };
 }
 
 // ─── Protocol tag ───────────────────────────────────────────────────────────
@@ -95,7 +99,7 @@ function customMetricRows(edge: TopologyEdge, mode: ColoringMode, sla: SlaThresh
     value: cm.value !== undefined
       ? fmtNum(cm.value) + (cm.unit !== undefined ? ' ' + cm.unit : '')
       : 'N/A',
-    color: unifiedMetricColor(cm.value, cm.valueWeekAgo, cm.key, mode, sla?.['custom:' + cm.key], cm.direction),
+    ...metricColorAndStatus(cm.value, cm.valueWeekAgo, cm.key, mode, sla?.['custom:' + cm.key], cm.direction),
     metricKey: 'custom:' + cm.key,
   }));
 }
@@ -136,7 +140,7 @@ export function edgeMetricRows(
       ? m.activeConnectionsWeekAgo + m.idleConnectionsWeekAgo
       : undefined;
     return [
-      { label: 'Pool conns', value: totalConns !== undefined ? String(Math.round(totalConns)) : 'N/A', color: unifiedMetricColor(totalConns, totalConnsWeekAgo, 'activeConnections', mode, sla?.activeConnections, undefined), metricKey: 'activeConnections' },
+      { label: 'Pool conns', ...intOrNA(totalConns, totalConnsWeekAgo, 'activeConnections', mode, sla), metricKey: 'activeConnections' },
       { label: 'Pool hit rate', ...numOrNA(m.poolHitRatePercent, m.poolHitRatePercentWeekAgo, 'poolHitRatePercent', mode, sla, '%'), metricKey: 'poolHitRatePercent' },
       { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps', mode, sla), metricKey: 'rps' },
       { label: 'Query P50', ...msOrNA(m.avgQueryTimeMs, m.avgQueryTimeMsWeekAgo, 'avgQueryTimeMs', mode, sla), metricKey: 'avgQueryTimeMs' },
@@ -162,7 +166,7 @@ export function edgeMetricRows(
       { label: 'Pub errors', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
       { label: 'Queue P95', ...msOrNA(m.queueResidenceTimeP95Ms, m.queueResidenceTimeP95MsWeekAgo, 'queueResidenceTimeP95Ms', mode, sla), metricKey: 'queueResidenceTimeP95' },
       { label: 'Queue Avg', ...msOrNA(m.queueResidenceTimeAvgMs, m.queueResidenceTimeAvgMsWeekAgo, 'queueResidenceTimeAvgMs', mode, sla), metricKey: 'queueResidenceTimeAvg' },
-      { label: 'Queue depth', value: m.queueDepth !== undefined ? String(Math.round(m.queueDepth)) : 'N/A', color: unifiedMetricColor(m.queueDepth, m.queueDepthWeekAgo, 'queueDepth', mode, sla?.queueDepth, undefined), metricKey: 'queueDepth' },
+      { label: 'Queue depth', ...intOrNA(m.queueDepth, m.queueDepthWeekAgo, 'queueDepth', mode, sla), metricKey: 'queueDepth' },
       { label: 'Process P95', ...msOrNA(m.consumerProcessingTimeP95Ms, m.consumerProcessingTimeP95MsWeekAgo, 'consumerProcessingTimeP95Ms', mode, sla), metricKey: 'consumerProcessingTimeP95' },
       { label: 'Process Avg', ...msOrNA(m.consumerProcessingTimeAvgMs, m.consumerProcessingTimeAvgMsWeekAgo, 'consumerProcessingTimeAvgMs', mode, sla), metricKey: 'consumerProcessingTimeAvg' },
       { label: 'Consumer RPS', ...numOrNA(m.consumerRps, m.consumerRpsWeekAgo, 'consumerRps', mode, sla), metricKey: 'consumerRps' },
@@ -182,7 +186,7 @@ export function edgeMetricRows(
       { label: 'Pub errors', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
       { label: 'Transit P95', ...msOrNA(m.queueResidenceTimeP95Ms, m.queueResidenceTimeP95MsWeekAgo, 'queueResidenceTimeP95Ms', mode, sla), metricKey: 'queueResidenceTimeP95' },
       { label: 'Transit Avg', ...msOrNA(m.queueResidenceTimeAvgMs, m.queueResidenceTimeAvgMsWeekAgo, 'queueResidenceTimeAvgMs', mode, sla), metricKey: 'queueResidenceTimeAvg' },
-      { label: 'Consumer lag', value: m.consumerLag !== undefined ? String(Math.round(m.consumerLag)) : 'N/A', color: unifiedMetricColor(m.consumerLag, m.consumerLagWeekAgo, 'consumerLag', mode, sla?.consumerLag, undefined), metricKey: 'consumerLag' },
+      { label: 'Consumer lag', ...intOrNA(m.consumerLag, m.consumerLagWeekAgo, 'consumerLag', mode, sla), metricKey: 'consumerLag' },
       { label: 'Process P95', ...msOrNA(m.consumerProcessingTimeP95Ms, m.consumerProcessingTimeP95MsWeekAgo, 'consumerProcessingTimeP95Ms', mode, sla), metricKey: 'consumerProcessingTimeP95' },
       { label: 'Process Avg', ...msOrNA(m.consumerProcessingTimeAvgMs, m.consumerProcessingTimeAvgMsWeekAgo, 'consumerProcessingTimeAvgMs', mode, sla), metricKey: 'consumerProcessingTimeAvg' },
       { label: 'Consumer RPS', ...numOrNA(m.consumerRps, m.consumerRpsWeekAgo, 'consumerRps', mode, sla), metricKey: 'consumerRps' },

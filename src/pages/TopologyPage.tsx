@@ -6,7 +6,7 @@ import type { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { useTopologyData } from '../features/topology/application/useTopologyData';
 import { canEditTopology } from '../features/topology/application/permissions';
 import { useGrafanaMetrics } from '../features/topology/application/useGrafanaMetrics';
-import { buildPromqlQueriesMap } from '../features/topology/application/promqlQueriesMap';
+import { buildPromqlQueriesMap, buildRawPromqlQueriesMap } from '../features/topology/application/promqlQueriesMap';
 import { buildMetricDatasourceMap, buildEntityDefaultDatasourceMap } from '../features/topology/application/metricDatasourceMap';
 import { saveNodeTemplate, saveEdgeTemplate, saveFlow } from '../features/topology/application/topologyApi';
 import type { NodeTemplate } from '../features/topology/application/topologyDefinition';
@@ -18,6 +18,7 @@ import { AddEdgeModal } from '../features/topology/ui/AddEdgeModal';
 import type { ExistingEdgeTemplate, EdgeTemplatePayload } from '../features/topology/ui/AddEdgeModal';
 import { TopologyIdProvider } from '../features/topology/application/TopologyIdContext';
 import { PromqlQueriesProvider } from '../features/topology/ui/PromqlQueriesContext';
+import { RawPromqlQueriesProvider } from '../features/topology/ui/RawPromqlQueriesContext';
 import { SseRefreshProvider } from '../features/topology/ui/SseRefreshContext';
 import { ViewOptionsProvider } from '../features/topology/ui/ViewOptionsContext';
 import type { ViewOptions, ViewOptionKey, ViewOptionsContextValue } from '../features/topology/ui/ViewOptionsContext';
@@ -389,6 +390,11 @@ function TopologyPage(): React.JSX.Element {
     [entry],
   );
 
+  const rawPromqlQueries = useMemo(
+    () => (entry !== undefined ? buildRawPromqlQueriesMap(entry.definition) : {}),
+    [entry],
+  );
+
   const metricDsMap = useMemo(
     () => (entry !== undefined ? buildMetricDatasourceMap(entry.definition) : {}),
     [entry],
@@ -634,6 +640,7 @@ function TopologyPage(): React.JSX.Element {
       {graph !== undefined && (
         <TopologyIdProvider value={effectiveId}>
           <PromqlQueriesProvider value={promqlQueries}>
+          <RawPromqlQueriesProvider value={rawPromqlQueries}>
             <DataSourceMapProvider value={dataSourceMap}>
               <EditModeProvider value={isEditing}>
                 <DatasourceDefsProvider value={datasourceDefinitions}>
@@ -676,6 +683,7 @@ function TopologyPage(): React.JSX.Element {
                 </DatasourceDefsProvider>
               </EditModeProvider>
             </DataSourceMapProvider>
+          </RawPromqlQueriesProvider>
           </PromqlQueriesProvider>
         </TopologyIdProvider>
       )}

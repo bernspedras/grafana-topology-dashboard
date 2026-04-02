@@ -103,6 +103,10 @@ function deploymentQueryKey(nodeId: string, deploymentName: string, metric: stri
   return nodeQueryKey(nodeId, `deploy:${deploymentName}:${metric}`);
 }
 
+function optionalRound(value: number | undefined): number | undefined {
+  return value !== undefined ? Math.round(value) : undefined;
+}
+
 function epQueryKey(edgeId: string, endpointPath: string, metric: string): string {
   return edgeQueryKey(edgeId, `ep:${endpointPath}:${metric}`);
 }
@@ -218,8 +222,8 @@ function constructEKSNode(def: EKSServiceNodeDefinition, base: NodeBaseParams, r
         name,
         cpuPercent: results.get(deploymentQueryKey(def.id, name, 'cpu')) ?? 0,
         memoryPercent: results.get(deploymentQueryKey(def.id, name, 'memory')) ?? 0,
-        readyReplicas: Math.round(results.get(deploymentQueryKey(def.id, name, 'readyReplicas')) ?? 0),
-        desiredReplicas: Math.round(results.get(deploymentQueryKey(def.id, name, 'desiredReplicas')) ?? 0),
+        readyReplicas: optionalRound(results.get(deploymentQueryKey(def.id, name, 'readyReplicas'))),
+        desiredReplicas: optionalRound(results.get(deploymentQueryKey(def.id, name, 'desiredReplicas'))),
         cpuPercentWeekAgo: weekAgoResults.get(deploymentQueryKey(def.id, name, 'cpu')),
         memoryPercentWeekAgo: weekAgoResults.get(deploymentQueryKey(def.id, name, 'memory')),
         ...(depCustomMetrics.length > 0 ? { customMetrics: depCustomMetrics } : {}),

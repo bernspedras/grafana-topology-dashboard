@@ -44,6 +44,7 @@ export type QueryEmitter = (
 export function visitDefinitionQueries(
   definition: TopologyDefinition,
   emit: QueryEmitter,
+  transformOverride?: (promql: string) => string,
 ): void {
   /** Emit a single metric if non-null, applying a PromQL transform. */
   function emitMetric(
@@ -57,7 +58,7 @@ export function visitDefinitionQueries(
     if (m == null) return;
     const promql = metricQueryPromql(m);
     if (promql === undefined) return;
-    emit(entityType, entityId, metricKey, transform(promql), metricQueryDataSource(m) ?? defaultDs);
+    emit(entityType, entityId, metricKey, (transformOverride ?? transform)(promql), metricQueryDataSource(m) ?? defaultDs);
   }
 
   const identity = (q: string): string => q;
@@ -76,6 +77,8 @@ export function visitDefinitionQueries(
     const resolveDeploy = (q: string): string => resolveDeploymentPlaceholder(q, undefined);
     emitMetric(node.prometheus.cpu, node.dataSource, 'node', node.id, 'cpu', resolveDeploy);
     emitMetric(node.prometheus.memory, node.dataSource, 'node', node.id, 'memory', resolveDeploy);
+    emitMetric(node.prometheus.readyReplicas, node.dataSource, 'node', node.id, 'readyReplicas', resolveDeploy);
+    emitMetric(node.prometheus.desiredReplicas, node.dataSource, 'node', node.id, 'desiredReplicas', resolveDeploy);
 
     // Per-deployment queries
     if (node.kind === 'eks-service' && node.deploymentNames !== undefined) {

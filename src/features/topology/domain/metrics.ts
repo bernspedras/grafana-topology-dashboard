@@ -61,8 +61,8 @@ export class NodeMetrics {
 
 export class DeploymentMetrics {
   public readonly name: string;
-  public readonly readyReplicas: number;
-  public readonly desiredReplicas: number;
+  public readonly readyReplicas: number | undefined;
+  public readonly desiredReplicas: number | undefined;
   public readonly cpuPercent: number;
   public readonly memoryPercent: number;
   public readonly cpuPercentWeekAgo: number | undefined;
@@ -71,8 +71,8 @@ export class DeploymentMetrics {
 
   public constructor(params: {
     name: string;
-    readyReplicas: number;
-    desiredReplicas: number;
+    readyReplicas?: number | undefined;
+    desiredReplicas?: number | undefined;
     cpuPercent: number;
     memoryPercent: number;
     cpuPercentWeekAgo?: number | undefined;
