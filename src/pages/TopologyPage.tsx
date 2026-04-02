@@ -266,6 +266,97 @@ function TopologyPage(): React.JSX.Element {
     [edgeTemplates],
   );
 
+  // ── Flow step modal state ──
+  const [editingFlowStepId, setEditingFlowStepId] = useState<string | undefined>(undefined);
+
+  const handleOpenFlowStepEditor = useCallback((stepId: string): void => {
+    setEditingFlowStepId(stepId);
+  }, []);
+
+  const handleCloseFlowStepEditor = useCallback((): void => {
+    setEditingFlowStepId(undefined);
+  }, []);
+
+  const handleAddFlowStep = useCallback((): void => {
+    void (async (): Promise<void> => {
+      try {
+        const currentEntry = topologies.find((t) => t.id === effectiveId);
+        if (currentEntry === undefined) return;
+        const rawFlow = currentEntry.raw as Record<string, unknown>;
+        const definition = rawFlow.definition as Record<string, unknown>;
+        const existingSteps = (definition.flowSteps ?? []) as readonly Record<string, unknown>[];
+        const maxStep = existingSteps.reduce((max, s) => Math.max(max, Number(s.step ?? 0)), 0);
+        const newStep = {
+          id: 'step-' + String(Date.now()),
+          step: maxStep + 1,
+          text: 'New step',
+        };
+        const updatedFlow = {
+          ...rawFlow,
+          definition: {
+            ...definition,
+            flowSteps: [...existingSteps, newStep],
+          },
+        };
+        await saveFlow(effectiveId, updatedFlow);
+        reload();
+      } catch (err) {
+        console.error('[topology] Failed to add flow step', err);
+      }
+    })();
+  }, [topologies, effectiveId, reload]);
+
+  const handleSaveFlowStep = useCallback((stepId: string, step: number, text: string, moreDetails: string | undefined): void => {
+    void (async (): Promise<void> => {
+      try {
+        const currentEntry = topologies.find((t) => t.id === effectiveId);
+        if (currentEntry === undefined) return;
+        const rawFlow = currentEntry.raw as Record<string, unknown>;
+        const definition = rawFlow.definition as Record<string, unknown>;
+        const existingSteps = (definition.flowSteps ?? []) as readonly Record<string, unknown>[];
+        const updatedSteps = existingSteps.map((s) =>
+          s.id === stepId ? { ...s, step, text, moreDetails } : s,
+        );
+        const updatedFlow = {
+          ...rawFlow,
+          definition: {
+            ...definition,
+            flowSteps: updatedSteps,
+          },
+        };
+        await saveFlow(effectiveId, updatedFlow);
+        setEditingFlowStepId(undefined);
+        reload();
+      } catch (err) {
+        console.error('[topology] Failed to save flow step', err);
+      }
+    })();
+  }, [topologies, effectiveId, reload]);
+
+  const handleDeleteFlowStep = useCallback((stepId: string): void => {
+    void (async (): Promise<void> => {
+      try {
+        const currentEntry = topologies.find((t) => t.id === effectiveId);
+        if (currentEntry === undefined) return;
+        const rawFlow = currentEntry.raw as Record<string, unknown>;
+        const definition = rawFlow.definition as Record<string, unknown>;
+        const existingSteps = (definition.flowSteps ?? []) as readonly Record<string, unknown>[];
+        const updatedFlow = {
+          ...rawFlow,
+          definition: {
+            ...definition,
+            flowSteps: existingSteps.filter((s) => s.id !== stepId),
+          },
+        };
+        await saveFlow(effectiveId, updatedFlow);
+        setEditingFlowStepId(undefined);
+        reload();
+      } catch (err) {
+        console.error('[topology] Failed to delete flow step', err);
+      }
+    })();
+  }, [topologies, effectiveId, reload]);
+
   const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true });
   const toggleViewOption = useCallback((key: ViewOptionKey): void => {
     setViewOptions((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -551,6 +642,12 @@ function TopologyPage(): React.JSX.Element {
                                     onAddNode={handleAddNode}
                                     onAddEdge={handleAddEdge}
                                     hideFlowSteps={!viewOptions.showFlowStepCards}
+                                    editingFlowStepId={editingFlowStepId}
+                                    onOpenFlowStepEditor={handleOpenFlowStepEditor}
+                                    onCloseFlowStepEditor={handleCloseFlowStepEditor}
+                                    onSaveFlowStep={handleSaveFlowStep}
+                                    onDeleteFlowStep={handleDeleteFlowStep}
+                                    onAddFlowStep={handleAddFlowStep}
                                     onSaveLayout={saveTopologyLayout}
                                     rawFlowJson={entry?.raw}
                                   />

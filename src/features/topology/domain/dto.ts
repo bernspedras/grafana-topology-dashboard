@@ -273,6 +273,7 @@ export interface FlowStepDto {
   readonly id: string;
   readonly step: number;
   readonly text: string;
+  readonly moreDetails: string | undefined;
 }
 
 // ─── PromQL queries map ─────────────────────────────────────────────────────

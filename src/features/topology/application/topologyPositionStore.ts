@@ -294,7 +294,7 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
         return layout.edgeLabelOffsets[edgeId];
       },
 
-      updateFlowSteps: (updates: readonly { readonly id: string; readonly step: number; readonly text: string }[]): void => {
+      updateFlowSteps: (updates: readonly { readonly id: string; readonly step: number; readonly text: string; readonly moreDetails?: string }[]): void => {
         const state = get();
         const updateMap = new Map(updates.map((u) => [u.id, u]));
         if (updateMap.size === 0) return;
@@ -304,7 +304,7 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
           if (update === undefined) return node;
           const prev = getFlowStepData(node);
           if (prev === undefined) return node;
-          const updated = new FlowStepNode({ id: prev.id, step: update.step, text: update.text });
+          const updated = new FlowStepNode({ id: prev.id, step: update.step, text: update.text, moreDetails: update.moreDetails });
           return { ...node, data: { ...node.data, domainFlowStep: updated } };
         });
 
