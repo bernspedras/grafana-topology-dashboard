@@ -68,7 +68,7 @@ export function nodeMetricRows(node: TopologyNode, selectedDeployment?: string):
     if (dep !== undefined) {
       return [
         { label: 'Pods', value: String(dep.readyReplicas) + ' / ' + String(dep.desiredReplicas), color: '#22c55e', metricKey: undefined },
-        { label: 'CPU médio', value: pct(dep.cpuPercent), color: baselineColor(dep.cpuPercent, dep.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
+        { label: 'Avg CPU', value: pct(dep.cpuPercent), color: baselineColor(dep.cpuPercent, dep.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
         { label: 'Memory', value: pct(dep.memoryPercent), color: baselineColor(dep.memoryPercent, dep.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
         ...customMetricRows(dep.customMetrics.length > 0 ? dep : node),
       ];
@@ -79,7 +79,7 @@ export function nodeMetricRows(node: TopologyNode, selectedDeployment?: string):
 
     return [
       { label: 'Pods', value: String(totalReady) + ' / ' + String(totalDesired), color: '#22c55e', metricKey: undefined },
-      { label: 'CPU médio', value: pct(node.metrics.cpuPercent), color: metricColor(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
+      { label: 'Avg CPU', value: pct(node.metrics.cpuPercent), color: metricColor(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent'), metricKey: 'cpu' },
       { label: 'Memory', value: pct(node.metrics.memoryPercent), color: metricColor(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent'), metricKey: 'memory' },
       ...customMetricRows(node),
     ];

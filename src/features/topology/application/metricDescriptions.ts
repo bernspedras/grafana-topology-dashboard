@@ -3,85 +3,85 @@
 // Keys match the metricKey values used in nodeDisplayData / edgeDisplayData.
 
 const METRIC_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  // ── Métricas de nó ────────────────────────────────────────────────────────
+  // ── Node metrics ────────────────────────────────────────────────────────
   cpu:
-    'Percentual de CPU requests em uso em todos os pods do serviço. ' +
-    'Calculado como uso real de CPU dividido pela soma dos resource requests de CPU.',
+    'Percentage of CPU requests in use across all pods of the service. ' +
+    'Calculated as actual CPU usage divided by the sum of CPU resource requests.',
   memory:
-    'Percentual de memory requests em uso em todos os pods do serviço. ' +
-    'Calculado como uso real de memória (RSS) dividido pela soma dos resource requests de memória.',
+    'Percentage of memory requests in use across all pods of the service. ' +
+    'Calculated as actual memory usage (RSS) divided by the sum of memory resource requests.',
   readyReplicas:
-    'Número de réplicas de pod que passaram nas readiness probes e estão servindo tráfego.',
+    'Number of pod replicas that have passed readiness probes and are serving traffic.',
   desiredReplicas:
-    'Número de réplicas de pod que o Deployment/StatefulSet está configurado para rodar. ' +
-    'Uma diferença entre ready e desired indica pods iniciando, crashando ou sendo evicted.',
+    'Number of pod replicas the Deployment/StatefulSet is configured to run. ' +
+    'A difference between ready and desired indicates pods starting, crashing, or being evicted.',
 
-  // ── Métricas de edge HTTP ─────────────────────────────────────────────────
+  // ── HTTP edge metrics ─────────────────────────────────────────────────
   rps:
-    'Requisições por segundo medidas no caller (nó de origem). ' +
-    'Usa métricas HTTP client-side para que cada edge mostre um ponto de medição distinto.',
+    'Requests per second measured at the caller (source node). ' +
+    'Uses client-side HTTP metrics so that each edge shows a distinct measurement point.',
   latencyP95:
-    'Percentil 95 do tempo de resposta em milissegundos, medido no caller. ' +
-    'É quanto tempo o source esperou pela resposta do target — 95% das requisições são mais rápidas que esse valor.',
+    '95th percentile response time in milliseconds, measured at the caller. ' +
+    'This is how long the source waited for the target to respond — 95% of requests are faster than this value.',
   latencyAvg:
-    'Tempo médio de resposta em milissegundos, medido no caller. ' +
-    'Calculado como soma de todas as durações dividida pela contagem de requisições na janela.',
+    'Average response time in milliseconds, measured at the caller. ' +
+    'Calculated as the sum of all durations divided by the request count within the window.',
   errorRate:
-    'Percentual de requisições que retornaram erro (5xx ou equivalente), medido no caller.',
+    'Percentage of requests that returned an error (5xx or equivalent), measured at the caller.',
 
-  // ── Métricas TCP / conexão de banco ───────────────────────────────────────
+  // ── TCP / database connection metrics ───────────────────────────────────
   activeConnections:
-    'Número de conexões de banco em uso (retiradas do pool).',
+    'Number of database connections currently in use (checked out from the pool).',
   idleConnections:
-    'Número de conexões de banco ociosas no pool, disponíveis para reuso.',
+    'Number of idle database connections in the pool, available for reuse.',
   avgQueryTimeMs:
-    'Tempo mediano (p50) de execução de query em milissegundos. ' +
-    'Mede quanto tempo o banco leva para executar queries, excluindo tempo de aquisição de conexão.',
+    'Median (p50) query execution time in milliseconds. ' +
+    'Measures how long the database takes to execute queries, excluding connection acquisition time.',
   poolHitRatePercent:
-    'Percentual de requisições de conexão atendidas por uma conexão ociosa existente ' +
-    'ao invés de abrir uma nova. Quanto maior melhor — valores baixos indicam esgotamento do pool.',
+    'Percentage of connection requests served by an existing idle connection ' +
+    'instead of opening a new one. Higher is better — low values indicate pool exhaustion.',
   poolTimeoutsPerMin:
-    'Taxa de timeouts de aquisição de conexão por minuto. ' +
-    'Cada timeout significa que uma requisição esperou por uma conexão mas o pool estava totalmente ocupado.',
+    'Rate of connection acquisition timeouts per minute. ' +
+    'Each timeout means a request waited for a connection but the pool was fully occupied.',
   staleConnectionsPerMin:
-    'Taxa de conexões stale detectadas e fechadas por minuto. ' +
-    'Conexões stale são conexões ociosas que excederam o tempo máximo de vida ou estavam quebradas.',
+    'Rate of stale connections detected and closed per minute. ' +
+    'Stale connections are idle connections that exceeded their maximum lifetime or were broken.',
 
-  // ── Métricas AMQP edge (lado publisher) ───────────────────────────────────
-  // rps, latencyP95, latencyAvg, errorRate são reutilizados das chaves HTTP acima
-  // com semântica AMQP tratada pelos labels de exibição (Pub RPS, Pub P95, etc.)
+  // ── AMQP edge metrics (publisher side) ───────────────────────────────
+  // rps, latencyP95, latencyAvg, errorRate are reused from the HTTP keys above
+  // with AMQP semantics handled by the display labels (Pub RPS, Pub P95, etc.)
 
-  // ── Métricas AMQP edge (lado queue / broker) ─────────────────────────────
+  // ── AMQP edge metrics (queue / broker side) ─────────────────────────
   queueResidenceTimeP95:
-    'Percentil 95 do tempo que uma mensagem fica na fila entre publish e pickup pelo consumer. ' +
-    'Isola backpressure da fila do tempo de trânsito upstream. Ainda não instrumentado — requer que o publisher defina o header AMQP timestamp no momento do publish.',
+    '95th percentile of the time a message stays in the queue between publish and consumer pickup. ' +
+    'Isolates queue backpressure from upstream transit time. Not yet instrumented — requires the publisher to set the AMQP timestamp header at publish time.',
   queueResidenceTimeAvg:
-    'Tempo médio que uma mensagem fica na fila entre publish e pickup pelo consumer. ' +
-    'Ainda não instrumentado — requer que o publisher defina o header AMQP timestamp no momento do publish.',
+    'Average time a message stays in the queue between publish and consumer pickup. ' +
+    'Not yet instrumented — requires the publisher to set the AMQP timestamp header at publish time.',
   queueDepth:
-    'Número de mensagens atualmente na fila (ready + unacked). ' +
-    'Ainda não instrumentado — requer exporter Prometheus do broker (ex: rabbitmq_queue_messages).',
+    'Number of messages currently in the queue (ready + unacked). ' +
+    'Not yet instrumented — requires a Prometheus broker exporter (e.g. rabbitmq_queue_messages).',
 
-  // ── Métricas AMQP edge (lado consumer) ────────────────────────────────────
+  // ── AMQP edge metrics (consumer side) ────────────────────────────────
   consumerProcessingTimeP95:
-    'Percentil 95 do tempo que o consumer leva para processar uma mensagem, do dequeue ao ack. ' +
-    'Ainda não instrumentado — requer medição de tempo do callback de delivery até ack/nack.',
+    '95th percentile of the time the consumer takes to process a message, from dequeue to ack. ' +
+    'Not yet instrumented — requires timing from the delivery callback to ack/nack.',
   consumerProcessingTimeAvg:
-    'Tempo médio que o consumer leva para processar uma mensagem, do dequeue ao ack. ' +
-    'Ainda não instrumentado — requer medição de tempo do callback de delivery até ack/nack.',
+    'Average time the consumer takes to process a message, from dequeue to ack. ' +
+    'Not yet instrumented — requires timing from the delivery callback to ack/nack.',
   consumerRps:
-    'Mensagens consumidas (acked) por segundo pelo serviço consumer. ' +
-    'Baseado na métrica rabbitmq_messages_consumed_total com status=ack.',
+    'Messages consumed (acked) per second by the consumer service. ' +
+    'Based on the rabbitmq_messages_consumed_total metric with status=ack.',
   consumerErrorRate:
-    'Percentual de mensagens que receberam nack pelo consumer. ' +
-    'Calculado como nack / total na janela de 5 minutos.',
+    'Percentage of messages that were nacked by the consumer. ' +
+    'Calculated as nack / total within the 5-minute window.',
   e2eLatencyP95:
-    'Percentil 95 da latência de consumo: tempo desde quando o serviço de origem (source) ' +
-    'publicou a mensagem até o serviço de destino (target) consumí-la (ack). ' +
-    'Baseado na métrica rabbitmq_message_consume_latency_seconds.',
+    '95th percentile of end-to-end consume latency: time from when the source service ' +
+    'published the message until the target service consumed it (ack). ' +
+    'Based on the rabbitmq_message_consume_latency_seconds metric.',
   e2eLatencyAvg:
-    'Latência média de consumo: tempo desde o publish pelo source até o ack pelo target. ' +
-    'Se este valor for muito alto, pode indicar backpressure na fila ou lentidão no consumer.',
+    'Average end-to-end consume latency: time from publish by the source to ack by the target. ' +
+    'If this value is too high, it may indicate queue backpressure or slow consumer processing.',
 };
 
 export function metricDescription(metricKey: string): string | undefined {

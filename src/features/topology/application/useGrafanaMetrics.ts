@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getBackendSrv } from '@grafana/runtime';
 import { firstValueFrom } from 'rxjs';
 import type { TopologyGraph } from '../domain';
@@ -131,6 +131,12 @@ export function useGrafanaMetrics(
   const pollRef = useRef(0);
   const backendAvailableRef = useRef<boolean | undefined>(undefined);
   const baselineCacheRef = useRef<Map<string, number | undefined> | undefined>(undefined);
+  const baselineFetchedAtRef = useRef(0);
+
+  const groupedMaps = useMemo(
+    () => definition !== undefined ? buildGroupedQueryMaps(definition) : undefined,
+    [definition],
+  );
 
   // Immediately render graph structure (no metrics) when definition changes
   useEffect(() => {
@@ -142,17 +148,17 @@ export function useGrafanaMetrics(
     setGraph(assembleTopologyGraph(definition, empty, empty));
     // Reset baseline cache on topology change.
     baselineCacheRef.current = undefined;
+    baselineFetchedAtRef.current = 0;
   }, [definition]);
 
   const poll = useCallback(async (id: number): Promise<void> => {
-    if (definition === undefined) return;
-
-    const groupedMaps = buildGroupedQueryMaps(definition);
+    if (definition === undefined || groupedMaps === undefined) return;
 
     // Try backend path first (or use it if already confirmed available).
     if (backendAvailableRef.current !== false) {
       try {
-        const includeBaseline = baselineCacheRef.current === undefined;
+        const baselineExpired = Date.now() - baselineFetchedAtRef.current > 5 * 60 * 1000;
+        const includeBaseline = baselineCacheRef.current === undefined || baselineExpired;
         const response = await fetchMetricsFromBackend({
           queries: groupedMapsToRecord(groupedMaps),
           includeBaseline,
@@ -168,6 +174,7 @@ export function useGrafanaMetrics(
         if (response.baselineResults !== undefined) {
           weekAgoResults = recordToMap(response.baselineResults);
           baselineCacheRef.current = weekAgoResults;
+          baselineFetchedAtRef.current = Date.now();
         } else {
           weekAgoResults = baselineCacheRef.current ?? new Map<string, number | undefined>();
         }
@@ -185,7 +192,9 @@ export function useGrafanaMetrics(
 
     // Legacy fallback: individual Prometheus proxy requests.
     const mergedResults = new Map<string, number | undefined>();
-    const weekAgoResults = new Map<string, number | undefined>();
+    const legacyBaselineExpired = Date.now() - baselineFetchedAtRef.current > 5 * 60 * 1000;
+    const fetchLegacyBaseline = baselineCacheRef.current === undefined || legacyBaselineExpired;
+    const weekAgoResults = fetchLegacyBaseline ? new Map<string, number | undefined>() : undefined;
     const weekAgoTime = Math.floor(Date.now() / 1000) - 7 * 86400;
 
     const batchPromises: Promise<void>[] = [];
@@ -195,7 +204,6 @@ export function useGrafanaMetrics(
       if (dsUid === '') {
         for (const key of queries.keys()) {
           mergedResults.set(key, undefined);
-          weekAgoResults.set(key, undefined);
         }
         continue;
       }
@@ -208,19 +216,29 @@ export function useGrafanaMetrics(
         }),
       );
 
-      batchPromises.push(
-        legacyBatchQuery(dsUid, queries, weekAgoTime).then((results): void => {
-          for (const [key, value] of results) {
-            weekAgoResults.set(key, value);
-          }
-        }),
-      );
+      if (weekAgoResults !== undefined) {
+        batchPromises.push(
+          legacyBatchQuery(dsUid, queries, weekAgoTime).then((results): void => {
+            for (const [key, value] of results) {
+              weekAgoResults.set(key, value);
+            }
+          }),
+        );
+      }
     }
 
     try {
       await Promise.all(batchPromises);
       if (pollRef.current === id) {
-        const assembled = assembleTopologyGraph(definition, mergedResults, weekAgoResults);
+        let effectiveBaseline: Map<string, number | undefined>;
+        if (weekAgoResults !== undefined) {
+          baselineCacheRef.current = weekAgoResults;
+          baselineFetchedAtRef.current = Date.now();
+          effectiveBaseline = weekAgoResults;
+        } else {
+          effectiveBaseline = baselineCacheRef.current ?? new Map<string, number | undefined>();
+        }
+        const assembled = assembleTopologyGraph(definition, mergedResults, effectiveBaseline);
         setGraph(assembled);
         setError(undefined);
         setLastRefreshAt(Date.now());
@@ -230,7 +248,7 @@ export function useGrafanaMetrics(
         setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
       }
     }
-  }, [definition, dataSourceMap]);
+  }, [definition, groupedMaps, dataSourceMap]);
 
   // Metric polling (runs in background, doesn't block graph rendering)
   useEffect(() => {

@@ -169,14 +169,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
             </div>
           </div>
           <span
-            className={css({
-              marginTop: '4px',
-              height: '12px',
-              width: '12px',
-              flexShrink: 0,
-              borderRadius: '9999px',
-              ...(isCritical ? { animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' } : {}),
-            })}
+            className={isCritical ? styles.statusDotCritical : styles.statusDot}
             style={{ backgroundColor: dotColor }}
           />
         </div>
@@ -189,7 +182,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
               {/* eslint-disable-next-line @typescript-eslint/no-deprecated */}
               <Select<string>
                 options={[
-                  { label: 'Todos', value: '' },
+                  { label: 'All', value: '' },
                   ...(hasDeployments && node instanceof EKSServiceNode
                     ? node.deployments.map((d) => ({ label: d.name, value: d.name }))
                     : []),
@@ -413,5 +406,22 @@ const styles = {
 
   metricValue: css({
     fontWeight: 600,
+  }),
+
+  statusDot: css({
+    marginTop: '4px',
+    height: '12px',
+    width: '12px',
+    flexShrink: 0,
+    borderRadius: '9999px',
+  }),
+
+  statusDotCritical: css({
+    marginTop: '4px',
+    height: '12px',
+    width: '12px',
+    flexShrink: 0,
+    borderRadius: '9999px',
+    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
   }),
 };

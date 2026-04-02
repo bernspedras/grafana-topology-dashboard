@@ -117,6 +117,56 @@ const styles = {
   metricValue: css({
     fontWeight: 600,
   }),
+  cardWrapper: css({
+    position: 'relative',
+    minWidth: '240px',
+    overflow: 'hidden',
+    borderRadius: '8px',
+    border: '1px solid #334155',
+    backgroundColor: '#1e293b',
+    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+    '&:hover .edge-drag-handle': {
+      opacity: 1,
+    },
+    '&:hover .edge-settings-btn': {
+      opacity: 1,
+    },
+  }),
+  dragHandle: css({
+    display: 'flex',
+    cursor: 'grab',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottom: '1px solid rgba(51,65,85,0.5)',
+    paddingTop: '2px',
+    paddingBottom: '2px',
+    opacity: 0,
+    transition: 'opacity 150ms ease',
+    '&:active': {
+      cursor: 'grabbing',
+    },
+  }),
+  dragSvgColor: css({
+    color: '#64748b',
+  }),
+  settingsBtn: css({
+    position: 'absolute',
+    top: '6px',
+    right: '6px',
+    zIndex: 10,
+    borderRadius: '6px',
+    padding: '4px',
+    color: '#64748b',
+    opacity: 0,
+    transition: 'opacity 150ms ease',
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    '&:hover': {
+      backgroundColor: '#334155',
+      color: '#cbd5e1',
+    },
+  }),
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -139,7 +189,7 @@ function hasSelectableEndpointPaths(edge: TopologyEdge): boolean {
 }
 
 function buildEndpointOptions(edge: TopologyEdge, endpoint: string | undefined): SelectableValue[] {
-  const options: SelectableValue[] = [{ label: 'Todos', value: 'all' }];
+  const options: SelectableValue[] = [{ label: 'All', value: 'all' }];
   if (edge instanceof AmqpEdge) {
     for (const rk of edge.routingKeyFilters) {
       options.push({ label: rk, value: 'rk:' + rk });
@@ -422,43 +472,16 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
           className="nodrag nopan"
         >
           <div
-            className={css({
-              position: 'relative',
-              minWidth: '240px',
-              overflow: 'hidden',
-              borderRadius: '8px',
-              border: '1px solid #334155',
-              backgroundColor: '#1e293b',
-              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
-              borderLeft: '4px solid ' + protocolColor,
-              '&:hover .edge-drag-handle': {
-                opacity: 1,
-              },
-              '&:hover .edge-settings-btn': {
-                opacity: 1,
-              },
-            })}
+            className={styles.cardWrapper}
+            style={{ borderLeft: '4px solid ' + protocolColor }}
           >
             {/* Drag handle — only in edit mode */}
             {data.isEditing === true && (
               <div
-                className={'edge-drag-handle ' + css({
-                  display: 'flex',
-                  cursor: 'grab',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderBottom: '1px solid rgba(51,65,85,0.5)',
-                  paddingTop: '2px',
-                  paddingBottom: '2px',
-                  opacity: 0,
-                  transition: 'opacity 150ms ease',
-                  '&:active': {
-                    cursor: 'grabbing',
-                  },
-                })}
+                className={'edge-drag-handle ' + styles.dragHandle}
                 onMouseDown={onDragStart}
               >
-                <svg width="16" height="6" viewBox="0 0 16 6" className={css({ color: '#64748b' })}>
+                <svg width="16" height="6" viewBox="0 0 16 6" className={styles.dragSvgColor}>
                   <circle cx="4" cy="1" r="1" fill="currentColor" />
                   <circle cx="8" cy="1" r="1" fill="currentColor" />
                   <circle cx="12" cy="1" r="1" fill="currentColor" />
@@ -472,24 +495,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
             {/* Settings gear */}
             <button
               type="button"
-              className={'edge-settings-btn ' + css({
-                position: 'absolute',
-                top: '6px',
-                right: '6px',
-                zIndex: 10,
-                borderRadius: '6px',
-                padding: '4px',
-                color: '#64748b',
-                opacity: 0,
-                transition: 'opacity 150ms ease',
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                '&:hover': {
-                  backgroundColor: '#334155',
-                  color: '#cbd5e1',
-                },
-              })}
+              className={'edge-settings-btn ' + styles.settingsBtn}
               onClick={(): void => { setShowQueries(true); }}
               title="View PromQL queries"
             >

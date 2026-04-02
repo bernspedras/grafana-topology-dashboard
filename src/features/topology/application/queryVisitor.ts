@@ -47,7 +47,7 @@ export function visitDefinitionQueries(
 ): void {
   /** Emit a single metric if non-null, applying a PromQL transform. */
   function emitMetric(
-    m: MetricQuery | null | undefined,
+    m: MetricQuery | undefined,
     defaultDs: string,
     entityType: 'node' | 'edge',
     entityId: string,

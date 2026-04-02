@@ -79,7 +79,7 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
           <button
             type="button"
             className={'nodrag ' + styles.queryButton}
-            title="Ver PromQL queries"
+            title="View PromQL queries"
             onClick={(): void => { setShowQueries(true); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -93,7 +93,7 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
       {/* Metrics */}
       <div className={styles.metricsSection}>
         {metrics.length === 0 && (
-          <p className={styles.noMetrics}>Sem métricas configuradas</p>
+          <p className={styles.noMetrics}>No metrics configured</p>
         )}
         {metrics.map((m) => {
           const key = m.metricKey;

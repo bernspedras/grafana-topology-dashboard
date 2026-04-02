@@ -225,9 +225,9 @@ describe('edgeMetricRows', (): void => {
       const rows = edgeMetricRows(makeJsonEdge({ rps: 1500, latencyP95Ms: 30, errorRatePercent: 0 }));
       expect(rows).toHaveLength(4);
       expect(rows[0]?.label).toBe('RPS');
-      expect(rows[1]?.label).toBe('Latência P95');
+      expect(rows[1]?.label).toBe('Latency P95');
       expect(rows[1]?.value).toBe('30 ms');
-      expect(rows[2]?.label).toBe('Latência Avg');
+      expect(rows[2]?.label).toBe('Latency Avg');
       expect(rows[3]?.label).toBe('Error rate');
     });
 
@@ -272,8 +272,8 @@ describe('edgeMetricRows', (): void => {
       const rows = edgeMetricRows(makeXmlEdge());
       expect(rows).toHaveLength(4);
       expect(rows[0]?.label).toBe('RPS');
-      expect(rows[1]?.label).toBe('Latência P95');
-      expect(rows[2]?.label).toBe('Latência Avg');
+      expect(rows[1]?.label).toBe('Latency P95');
+      expect(rows[2]?.label).toBe('Latency Avg');
       expect(rows[3]?.label).toBe('Error rate');
     });
   });

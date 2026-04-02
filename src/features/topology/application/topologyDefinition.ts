@@ -5,14 +5,14 @@
 export type MetricQuery = string | { readonly query: string; readonly dataSource: string };
 
 /** Extract the PromQL string from a MetricQuery. */
-export function metricQueryPromql(m: MetricQuery | null | undefined): string | undefined {
-  if (m == null) return undefined;
+export function metricQueryPromql(m: MetricQuery | undefined): string | undefined {
+  if (m === undefined) return undefined;
   return typeof m === 'string' ? m : m.query;
 }
 
 /** Extract the per-metric dataSource override, if any. */
-export function metricQueryDataSource(m: MetricQuery | null | undefined): string | undefined {
-  if (m == null) return undefined;
+export function metricQueryDataSource(m: MetricQuery | undefined): string | undefined {
+  if (m === undefined) return undefined;
   return typeof m === 'string' ? undefined : m.dataSource;
 }
 
@@ -187,26 +187,26 @@ export interface AmqpEdgeDefinition {
   readonly dataSource: string;
   readonly exchange: string;
   readonly publish: AmqpPublishSection;
-  readonly consumer: AmqpConsumerSection | null | undefined;
+  readonly consumer: AmqpConsumerSection | undefined;
   readonly routingKeyFilters?: readonly string[];
   readonly customMetrics?: readonly CustomMetricDefinition[];
 }
 
 export interface KafkaPublishPrometheusQueries {
-  readonly rps: MetricQuery | null;
-  readonly latencyP95: MetricQuery | null;
-  readonly latencyAvg: MetricQuery | null;
-  readonly errorRate: MetricQuery | null;
+  readonly rps: MetricQuery | undefined;
+  readonly latencyP95: MetricQuery | undefined;
+  readonly latencyAvg: MetricQuery | undefined;
+  readonly errorRate: MetricQuery | undefined;
 }
 
 export interface KafkaConsumerPrometheusQueries {
-  readonly rps: MetricQuery | null;
-  readonly latencyP95: MetricQuery | null;
-  readonly latencyAvg: MetricQuery | null;
-  readonly errorRate: MetricQuery | null;
-  readonly processingTimeP95: MetricQuery | null;
-  readonly processingTimeAvg: MetricQuery | null;
-  readonly consumerLag: MetricQuery | null;
+  readonly rps: MetricQuery | undefined;
+  readonly latencyP95: MetricQuery | undefined;
+  readonly latencyAvg: MetricQuery | undefined;
+  readonly errorRate: MetricQuery | undefined;
+  readonly processingTimeP95: MetricQuery | undefined;
+  readonly processingTimeAvg: MetricQuery | undefined;
+  readonly consumerLag: MetricQuery | undefined;
 }
 
 export interface KafkaPublishSection {
@@ -226,7 +226,7 @@ export interface KafkaEdgeDefinition {
   readonly topic: string;
   readonly consumerGroup: string | undefined;
   readonly publish: KafkaPublishSection;
-  readonly consumer: KafkaConsumerSection | null | undefined;
+  readonly consumer: KafkaConsumerSection | undefined;
   readonly customMetrics?: readonly CustomMetricDefinition[];
 }
 
