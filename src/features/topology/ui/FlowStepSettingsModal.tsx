@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import { marked } from 'marked';
 import type { FlowStepNode } from '../domain';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,13 @@ export function FlowStepSettingsModal({ flowStep, onClose, onSave, onDelete, sav
     onDelete(flowStep.id);
   }, [flowStep.id, confirmDelete, onDelete]);
 
+  const previewHtml = useMemo((): string => {
+    if (moreDetails.trim() === '') {
+      return '<p style="color:#64748b;text-align:center;font-style:italic;">Markdown preview will appear here...</p>';
+    }
+    return marked.parse(moreDetails, { async: false });
+  }, [moreDetails]);
+
   const isEmpty = text.trim() === '';
 
   return createPortal(
@@ -74,35 +82,50 @@ export function FlowStepSettingsModal({ flowStep, onClose, onSave, onDelete, sav
 
         {/* Body */}
         <div className={styles.body}>
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Step number</label>
-            <input
-              type="number"
-              min={1}
-              value={step}
-              onChange={(e): void => { setStep(Math.max(1, Number(e.target.value))); }}
-              className={styles.stepInput}
-            />
+          <div className={styles.topFields}>
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>Step number</label>
+              <input
+                type="number"
+                min={1}
+                value={step}
+                onChange={(e): void => { setStep(Math.max(1, Number(e.target.value))); }}
+                className={styles.stepInput}
+              />
+            </div>
+            <div className={styles.fieldGrow}>
+              <label className={styles.fieldLabel}>Description</label>
+              <input
+                type="text"
+                value={text}
+                onChange={(e): void => { setText(e.target.value); }}
+                placeholder="Step description..."
+                className={styles.textInput}
+              />
+            </div>
           </div>
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Description</label>
-            <input
-              type="text"
-              value={text}
-              onChange={(e): void => { setText(e.target.value); }}
-              placeholder="Step description..."
-              className={styles.textInput}
-            />
-          </div>
+
+          {/* Markdown editor + live preview */}
           <div className={styles.field}>
             <label className={styles.fieldLabel}>More details (Markdown)</label>
-            <textarea
-              value={moreDetails}
-              onChange={(e): void => { setMoreDetails(e.target.value); }}
-              placeholder="Add detailed documentation in Markdown format..."
-              className={styles.textArea}
-              rows={10}
-            />
+            <div className={styles.splitPane}>
+              <div className={styles.editorPane}>
+                <div className={styles.paneLabel}>Editor</div>
+                <textarea
+                  value={moreDetails}
+                  onChange={(e): void => { setMoreDetails(e.target.value); }}
+                  placeholder="Write Markdown here..."
+                  className={styles.textArea}
+                />
+              </div>
+              <div className={styles.previewPane}>
+                <div className={styles.paneLabel}>Preview</div>
+                <div
+                  className={styles.previewContent}
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -158,9 +181,9 @@ const styles = {
   }),
   modal: css({
     display: 'flex',
-    maxHeight: '80vh',
+    maxHeight: '85vh',
     width: '100%',
-    maxWidth: '672px',
+    maxWidth: '960px',
     flexDirection: 'column',
     borderRadius: '16px',
     border: '1px solid #334155',
@@ -205,10 +228,21 @@ const styles = {
     flexDirection: 'column',
     gap: '16px',
   }),
+  topFields: css({
+    display: 'flex',
+    gap: '16px',
+    alignItems: 'flex-end',
+  }),
   field: css({
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
+  }),
+  fieldGrow: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flex: 1,
   }),
   fieldLabel: css({
     fontSize: '13px',
@@ -246,26 +280,83 @@ const styles = {
       borderColor: '#3b82f6',
     },
   }),
-  textArea: css({
-    width: '100%',
+
+  // ─── Split pane (editor + preview) ──────────────────────────────────────
+  splitPane: css({
+    display: 'flex',
+    gap: '1px',
+    backgroundColor: '#334155',
     borderRadius: '8px',
-    border: '1px solid #475569',
+    overflow: 'hidden',
+    height: '340px',
+  }),
+  editorPane: css({
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
     backgroundColor: '#0f172a',
-    padding: '8px 12px',
+    minWidth: 0,
+  }),
+  previewPane: css({
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: '#1e293b',
+    minWidth: 0,
+  }),
+  paneLabel: css({
+    padding: '6px 12px',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    borderBottom: '1px solid #334155',
+    flexShrink: 0,
+  }),
+  textArea: css({
+    flex: 1,
+    width: '100%',
+    border: 'none',
+    backgroundColor: 'transparent',
+    padding: '12px',
     fontSize: '13px',
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
     lineHeight: 1.5,
     color: '#e2e8f0',
     outline: 'none',
-    resize: 'vertical',
-    minHeight: '120px',
+    resize: 'none',
     '&::placeholder': {
-      color: '#64748b',
-    },
-    '&:focus': {
-      borderColor: '#3b82f6',
+      color: '#475569',
     },
   }),
+  previewContent: css({
+    flex: 1,
+    overflowY: 'auto',
+    padding: '12px',
+    fontSize: '13px',
+    lineHeight: 1.7,
+    color: '#e2e8f0',
+
+    '& h1': { fontSize: '20px', fontWeight: 700, color: '#f1f5f9', marginTop: '20px', marginBottom: '10px', borderBottom: '1px solid #334155', paddingBottom: '6px' },
+    '& h2': { fontSize: '17px', fontWeight: 600, color: '#f1f5f9', marginTop: '16px', marginBottom: '8px' },
+    '& h3': { fontSize: '15px', fontWeight: 600, color: '#f1f5f9', marginTop: '14px', marginBottom: '6px' },
+    '& p': { marginTop: '6px', marginBottom: '6px' },
+    '& ul, & ol': { paddingLeft: '20px', marginTop: '6px', marginBottom: '6px' },
+    '& li': { marginBottom: '3px' },
+    '& code': { backgroundColor: '#0f172a', borderRadius: '4px', padding: '2px 5px', fontSize: '12px', fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace", color: '#c4b5fd' },
+    '& pre': { backgroundColor: '#0f172a', borderRadius: '6px', padding: '10px 12px', overflow: 'auto', marginTop: '8px', marginBottom: '8px', border: '1px solid #334155' },
+    '& pre code': { backgroundColor: 'transparent', padding: 0, fontSize: '12px' },
+    '& a': { color: '#60a5fa', textDecoration: 'underline' },
+    '& blockquote': { borderLeft: '3px solid #8b5cf6', margin: '8px 0', paddingLeft: '12px', color: '#94a3b8' },
+    '& table': { width: '100%', borderCollapse: 'collapse', marginTop: '8px', marginBottom: '8px' },
+    '& th': { textAlign: 'left', padding: '6px 10px', borderBottom: '2px solid #334155', fontSize: '12px', fontWeight: 600, color: '#94a3b8' },
+    '& td': { padding: '6px 10px', borderBottom: '1px solid #1e293b' },
+    '& hr': { border: 'none', borderTop: '1px solid #334155', margin: '12px 0' },
+    '& img': { maxWidth: '100%', borderRadius: '6px' },
+  }),
+
+  // ─── Footer ────────────────────────────────────────────────────────────
   footer: css({
     display: 'flex',
     alignItems: 'center',
