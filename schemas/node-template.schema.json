@@ -1,0 +1,138 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bernspedras.dev/topology-dashboard/schemas/node-template.schema.json",
+  "title": "Topology Node Template",
+  "description": "Reusable node template for a topology. Discriminated by the 'kind' field.",
+  "oneOf": [
+    { "$ref": "#/$defs/eksServiceNodeTemplate" },
+    { "$ref": "#/$defs/ec2ServiceNodeTemplate" },
+    { "$ref": "#/$defs/databaseNodeTemplate" },
+    { "$ref": "#/$defs/externalNodeTemplate" }
+  ],
+  "$defs": {
+    "metricQuery": {
+      "description": "A PromQL query string, a cross-datasource query object, or null if not configured.",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["query", "dataSource"],
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string" },
+            "dataSource": { "type": "string" }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "nodePrometheusQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "$ref": "#/$defs/metricQuery" },
+        "memory": { "$ref": "#/$defs/metricQuery" },
+        "readyReplicas": { "$ref": "#/$defs/metricQuery" },
+        "desiredReplicas": { "$ref": "#/$defs/metricQuery" }
+      }
+    },
+    "customMetricDefinition": {
+      "type": "object",
+      "required": ["key", "label", "promql"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "promql": { "type": "string" },
+        "dataSource": { "type": ["string", "null"] },
+        "unit": { "type": ["string", "null"] },
+        "direction": {
+          "oneOf": [
+            { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            { "type": "null" }
+          ]
+        },
+        "description": { "type": ["string", "null"] }
+      }
+    },
+    "eksServiceNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "namespace", "prometheus"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "eks-service" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "namespace": { "type": "string" },
+        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "deploymentNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "ec2ServiceNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "instanceId", "instanceType", "availabilityZone", "prometheus"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "ec2-service" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "instanceId": { "type": "string" },
+        "instanceType": { "type": "string" },
+        "availabilityZone": { "type": "string" },
+        "amiId": { "type": ["string", "null"] },
+        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "databaseNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "engine", "isReadReplica", "prometheus"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "database" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "engine": { "type": "string" },
+        "isReadReplica": { "type": "boolean" },
+        "storageGb": { "type": ["number", "null"] },
+        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "externalNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "provider", "prometheus"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "external" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "provider": { "type": "string" },
+        "contactEmail": { "type": ["string", "null"] },
+        "slaPercent": { "type": ["number", "null"] },
+        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    }
+  }
+}

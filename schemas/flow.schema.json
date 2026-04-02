@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bernspedras.dev/topology-dashboard/schemas/flow.schema.json",
+  "title": "Topology Flow",
+  "description": "A topology flow definition with node/edge references, optional flow steps, and layout.",
+  "type": "object",
+  "required": ["id", "name", "definition"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique flow identifier."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable flow name."
+    },
+    "definition": { "$ref": "#/$defs/topologyDefinitionRefs" },
+    "layout": { "$ref": "#/$defs/layout" }
+  },
+  "$defs": {
+    "customMetricDefinition": {
+      "type": "object",
+      "required": ["key", "label", "promql"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "promql": { "type": "string" },
+        "dataSource": { "type": ["string", "null"] },
+        "unit": { "type": ["string", "null"] },
+        "direction": {
+          "oneOf": [
+            { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            { "type": "null" }
+          ]
+        },
+        "description": { "type": ["string", "null"] }
+      }
+    },
+    "topologyNodeRef": {
+      "type": "object",
+      "required": ["nodeId"],
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string",
+          "description": "References a node template by ID."
+        },
+        "usedDeployment": {
+          "type": "string",
+          "description": "For EKS nodes, selects a specific deployment from deploymentNames."
+        },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "topologyEdgeRef": {
+      "type": "object",
+      "required": ["edgeId"],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": {
+          "type": "string",
+          "description": "References an edge template by ID."
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method filter (resolves {{method}} placeholder in PromQL)."
+        },
+        "endpointPath": {
+          "type": "string",
+          "description": "Endpoint path filter (resolves {{endpointPath}} placeholder in PromQL)."
+        },
+        "endpointPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Multiple endpoint paths (joined as regex alternation for {{endpointPath}})."
+        },
+        "soapAction": {
+          "type": "string",
+          "description": "SOAP action filter for HTTP XML edges."
+        },
+        "routingKeyFilter": {
+          "type": "string",
+          "description": "Routing key filter for AMQP edges."
+        },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "flowStepDefinition": {
+      "type": "object",
+      "required": ["id", "step", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique step identifier."
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Step number (1-based)."
+        },
+        "text": {
+          "type": "string",
+          "description": "Step description."
+        },
+        "moreDetails": {
+          "type": ["string", "null"],
+          "description": "Optional markdown content with additional details."
+        }
+      }
+    },
+    "flowSummaryRef": {
+      "type": "object",
+      "required": ["id", "label", "dataSource", "customMetrics"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "topologyDefinitionRefs": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/topologyNodeRef" }
+        },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/topologyEdgeRef" }
+        },
+        "flowSummary": { "$ref": "#/$defs/flowSummaryRef" },
+        "flowSteps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/flowStepDefinition" }
+        }
+      }
+    },
+    "position": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "handleOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceHandle": {
+          "type": "string",
+          "enum": ["top", "right", "bottom", "left"],
+          "description": "Source handle position."
+        },
+        "targetHandle": {
+          "type": "string",
+          "enum": ["top", "right", "bottom", "left"],
+          "description": "Target handle position."
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "positions": {
+          "type": "object",
+          "description": "Map of node/step ID to position.",
+          "additionalProperties": { "$ref": "#/$defs/position" }
+        },
+        "handleOverrides": {
+          "type": "object",
+          "description": "Map of edge ID to handle overrides.",
+          "additionalProperties": { "$ref": "#/$defs/handleOverride" }
+        },
+        "edgeLabelOffsets": {
+          "type": "object",
+          "description": "Map of edge ID to label offset from default position.",
+          "additionalProperties": { "$ref": "#/$defs/position" }
+        }
+      }
+    }
+  }
+}
