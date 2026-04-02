@@ -55,6 +55,19 @@
         "description": { "type": ["string", "null"] }
       }
     },
+    "slaThresholdMap": {
+      "type": "object",
+      "description": "Per-metric SLA thresholds. Keys are metric names, values define warning and critical thresholds.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["warning", "critical"],
+        "additionalProperties": false,
+        "properties": {
+          "warning": { "type": "number" },
+          "critical": { "type": "number" }
+        }
+      }
+    },
     "eksServiceNodeTemplate": {
       "type": "object",
       "required": ["kind", "id", "label", "dataSource", "namespace", "prometheus"],
@@ -73,7 +86,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "ec2ServiceNodeTemplate": {
@@ -93,7 +107,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "databaseNodeTemplate": {
@@ -112,7 +127,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "externalNodeTemplate": {
@@ -131,7 +147,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     }
   }

@@ -42,6 +42,10 @@ func (a *App) registerTopologyRoutes(mux *http.ServeMux) {
 
 	// Datasource definitions.
 	mux.HandleFunc("PUT /datasources", requireEdit(a.handlePutDatasources))
+
+	// SLA defaults.
+	mux.HandleFunc("PUT /sla-defaults", requireEdit(a.handlePutSlaDefaults))
+	mux.HandleFunc("DELETE /sla-defaults", requireEdit(a.handleDeleteSlaDefaults))
 }
 
 // ─── Bundle ─────────────────────────────────────────────────────────────────
@@ -264,6 +268,31 @@ func (a *App) handlePutDatasources(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.topologyStore.WriteDatasources(raw); err != nil {
 		a.logger.Error("Failed to write datasources", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ─── SLA defaults ────────────────────────────────────────────────────────────
+
+func (a *App) handlePutSlaDefaults(w http.ResponseWriter, r *http.Request) {
+	raw, err := readBody(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := a.topologyStore.WriteSlaDefaults(raw); err != nil {
+		a.logger.Error("Failed to write SLA defaults", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *App) handleDeleteSlaDefaults(w http.ResponseWriter, _ *http.Request) {
+	if err := a.topologyStore.DeleteSlaDefaults(); err != nil {
+		a.logger.Error("Failed to delete SLA defaults", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

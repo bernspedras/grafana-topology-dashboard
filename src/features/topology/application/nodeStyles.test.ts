@@ -17,35 +17,35 @@ function makeMetrics(): NodeMetrics {
 
 function makeEksNode(): EKSServiceNode {
   return new EKSServiceNode({
-    id: 'eks-1', label: 'eks', status: 'healthy', metrics: makeMetrics(),
+    id: 'eks-1', label: 'eks', status: 'healthy', baselineStatus: 'healthy', metrics: makeMetrics(),
     namespace: 'ns', deployments: [],
   });
 }
 
 function makeEc2Node(): EC2ServiceNode {
   return new EC2ServiceNode({
-    id: 'ec2-1', label: 'ec2', status: 'healthy', metrics: makeMetrics(),
+    id: 'ec2-1', label: 'ec2', status: 'healthy', baselineStatus: 'healthy', metrics: makeMetrics(),
     instanceId: 'i-123', instanceType: 't3.micro', availabilityZone: 'us-east-1a',
   });
 }
 
 function makeDbNode(): DatabaseNode {
   return new DatabaseNode({
-    id: 'db-1', label: 'db', status: 'healthy', metrics: makeMetrics(),
+    id: 'db-1', label: 'db', status: 'healthy', baselineStatus: 'healthy', metrics: makeMetrics(),
     engine: 'postgres', isReadReplica: false,
   });
 }
 
 function makeExternalNode(): ExternalNode {
   return new ExternalNode({
-    id: 'ext-1', label: 'ext', status: 'healthy', metrics: makeMetrics(),
+    id: 'ext-1', label: 'ext', status: 'healthy', baselineStatus: 'healthy', metrics: makeMetrics(),
     provider: 'Acme Corp',
   });
 }
 
 function makeNodeWithStatus(status: NodeStatus): EKSServiceNode {
   return new EKSServiceNode({
-    id: 'n', label: 'n', status, metrics: makeMetrics(),
+    id: 'n', label: 'n', status, baselineStatus: 'healthy', metrics: makeMetrics(),
     namespace: 'ns', deployments: [],
   });
 }

@@ -123,6 +123,19 @@
         "consumerLag": { "$ref": "#/$defs/metricQuery" }
       }
     },
+    "slaThresholdMap": {
+      "type": "object",
+      "description": "Per-metric SLA thresholds. Keys are metric names, values define warning and critical thresholds.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["warning", "critical"],
+        "additionalProperties": false,
+        "properties": {
+          "warning": { "type": "number" },
+          "critical": { "type": "number" }
+        }
+      }
+    },
     "httpJsonEdgeTemplate": {
       "type": "object",
       "required": ["kind", "id", "source", "target", "dataSource", "prometheus"],
@@ -137,7 +150,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "httpXmlEdgeTemplate": {
@@ -154,7 +168,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "tcpDbEdgeTemplate": {
@@ -173,7 +188,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "amqpEdgeTemplate": {
@@ -217,7 +233,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "kafkaEdgeTemplate": {
@@ -256,7 +273,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     },
     "grpcEdgeTemplate": {
@@ -275,7 +293,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sla": { "$ref": "#/$defs/slaThresholdMap" }
       }
     }
   }

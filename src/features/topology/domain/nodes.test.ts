@@ -23,6 +23,7 @@ const BASE_PARAMS = {
   id: 'node-1',
   label: 'Test Node',
   status: 'healthy' as const,
+  baselineStatus: 'healthy' as const,
   metrics: makeMetrics(),
 };
 

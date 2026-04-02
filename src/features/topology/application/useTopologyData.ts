@@ -35,6 +35,7 @@ export interface TopologyDataResult {
   readonly datasourceDefinitions: readonly DatasourceDefinition[];
   readonly dataSourceMap: Record<string, string>;
   readonly editAllowList: readonly string[] | undefined;
+  readonly slaDefaultsRaw: unknown;
   readonly saveTopologyLayout: (topologyId: string, layout: FlowLayout) => Promise<boolean>;
   /** Re-fetch from the backend. */
   readonly reload: () => void;
@@ -119,6 +120,7 @@ export function useTopologyData(): TopologyDataResult {
   const [datasourceDefinitions, setDatasourceDefinitions] = useState<readonly DatasourceDefinition[]>([]);
   const [dataSourceMap, setDataSourceMap] = useState<Record<string, string>>({});
   const [editAllowList, setEditAllowList] = useState<readonly string[] | undefined>(undefined);
+  const [slaDefaultsRaw, setSlaDefaultsRaw] = useState<unknown>(undefined);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
 
@@ -156,6 +158,7 @@ export function useTopologyData(): TopologyDataResult {
             setDatasourceDefinitions(resolved.datasourceDefinitions);
             setDataSourceMap(settings.dataSourceMap);
             setEditAllowList(settings.editAllowList);
+            setSlaDefaultsRaw(bundle.slaDefaults);
           }
         }
       } catch (err) {
@@ -197,5 +200,5 @@ export function useTopologyData(): TopologyDataResult {
     [topologies],
   );
 
-  return { loading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, saveTopologyLayout, reload };
+  return { loading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, slaDefaultsRaw, saveTopologyLayout, reload };
 }

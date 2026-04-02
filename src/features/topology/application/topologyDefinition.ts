@@ -63,6 +63,7 @@ export interface BaseNodeDefinition {
   readonly dataSource: string;
   readonly prometheus: NodePrometheusQueries;
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface EKSServiceNodeDefinition extends BaseNodeDefinition {
@@ -122,6 +123,7 @@ export interface HttpJsonEdgeDefinition {
   readonly endpointPath: string | undefined;
   readonly endpointPaths?: readonly string[];
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface HttpXmlEdgeDefinition {
@@ -136,6 +138,7 @@ export interface HttpXmlEdgeDefinition {
   readonly soapAction: string | undefined;
   readonly endpointPaths?: readonly string[];
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface TcpDbEdgeDefinition {
@@ -148,6 +151,7 @@ export interface TcpDbEdgeDefinition {
   readonly poolSize: number | undefined;
   readonly port: number | undefined;
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface AmqpPublishPrometheusQueries {
@@ -190,6 +194,7 @@ export interface AmqpEdgeDefinition {
   readonly consumer: AmqpConsumerSection | undefined;
   readonly routingKeyFilters?: readonly string[];
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface KafkaPublishPrometheusQueries {
@@ -228,6 +233,7 @@ export interface KafkaEdgeDefinition {
   readonly publish: KafkaPublishSection;
   readonly consumer: KafkaConsumerSection | undefined;
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface GrpcEdgeDefinition {
@@ -240,6 +246,7 @@ export interface GrpcEdgeDefinition {
   readonly grpcService: string;
   readonly grpcMethod: string;
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export type EdgeDefinition =
@@ -285,6 +292,7 @@ export interface HttpJsonEdgeTemplate {
   readonly dataSource: string;
   readonly prometheus: HttpEdgePrometheusQueries;
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export interface HttpXmlEdgeTemplate {
@@ -295,6 +303,7 @@ export interface HttpXmlEdgeTemplate {
   readonly dataSource: string;
   readonly prometheus: HttpEdgePrometheusQueries;
   readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
 }
 
 export type EdgeTemplate =

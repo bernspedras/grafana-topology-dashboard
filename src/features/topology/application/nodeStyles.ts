@@ -5,7 +5,8 @@ import {
   ExternalNode,
   FlowSummaryNode,
 } from '../domain';
-import type { TopologyNode } from '../domain';
+import type { TopologyNode, NodeStatus } from '../domain';
+import type { ColoringMode } from './metricColor';
 
 export function nodeColor(node: TopologyNode): string {
   if (node instanceof EKSServiceNode) return '#3b82f6';
@@ -16,11 +17,16 @@ export function nodeColor(node: TopologyNode): string {
   return '#6b7280';
 }
 
-export function statusBorderColor(node: TopologyNode): string {
-  switch (node.status) {
+export function statusColor(status: NodeStatus): string {
+  switch (status) {
     case 'healthy':  return '#22c55e';
     case 'warning':  return '#eab308';
     case 'critical': return '#ef4444';
     case 'unknown':  return '#9ca3af';
   }
+}
+
+export function statusBorderColor(node: TopologyNode, mode?: ColoringMode): string {
+  const status = mode === 'baseline' ? node.baselineStatus : node.status;
+  return statusColor(status);
 }

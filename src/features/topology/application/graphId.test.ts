@@ -32,6 +32,7 @@ function makeNode(id: string): EKSServiceNode {
     id,
     label: id,
     status: 'healthy',
+    baselineStatus: 'healthy',
     metrics: nodeMetrics,
     namespace: 'ns',
     deployments: [
@@ -45,6 +46,7 @@ function makeDbNode(id: string): DatabaseNode {
     id,
     label: id,
     status: 'healthy',
+    baselineStatus: 'healthy',
     metrics: nodeMetrics,
     engine: 'PostgreSQL',
     isReadReplica: false,

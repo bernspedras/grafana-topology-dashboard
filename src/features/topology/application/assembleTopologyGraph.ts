@@ -14,6 +14,10 @@ import type {
   GrpcEdgeDefinition,
   CustomMetricDefinition,
 } from './topologyDefinition';
+import type { SlaThresholdMap } from './slaThresholds';
+import type { ParsedSlaDefaults } from './slaThresholds';
+import { resolveNodeSla, EMPTY_SLA_DEFAULTS } from './slaThresholds';
+import { baselineMetricStatus, worstOfStatuses } from './metricColor';
 import { visitDefinitionQueries } from './queryVisitor';
 import {
   TopologyGraph,
@@ -58,11 +62,29 @@ export interface PrometheusQuerierResolver {
 
 // ─── Status derivation ──────────────────────────────────────────────────────
 
-export function deriveNodeStatus(cpu: number | undefined, memory: number | undefined): NodeStatus {
+export function deriveNodeStatus(cpu: number | undefined, memory: number | undefined, sla?: SlaThresholdMap): NodeStatus {
   if (cpu === undefined || memory === undefined) return 'unknown';
-  if (cpu >= 90 || memory >= 95) return 'critical';
-  if (cpu >= 70 || memory >= 80) return 'warning';
+  const cpuSla = sla?.cpuPercent;
+  const memSla = sla?.memoryPercent;
+  // No SLA thresholds defined → unknown (no opinion on health)
+  if (cpuSla === undefined && memSla === undefined) return 'unknown';
+  if (cpuSla !== undefined && cpu >= cpuSla.critical) return 'critical';
+  if (memSla !== undefined && memory >= memSla.critical) return 'critical';
+  if (cpuSla !== undefined && cpu >= cpuSla.warning) return 'warning';
+  if (memSla !== undefined && memory >= memSla.warning) return 'warning';
   return 'healthy';
+}
+
+export function deriveBaselineNodeStatus(
+  cpu: number | undefined,
+  memory: number | undefined,
+  cpuWeekAgo: number | undefined,
+  memoryWeekAgo: number | undefined,
+): NodeStatus {
+  return worstOfStatuses([
+    baselineMetricStatus(cpu, cpuWeekAgo, 'cpuPercent'),
+    baselineMetricStatus(memory, memoryWeekAgo, 'memoryPercent'),
+  ]);
 }
 
 // ─── Query key helpers ──────────────────────────────────────────────────────
@@ -136,6 +158,7 @@ function constructNode(
   results: ReadonlyMap<string, number | undefined>,
   weekAgoResults: ReadonlyMap<string, number | undefined>,
   now: Date,
+  slaDefaults: ParsedSlaDefaults,
 ): TopologyNode {
   if (def.kind === 'flow-summary') {
     const customMetrics = buildCustomMetricValues(def.customMetrics, def.id, nodeQueryKey, results, weekAgoResults);
@@ -143,6 +166,7 @@ function constructNode(
       id: def.id,
       label: def.label,
       status: 'healthy',
+      baselineStatus: 'unknown',
       metrics: new NodeMetrics({ cpuPercent: 0, memoryPercent: 0, lastUpdatedAt: now }),
       ...(customMetrics.length > 0 ? { customMetrics } : {}),
     });
@@ -150,17 +174,21 @@ function constructNode(
 
   const cpu = results.get(nodeQueryKey(def.id, 'cpu'));
   const memory = results.get(nodeQueryKey(def.id, 'memory'));
-  const status = deriveNodeStatus(cpu, memory);
+  const cpuWeekAgo = weekAgoResults.get(nodeQueryKey(def.id, 'cpu'));
+  const memoryWeekAgo = weekAgoResults.get(nodeQueryKey(def.id, 'memory'));
+  const sla = resolveNodeSla(def, slaDefaults);
+  const status = deriveNodeStatus(cpu, memory, sla);
+  const baselineStatus = deriveBaselineNodeStatus(cpu, memory, cpuWeekAgo, memoryWeekAgo);
   const metrics = new NodeMetrics({
     cpuPercent: cpu,
     memoryPercent: memory,
-    cpuPercentWeekAgo: weekAgoResults.get(nodeQueryKey(def.id, 'cpu')),
-    memoryPercentWeekAgo: weekAgoResults.get(nodeQueryKey(def.id, 'memory')),
+    cpuPercentWeekAgo: cpuWeekAgo,
+    memoryPercentWeekAgo: memoryWeekAgo,
     lastUpdatedAt: now,
   });
 
   const customMetrics = buildCustomMetricValues(def.customMetrics, def.id, nodeQueryKey, results, weekAgoResults);
-  const base = { id: def.id, label: def.label, status, metrics, ...(customMetrics.length > 0 ? { customMetrics } : {}) };
+  const base = { id: def.id, label: def.label, status, baselineStatus, metrics, ...(customMetrics.length > 0 ? { customMetrics } : {}) };
 
   switch (def.kind) {
     case 'eks-service':
@@ -178,6 +206,7 @@ interface NodeBaseParams {
   readonly id: string;
   readonly label: string;
   readonly status: NodeStatus;
+  readonly baselineStatus: NodeStatus;
   readonly metrics: NodeMetrics;
 }
 
@@ -617,11 +646,13 @@ export function assembleTopologyGraph(
   definition: TopologyDefinition,
   results: ReadonlyMap<string, number | undefined>,
   weekAgoResults: ReadonlyMap<string, number | undefined>,
+  slaDefaults?: ParsedSlaDefaults,
 ): TopologyGraph {
   const now = new Date();
+  const defaults = slaDefaults ?? EMPTY_SLA_DEFAULTS;
 
   const nodes: TopologyNode[] = definition.nodes.map(
-    (def: NodeDefinition): TopologyNode => constructNode(def, results, weekAgoResults, now),
+    (def: NodeDefinition): TopologyNode => constructNode(def, results, weekAgoResults, now, defaults),
   );
 
   const edges: TopologyEdge[] = definition.edges.map(

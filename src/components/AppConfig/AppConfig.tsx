@@ -14,6 +14,8 @@ import {
   saveEdgeTemplate,
   deleteEdgeTemplate,
   saveDatasources,
+  saveSlaDefaults,
+  deleteSlaDefaults,
   createFlow,
 } from '../../features/topology/application/topologyApi';
 import type { TopologyBundleResponse } from '../../features/topology/application/topologyApi';
@@ -135,6 +137,111 @@ function JsonItemList({ items, label, labelFn, onSaveItem, onDeleteItem }: JsonI
   );
 }
 
+// ─── SLA defaults editor ─────────────────────────────────────────────────────
+
+const SLA_DEFAULTS_TEMPLATE = `{
+  "node": {
+    "cpuPercent": { "warning": 70, "critical": 90 },
+    "memoryPercent": { "warning": 80, "critical": 95 }
+  },
+  "http-json": {
+    "errorRatePercent": { "warning": 1, "critical": 5 },
+    "latencyP95Ms": { "warning": 500, "critical": 2000 }
+  }
+}`;
+
+interface SlaDefaultsEditorProps {
+  readonly slaDefaults: unknown;
+  readonly onReload: () => void;
+}
+
+function SlaDefaultsEditor({ slaDefaults, onReload }: SlaDefaultsEditorProps): React.JSX.Element {
+  const s = useStyles2(getStyles);
+  const hasExisting = slaDefaults !== undefined && slaDefaults !== null;
+  const [value, setValue] = useState(
+    hasExisting ? JSON.stringify(slaDefaults, null, 2) : '',
+  );
+  const [status, setStatus] = useState<string | null>(null);
+
+  // Sync editor when bundle reloads with new data
+  useEffect(() => {
+    if (slaDefaults !== undefined && slaDefaults !== null) {
+      setValue(JSON.stringify(slaDefaults, null, 2));
+    } else {
+      setValue('');
+    }
+    setStatus(null);
+  }, [slaDefaults]);
+
+  const handleSave = async (): Promise<void> => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      setStatus('Invalid JSON');
+      return;
+    }
+    try {
+      await saveSlaDefaults(parsed);
+      setStatus('Saved');
+      onReload();
+    } catch {
+      setStatus('Failed to save');
+    }
+  };
+
+  const handleDelete = async (): Promise<void> => {
+    try {
+      await deleteSlaDefaults();
+      setValue('');
+      setStatus('Deleted');
+      onReload();
+    } catch {
+      setStatus('Failed to delete');
+    }
+  };
+
+  const handleCreate = (): void => {
+    setValue(SLA_DEFAULTS_TEMPLATE);
+    setStatus(null);
+  };
+
+  return (
+    <FieldSet label="SLA Defaults">
+      <p className={s.muted}>
+        Per-metric warning and critical thresholds used in SLA coloring mode. Define thresholds per entity kind (node, http-json, tcp-db, amqp, kafka, grpc).
+      </p>
+      {value === '' ? (
+        <div className={s.editorActions}>
+          <Button size="sm" variant="secondary" onClick={handleCreate}>
+            Create SLA Defaults
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className={s.editorContainer}>
+            <CodeEditor
+              language="json"
+              value={value}
+              height={400}
+              showLineNumbers
+              showMiniMap={false}
+              onBlur={setValue}
+            />
+          </div>
+          <div className={s.editorActions}>
+            <Button size="sm" onClick={() => void handleSave()}>Save</Button>
+            {hasExisting && (
+              <Button size="sm" variant="destructive" fill="outline" onClick={() => void handleDelete()}>Delete</Button>
+            )}
+            {status !== null && <span className={s.muted}>{status}</span>}
+          </div>
+        </>
+      )}
+    </FieldSet>
+  );
+}
+
 // ─── Main config page ───────────────────────────────────────────────────────
 
 const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
@@ -198,6 +305,9 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
     if (datasourceDefinitions.length > 0) {
       files['topologies/datasources.json'] = strToU8(JSON.stringify(datasourceDefinitions, null, 2));
     }
+    if (bundle?.slaDefaults !== undefined) {
+      files['topologies/sla-defaults.json'] = strToU8(JSON.stringify(bundle.slaDefaults, null, 2));
+    }
     for (const t of topologies) {
       const filename = `topologies/flows/${t.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
       files[filename] = strToU8(JSON.stringify(t, null, 2));
@@ -229,12 +339,15 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
     const nodes: ItemWithId[] = [];
     const edges: ItemWithId[] = [];
     let datasourcesRaw: unknown[] | undefined;
+    let slaDefaultsRaw: unknown;
 
     for (const [path, data] of Object.entries(unzipped)) {
       if (!path.endsWith('.json')) continue;
       try {
         if (path.endsWith('datasources.json')) {
           datasourcesRaw = JSON.parse(strFromU8(data)) as unknown[];
+        } else if (path.endsWith('sla-defaults.json')) {
+          slaDefaultsRaw = JSON.parse(strFromU8(data)) as unknown;
         } else {
           const parsed = JSON.parse(strFromU8(data)) as ItemWithId;
           if (path.includes('/flows/') || (/^flows\//.exec(path))) {
@@ -250,14 +363,15 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
       }
     }
 
-    if (flows.length === 0 && nodes.length === 0 && edges.length === 0 && datasourcesRaw === undefined) {
-      alert('No valid topology files found in ZIP. Expected paths: flows/*.json, templates/nodes/*.json, templates/edges/*.json, datasources.json');
+    if (flows.length === 0 && nodes.length === 0 && edges.length === 0 && datasourcesRaw === undefined && slaDefaultsRaw === undefined) {
+      alert('No valid topology files found in ZIP. Expected paths: flows/*.json, templates/nodes/*.json, templates/edges/*.json, datasources.json, sla-defaults.json');
       return;
     }
 
     // Write each item to the Go backend.
     const promises: Promise<unknown>[] = [];
     if (datasourcesRaw !== undefined) { promises.push(saveDatasources(datasourcesRaw)); }
+    if (slaDefaultsRaw !== undefined) { promises.push(saveSlaDefaults(slaDefaultsRaw)); }
     for (const f of flows) { promises.push(saveFlow(f.id, f).catch(() => createFlow(f))); }
     for (const n of nodes) { promises.push(saveNodeTemplate(n.id, n)); }
     for (const e of edges) { promises.push(saveEdgeTemplate(e.id, e)); }
@@ -407,6 +521,8 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
         onSaveItem={async (item) => { await saveEdgeTemplate(item.id, item); reload(); }}
         onDeleteItem={async (id) => { await deleteEdgeTemplate(id); reload(); }}
       />
+
+      <SlaDefaultsEditor slaDefaults={bundle.slaDefaults} onReload={reload} />
 
       <FieldSet label="Import / Export">
         <div className={s.editorActions}>

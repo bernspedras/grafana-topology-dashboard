@@ -21,6 +21,10 @@ import { PromqlQueriesProvider } from '../features/topology/ui/PromqlQueriesCont
 import { SseRefreshProvider } from '../features/topology/ui/SseRefreshContext';
 import { ViewOptionsProvider } from '../features/topology/ui/ViewOptionsContext';
 import type { ViewOptions, ViewOptionKey, ViewOptionsContextValue } from '../features/topology/ui/ViewOptionsContext';
+import type { ColoringMode } from '../features/topology/application/metricColor';
+import { SlaProvider } from '../features/topology/ui/SlaContext';
+import { buildSlaMap, parseSlaDefaults } from '../features/topology/application/slaThresholds';
+import type { SlaDefaultsJson } from '../features/topology/application/pluginSettings';
 import { DataSourceMapProvider } from '../features/topology/ui/DataSourceMapContext';
 import { EditModeProvider } from '../features/topology/ui/EditModeContext';
 import { DatasourceDefsProvider } from '../features/topology/ui/DatasourceDefsContext';
@@ -73,7 +77,7 @@ function RefreshStatus({ lastRefreshAt, pollIntervalMs, loading }: RefreshStatus
 
 function TopologyPage(): React.JSX.Element {
   const styles = useStyles2(getStyles);
-  const { loading: topologyLoading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, saveTopologyLayout, reload } = useTopologyData();
+  const { loading: topologyLoading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, slaDefaultsRaw, saveTopologyLayout, reload } = useTopologyData();
   const canEdit = canEditTopology(editAllowList);
 
   const [selectedId, setSelectedId] = useState('');
@@ -357,20 +361,28 @@ function TopologyPage(): React.JSX.Element {
     })();
   }, [topologies, effectiveId, reload]);
 
-  const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true });
+  const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true, coloringMode: 'baseline' });
   const toggleViewOption = useCallback((key: ViewOptionKey): void => {
     setViewOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
+  const setColoringMode = useCallback((mode: ColoringMode): void => {
+    setViewOptions((prev) => ({ ...prev, coloringMode: mode }));
+  }, []);
   const viewOptionsCtx = useMemo<ViewOptionsContextValue>(
-    () => ({ options: viewOptions, toggle: toggleViewOption }),
-    [viewOptions, toggleViewOption],
+    () => ({ options: viewOptions, toggle: toggleViewOption, setColoringMode }),
+    [viewOptions, toggleViewOption, setColoringMode],
   );
+
+  const slaDefaults = useMemo(() => parseSlaDefaults(slaDefaultsRaw as SlaDefaultsJson | undefined), [slaDefaultsRaw]);
 
   const { graph, loading: metricsLoading, error, lastRefreshAt } = useGrafanaMetrics(
     entry?.definition,
     dataSourceMap,
     POLL_INTERVAL_MS,
+    slaDefaults,
   );
+
+  const slaMap = useMemo(() => buildSlaMap(entry?.definition, slaDefaults), [entry, slaDefaults]);
 
   const promqlQueries = useMemo(
     () => (entry !== undefined ? buildPromqlQueriesMap(entry.definition) : {}),
@@ -632,6 +644,7 @@ function TopologyPage(): React.JSX.Element {
                           <DeleteCardProvider value={handleDeleteCard}>
                             <SseRefreshProvider value={0}>
                               <ViewOptionsProvider value={viewOptionsCtx}>
+                              <SlaProvider value={slaMap}>
                                 <div className={styles.graphArea}>
                                   <TopologyView
                                     graph={graph}
@@ -652,6 +665,7 @@ function TopologyPage(): React.JSX.Element {
                                     rawFlowJson={entry?.raw}
                                   />
                                 </div>
+                              </SlaProvider>
                               </ViewOptionsProvider>
                             </SseRefreshProvider>
                           </DeleteCardProvider>

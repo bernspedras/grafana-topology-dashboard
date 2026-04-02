@@ -7,6 +7,7 @@ export abstract class BaseNode {
   public readonly id: string;
   public readonly label: string;
   public readonly status: NodeStatus;
+  public readonly baselineStatus: NodeStatus;
   public readonly metrics: NodeMetrics;
   public readonly customMetrics: readonly CustomMetricValue[];
 
@@ -14,12 +15,14 @@ export abstract class BaseNode {
     id: string;
     label: string;
     status: NodeStatus;
+    baselineStatus: NodeStatus;
     metrics: NodeMetrics;
     customMetrics?: readonly CustomMetricValue[];
   }) {
     this.id = params.id;
     this.label = params.label;
     this.status = params.status;
+    this.baselineStatus = params.baselineStatus;
     this.metrics = params.metrics;
     this.customMetrics = params.customMetrics ?? [];
   }
@@ -37,6 +40,7 @@ export class ExternalNode extends BaseNode {
     id: string;
     label: string;
     status: NodeStatus;
+    baselineStatus: NodeStatus;
     metrics: NodeMetrics;
     customMetrics?: readonly CustomMetricValue[];
     provider: string;
@@ -62,6 +66,7 @@ export class DatabaseNode extends BaseNode {
     id: string;
     label: string;
     status: NodeStatus;
+    baselineStatus: NodeStatus;
     metrics: NodeMetrics;
     customMetrics?: readonly CustomMetricValue[];
     engine: string;
@@ -94,6 +99,7 @@ export class EKSServiceNode extends ServiceNode {
     id: string;
     label: string;
     status: NodeStatus;
+    baselineStatus: NodeStatus;
     metrics: NodeMetrics;
     customMetrics?: readonly CustomMetricValue[];
     namespace: string;
@@ -120,6 +126,7 @@ export class EC2ServiceNode extends ServiceNode {
     id: string;
     label: string;
     status: NodeStatus;
+    baselineStatus: NodeStatus;
     metrics: NodeMetrics;
     customMetrics?: readonly CustomMetricValue[];
     instanceId: string;
@@ -144,6 +151,7 @@ export class FlowSummaryNode extends BaseNode {
     id: string;
     label: string;
     status: NodeStatus;
+    baselineStatus: NodeStatus;
     metrics: NodeMetrics;
     customMetrics?: readonly CustomMetricValue[];
   }) {

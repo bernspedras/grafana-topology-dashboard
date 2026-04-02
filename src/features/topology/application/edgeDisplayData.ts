@@ -8,7 +8,9 @@ import {
 } from '../domain';
 import type { TopologyEdge, AmqpEdgeMetrics } from '../domain';
 import type { MetricRow } from './nodeDisplayData';
-import { baselineColor } from './baselineComparison';
+import { metricColor as unifiedMetricColor } from './metricColor';
+import type { ColoringMode } from './metricColor';
+import type { SlaThresholdMap } from './slaThresholds';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -22,9 +24,15 @@ function fmtNum(n: number): string {
 
 const NA_COLOR = '#6b7280';
 
-function numOrNA(v: number | undefined, wa: number | undefined, key: string, suffix = ''): { value: string; color: string } {
+function numOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined, suffix = ''): { value: string; color: string } {
   return v !== undefined
-    ? { value: fmtNum(v) + suffix, color: baselineColor(v, wa, key) }
+    ? { value: fmtNum(v) + suffix, color: unifiedMetricColor(v, wa, key, mode, sla?.[key], undefined) }
+    : { value: 'N/A', color: NA_COLOR };
+}
+
+function msOrNA(v: number | undefined, wa: number | undefined, key: string, mode: ColoringMode, sla: SlaThresholdMap | undefined): { value: string; color: string } {
+  return v !== undefined
+    ? { value: String(round2(v)) + ' ms', color: unifiedMetricColor(v, wa, key, mode, sla?.[key], undefined) }
     : { value: 'N/A', color: NA_COLOR };
 }
 
@@ -81,22 +89,27 @@ export function edgeEndpointLabel(edge: TopologyEdge): string | undefined {
 
 // ─── Custom metric rows ─────────────────────────────────────────────────────
 
-function customMetricRows(edge: TopologyEdge): readonly MetricRow[] {
+function customMetricRows(edge: TopologyEdge, mode: ColoringMode, sla: SlaThresholdMap | undefined): readonly MetricRow[] {
   return edge.customMetrics.map((cm): MetricRow => ({
     label: cm.label,
     value: cm.value !== undefined
       ? fmtNum(cm.value) + (cm.unit !== undefined ? ' ' + cm.unit : '')
       : 'N/A',
-    color: cm.value !== undefined
-      ? baselineColor(cm.value, cm.valueWeekAgo, cm.key, cm.direction)
-      : '#6b7280',
+    color: unifiedMetricColor(cm.value, cm.valueWeekAgo, cm.key, mode, sla?.['custom:' + cm.key], cm.direction),
     metricKey: 'custom:' + cm.key,
   }));
 }
 
 // ─── Metric rows ────────────────────────────────────────────────────────────
 
-export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): readonly MetricRow[] {
+export function edgeMetricRows(
+  edge: TopologyEdge,
+  selectedEndpoint?: string,
+  coloringMode?: ColoringMode,
+  sla?: SlaThresholdMap,
+): readonly MetricRow[] {
+  const mode: ColoringMode = coloringMode ?? 'baseline';
+
   if (edge instanceof HttpJsonEdge || edge instanceof HttpXmlEdge) {
     let m = edge.metrics;
     if (selectedEndpoint === 'all' && edge.aggregateMetrics !== undefined) {
@@ -106,11 +119,11 @@ export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): r
       m = edge.endpointMetrics.get(epKey) ?? edge.metrics;
     }
     return [
-      { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Latency P95', value: m.latencyP95Ms !== undefined ? String(round2(m.latencyP95Ms)) + ' ms' : 'N/A', color: m.latencyP95Ms !== undefined ? baselineColor(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms') : NA_COLOR, metricKey: 'latencyP95' },
-      { label: 'Latency Avg', value: m.latencyAvgMs !== undefined ? String(round2(m.latencyAvgMs)) + ' ms' : 'N/A', color: m.latencyAvgMs !== undefined ? baselineColor(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs') : NA_COLOR, metricKey: 'latencyAvg' },
-      { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
-      ...customMetricRows(edge),
+      { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps', mode, sla), metricKey: 'rps' },
+      { label: 'Latency P95', ...msOrNA(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms', mode, sla), metricKey: 'latencyP95' },
+      { label: 'Latency Avg', ...msOrNA(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs', mode, sla), metricKey: 'latencyAvg' },
+      { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
+      ...customMetricRows(edge, mode, sla),
     ];
   }
 
@@ -123,14 +136,14 @@ export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): r
       ? m.activeConnectionsWeekAgo + m.idleConnectionsWeekAgo
       : undefined;
     return [
-      { label: 'Pool conns', value: totalConns !== undefined ? String(Math.round(totalConns)) : 'N/A', color: totalConns !== undefined ? baselineColor(totalConns, totalConnsWeekAgo, 'activeConnections') : NA_COLOR, metricKey: 'activeConnections' },
-      { label: 'Pool hit rate', ...numOrNA(m.poolHitRatePercent, m.poolHitRatePercentWeekAgo, 'poolHitRatePercent', '%'), metricKey: 'poolHitRatePercent' },
-      { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Query P50', value: m.avgQueryTimeMs !== undefined ? String(round2(m.avgQueryTimeMs)) + ' ms' : 'N/A', color: m.avgQueryTimeMs !== undefined ? baselineColor(m.avgQueryTimeMs, m.avgQueryTimeMsWeekAgo, 'avgQueryTimeMs') : NA_COLOR, metricKey: 'avgQueryTimeMs' },
-      { label: 'Timeouts/min', ...numOrNA(m.poolTimeoutsPerMin, m.poolTimeoutsPerMinWeekAgo, 'poolTimeoutsPerMin'), metricKey: 'poolTimeoutsPerMin' },
-      { label: 'Stale/min', ...numOrNA(m.staleConnectionsPerMin, m.staleConnectionsPerMinWeekAgo, 'staleConnectionsPerMin'), metricKey: 'staleConnectionsPerMin' },
-      { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
-      ...customMetricRows(edge),
+      { label: 'Pool conns', value: totalConns !== undefined ? String(Math.round(totalConns)) : 'N/A', color: unifiedMetricColor(totalConns, totalConnsWeekAgo, 'activeConnections', mode, sla?.activeConnections, undefined), metricKey: 'activeConnections' },
+      { label: 'Pool hit rate', ...numOrNA(m.poolHitRatePercent, m.poolHitRatePercentWeekAgo, 'poolHitRatePercent', mode, sla, '%'), metricKey: 'poolHitRatePercent' },
+      { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps', mode, sla), metricKey: 'rps' },
+      { label: 'Query P50', ...msOrNA(m.avgQueryTimeMs, m.avgQueryTimeMsWeekAgo, 'avgQueryTimeMs', mode, sla), metricKey: 'avgQueryTimeMs' },
+      { label: 'Timeouts/min', ...numOrNA(m.poolTimeoutsPerMin, m.poolTimeoutsPerMinWeekAgo, 'poolTimeoutsPerMin', mode, sla), metricKey: 'poolTimeoutsPerMin' },
+      { label: 'Stale/min', ...numOrNA(m.staleConnectionsPerMin, m.staleConnectionsPerMinWeekAgo, 'staleConnectionsPerMin', mode, sla), metricKey: 'staleConnectionsPerMin' },
+      { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
+      ...customMetricRows(edge, mode, sla),
     ];
   }
 
@@ -142,46 +155,42 @@ export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): r
       const rkKey = selectedEndpoint.slice(3);
       m = edge.routingKeyMetrics.get(rkKey) ?? edge.metrics;
     }
-    const msOrNA = (v: number | undefined, wa: number | undefined, key: string): { value: string; color: string } =>
-      v !== undefined ? { value: String(round2(v)) + ' ms', color: baselineColor(v, wa, key) } : { value: 'N/A', color: NA_COLOR };
     const rows: MetricRow[] = [
-      { label: 'Pub RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Pub P95', ...msOrNA(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms'), metricKey: 'latencyP95' },
-      { label: 'Pub Avg', ...msOrNA(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs'), metricKey: 'latencyAvg' },
-      { label: 'Pub errors', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
-      { label: 'Queue P95', ...msOrNA(m.queueResidenceTimeP95Ms, m.queueResidenceTimeP95MsWeekAgo, 'queueResidenceTimeP95Ms'), metricKey: 'queueResidenceTimeP95' },
-      { label: 'Queue Avg', ...msOrNA(m.queueResidenceTimeAvgMs, m.queueResidenceTimeAvgMsWeekAgo, 'queueResidenceTimeAvgMs'), metricKey: 'queueResidenceTimeAvg' },
-      { label: 'Queue depth', value: m.queueDepth !== undefined ? String(Math.round(m.queueDepth)) : 'N/A', color: m.queueDepth !== undefined ? baselineColor(m.queueDepth, m.queueDepthWeekAgo, 'queueDepth') : NA_COLOR, metricKey: 'queueDepth' },
-      { label: 'Process P95', ...msOrNA(m.consumerProcessingTimeP95Ms, m.consumerProcessingTimeP95MsWeekAgo, 'consumerProcessingTimeP95Ms'), metricKey: 'consumerProcessingTimeP95' },
-      { label: 'Process Avg', ...msOrNA(m.consumerProcessingTimeAvgMs, m.consumerProcessingTimeAvgMsWeekAgo, 'consumerProcessingTimeAvgMs'), metricKey: 'consumerProcessingTimeAvg' },
-      { label: 'Consumer RPS', ...numOrNA(m.consumerRps, m.consumerRpsWeekAgo, 'consumerRps'), metricKey: 'consumerRps' },
-      { label: 'Consumer errors', ...numOrNA(m.consumerErrorRatePercent, m.consumerErrorRatePercentWeekAgo, 'consumerErrorRatePercent', '%'), metricKey: 'consumerErrorRate' },
-      { label: 'E2E P95', ...msOrNA(m.e2eLatencyP95Ms, m.e2eLatencyP95MsWeekAgo, 'e2eLatencyP95Ms'), metricKey: 'e2eLatencyP95' },
-      { label: 'E2E Avg', ...msOrNA(m.e2eLatencyAvgMs, m.e2eLatencyAvgMsWeekAgo, 'e2eLatencyAvgMs'), metricKey: 'e2eLatencyAvg' },
+      { label: 'Pub RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps', mode, sla), metricKey: 'rps' },
+      { label: 'Pub P95', ...msOrNA(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms', mode, sla), metricKey: 'latencyP95' },
+      { label: 'Pub Avg', ...msOrNA(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs', mode, sla), metricKey: 'latencyAvg' },
+      { label: 'Pub errors', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
+      { label: 'Queue P95', ...msOrNA(m.queueResidenceTimeP95Ms, m.queueResidenceTimeP95MsWeekAgo, 'queueResidenceTimeP95Ms', mode, sla), metricKey: 'queueResidenceTimeP95' },
+      { label: 'Queue Avg', ...msOrNA(m.queueResidenceTimeAvgMs, m.queueResidenceTimeAvgMsWeekAgo, 'queueResidenceTimeAvgMs', mode, sla), metricKey: 'queueResidenceTimeAvg' },
+      { label: 'Queue depth', value: m.queueDepth !== undefined ? String(Math.round(m.queueDepth)) : 'N/A', color: unifiedMetricColor(m.queueDepth, m.queueDepthWeekAgo, 'queueDepth', mode, sla?.queueDepth, undefined), metricKey: 'queueDepth' },
+      { label: 'Process P95', ...msOrNA(m.consumerProcessingTimeP95Ms, m.consumerProcessingTimeP95MsWeekAgo, 'consumerProcessingTimeP95Ms', mode, sla), metricKey: 'consumerProcessingTimeP95' },
+      { label: 'Process Avg', ...msOrNA(m.consumerProcessingTimeAvgMs, m.consumerProcessingTimeAvgMsWeekAgo, 'consumerProcessingTimeAvgMs', mode, sla), metricKey: 'consumerProcessingTimeAvg' },
+      { label: 'Consumer RPS', ...numOrNA(m.consumerRps, m.consumerRpsWeekAgo, 'consumerRps', mode, sla), metricKey: 'consumerRps' },
+      { label: 'Consumer errors', ...numOrNA(m.consumerErrorRatePercent, m.consumerErrorRatePercentWeekAgo, 'consumerErrorRatePercent', mode, sla, '%'), metricKey: 'consumerErrorRate' },
+      { label: 'E2E P95', ...msOrNA(m.e2eLatencyP95Ms, m.e2eLatencyP95MsWeekAgo, 'e2eLatencyP95Ms', mode, sla), metricKey: 'e2eLatencyP95' },
+      { label: 'E2E Avg', ...msOrNA(m.e2eLatencyAvgMs, m.e2eLatencyAvgMsWeekAgo, 'e2eLatencyAvgMs', mode, sla), metricKey: 'e2eLatencyAvg' },
     ];
-    return [...rows, ...customMetricRows(edge)];
+    return [...rows, ...customMetricRows(edge, mode, sla)];
   }
 
   if (edge instanceof KafkaEdge) {
     const m = edge.metrics;
-    const msOrNA = (v: number | undefined, wa: number | undefined, key: string): { value: string; color: string } =>
-      v !== undefined ? { value: String(round2(v)) + ' ms', color: baselineColor(v, wa, key) } : { value: 'N/A', color: NA_COLOR };
     const rows: MetricRow[] = [
-      { label: 'Pub RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Pub P95', ...msOrNA(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms'), metricKey: 'latencyP95' },
-      { label: 'Pub Avg', ...msOrNA(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs'), metricKey: 'latencyAvg' },
-      { label: 'Pub errors', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
-      { label: 'Transit P95', ...msOrNA(m.queueResidenceTimeP95Ms, m.queueResidenceTimeP95MsWeekAgo, 'queueResidenceTimeP95Ms'), metricKey: 'queueResidenceTimeP95' },
-      { label: 'Transit Avg', ...msOrNA(m.queueResidenceTimeAvgMs, m.queueResidenceTimeAvgMsWeekAgo, 'queueResidenceTimeAvgMs'), metricKey: 'queueResidenceTimeAvg' },
-      { label: 'Consumer lag', value: m.consumerLag !== undefined ? String(Math.round(m.consumerLag)) : 'N/A', color: m.consumerLag !== undefined ? baselineColor(m.consumerLag, m.consumerLagWeekAgo, 'consumerLag') : NA_COLOR, metricKey: 'consumerLag' },
-      { label: 'Process P95', ...msOrNA(m.consumerProcessingTimeP95Ms, m.consumerProcessingTimeP95MsWeekAgo, 'consumerProcessingTimeP95Ms'), metricKey: 'consumerProcessingTimeP95' },
-      { label: 'Process Avg', ...msOrNA(m.consumerProcessingTimeAvgMs, m.consumerProcessingTimeAvgMsWeekAgo, 'consumerProcessingTimeAvgMs'), metricKey: 'consumerProcessingTimeAvg' },
-      { label: 'Consumer RPS', ...numOrNA(m.consumerRps, m.consumerRpsWeekAgo, 'consumerRps'), metricKey: 'consumerRps' },
-      { label: 'Consumer errors', ...numOrNA(m.consumerErrorRatePercent, m.consumerErrorRatePercentWeekAgo, 'consumerErrorRatePercent', '%'), metricKey: 'consumerErrorRate' },
-      { label: 'E2E P95', ...msOrNA(m.e2eLatencyP95Ms, m.e2eLatencyP95MsWeekAgo, 'e2eLatencyP95Ms'), metricKey: 'e2eLatencyP95' },
-      { label: 'E2E Avg', ...msOrNA(m.e2eLatencyAvgMs, m.e2eLatencyAvgMsWeekAgo, 'e2eLatencyAvgMs'), metricKey: 'e2eLatencyAvg' },
+      { label: 'Pub RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps', mode, sla), metricKey: 'rps' },
+      { label: 'Pub P95', ...msOrNA(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms', mode, sla), metricKey: 'latencyP95' },
+      { label: 'Pub Avg', ...msOrNA(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs', mode, sla), metricKey: 'latencyAvg' },
+      { label: 'Pub errors', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
+      { label: 'Transit P95', ...msOrNA(m.queueResidenceTimeP95Ms, m.queueResidenceTimeP95MsWeekAgo, 'queueResidenceTimeP95Ms', mode, sla), metricKey: 'queueResidenceTimeP95' },
+      { label: 'Transit Avg', ...msOrNA(m.queueResidenceTimeAvgMs, m.queueResidenceTimeAvgMsWeekAgo, 'queueResidenceTimeAvgMs', mode, sla), metricKey: 'queueResidenceTimeAvg' },
+      { label: 'Consumer lag', value: m.consumerLag !== undefined ? String(Math.round(m.consumerLag)) : 'N/A', color: unifiedMetricColor(m.consumerLag, m.consumerLagWeekAgo, 'consumerLag', mode, sla?.consumerLag, undefined), metricKey: 'consumerLag' },
+      { label: 'Process P95', ...msOrNA(m.consumerProcessingTimeP95Ms, m.consumerProcessingTimeP95MsWeekAgo, 'consumerProcessingTimeP95Ms', mode, sla), metricKey: 'consumerProcessingTimeP95' },
+      { label: 'Process Avg', ...msOrNA(m.consumerProcessingTimeAvgMs, m.consumerProcessingTimeAvgMsWeekAgo, 'consumerProcessingTimeAvgMs', mode, sla), metricKey: 'consumerProcessingTimeAvg' },
+      { label: 'Consumer RPS', ...numOrNA(m.consumerRps, m.consumerRpsWeekAgo, 'consumerRps', mode, sla), metricKey: 'consumerRps' },
+      { label: 'Consumer errors', ...numOrNA(m.consumerErrorRatePercent, m.consumerErrorRatePercentWeekAgo, 'consumerErrorRatePercent', mode, sla, '%'), metricKey: 'consumerErrorRate' },
+      { label: 'E2E P95', ...msOrNA(m.e2eLatencyP95Ms, m.e2eLatencyP95MsWeekAgo, 'e2eLatencyP95Ms', mode, sla), metricKey: 'e2eLatencyP95' },
+      { label: 'E2E Avg', ...msOrNA(m.e2eLatencyAvgMs, m.e2eLatencyAvgMsWeekAgo, 'e2eLatencyAvgMs', mode, sla), metricKey: 'e2eLatencyAvg' },
     ];
-    return [...rows, ...customMetricRows(edge)];
+    return [...rows, ...customMetricRows(edge, mode, sla)];
   }
 
   if (edge instanceof GrpcEdge) {
@@ -189,11 +198,11 @@ export function edgeMetricRows(edge: TopologyEdge, selectedEndpoint?: string): r
       ? edge.aggregateMetrics
       : edge.metrics;
     return [
-      { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps'), metricKey: 'rps' },
-      { label: 'Latency P95', value: m.latencyP95Ms !== undefined ? String(round2(m.latencyP95Ms)) + ' ms' : 'N/A', color: m.latencyP95Ms !== undefined ? baselineColor(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms') : NA_COLOR, metricKey: 'latencyP95' },
-      { label: 'Latency Avg', value: m.latencyAvgMs !== undefined ? String(round2(m.latencyAvgMs)) + ' ms' : 'N/A', color: m.latencyAvgMs !== undefined ? baselineColor(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs') : NA_COLOR, metricKey: 'latencyAvg' },
-      { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', '%'), metricKey: 'errorRate' },
-      ...customMetricRows(edge),
+      { label: 'RPS', ...numOrNA(m.rps, m.rpsWeekAgo, 'rps', mode, sla), metricKey: 'rps' },
+      { label: 'Latency P95', ...msOrNA(m.latencyP95Ms, m.latencyP95MsWeekAgo, 'latencyP95Ms', mode, sla), metricKey: 'latencyP95' },
+      { label: 'Latency Avg', ...msOrNA(m.latencyAvgMs, m.latencyAvgMsWeekAgo, 'latencyAvgMs', mode, sla), metricKey: 'latencyAvg' },
+      { label: 'Error rate', ...numOrNA(m.errorRatePercent, m.errorRatePercentWeekAgo, 'errorRatePercent', mode, sla, '%'), metricKey: 'errorRate' },
+      ...customMetricRows(edge, mode, sla),
     ];
   }
 

@@ -34,7 +34,7 @@ function makeEksNode(overrides?: {
   deployments?: readonly DeploymentMetrics[];
 }): EKSServiceNode {
   return new EKSServiceNode({
-    id: 'eks-1', label: 'eks', status: 'healthy',
+    id: 'eks-1', label: 'eks', status: 'healthy', baselineStatus: 'healthy',
     metrics: makeMetrics(overrides),
     namespace: 'ns',
     deployments: overrides?.deployments ?? [
@@ -51,7 +51,7 @@ function makeEc2Node(overrides?: {
   memoryPercentWeekAgo?: number | undefined;
 }): EC2ServiceNode {
   return new EC2ServiceNode({
-    id: 'ec2-1', label: 'ec2', status: 'healthy',
+    id: 'ec2-1', label: 'ec2', status: 'healthy', baselineStatus: 'healthy',
     metrics: makeMetrics(overrides),
     instanceId: 'i-123', instanceType: 't3.micro', availabilityZone: 'us-east-1a',
   });
@@ -65,7 +65,7 @@ function makeDbNode(overrides?: {
   storageGb?: number;
 }): DatabaseNode {
   return new DatabaseNode({
-    id: 'db-1', label: 'db', status: 'healthy',
+    id: 'db-1', label: 'db', status: 'healthy', baselineStatus: 'healthy',
     metrics: makeMetrics(overrides),
     engine: 'postgres', isReadReplica: false,
     ...(overrides?.storageGb !== undefined ? { storageGb: overrides.storageGb } : {}),
@@ -80,7 +80,7 @@ function makeExternalNode(overrides?: {
   slaPercent?: number;
 }): ExternalNode {
   return new ExternalNode({
-    id: 'ext-1', label: 'ext', status: 'healthy',
+    id: 'ext-1', label: 'ext', status: 'healthy', baselineStatus: 'healthy',
     metrics: makeMetrics(overrides),
     provider: 'Acme Corp',
     ...(overrides?.slaPercent !== undefined ? { slaPercent: overrides.slaPercent } : {}),

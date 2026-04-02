@@ -31,6 +31,7 @@ type TopologyBundle struct {
 	NodeTemplates []json.RawMessage `json:"nodeTemplates"`
 	EdgeTemplates []json.RawMessage `json:"edgeTemplates"`
 	Datasources   []json.RawMessage `json:"datasources"`
+	SlaDefaults   json.RawMessage   `json:"slaDefaults,omitempty"`
 }
 
 // FlowListItem is a minimal representation of a flow for listing.
@@ -91,7 +92,8 @@ func (s *TopologyStore) GetBundle() (*TopologyBundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TopologyBundle{Flows: flows, NodeTemplates: nodes, EdgeTemplates: edges, Datasources: datasources}, nil
+	slaDefaults := s.readSlaDefaults()
+	return &TopologyBundle{Flows: flows, NodeTemplates: nodes, EdgeTemplates: edges, Datasources: datasources, SlaDefaults: slaDefaults}, nil
 }
 
 // WriteDatasources replaces datasources.json in the data directory root.
@@ -123,6 +125,47 @@ func (s *TopologyStore) readDatasources() ([]json.RawMessage, error) {
 		return nil, fmt.Errorf("failed to parse datasources")
 	}
 	return items, nil
+}
+
+// ─── SLA defaults ────────────────────────────────────────────────────────────
+
+// readSlaDefaults reads the sla-defaults.json file from the data directory root.
+// Returns nil if the file does not exist.
+func (s *TopologyStore) readSlaDefaults() json.RawMessage {
+	path := filepath.Join(s.dataDir, "sla-defaults.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.Error("Failed to read SLA defaults", "error", err)
+		}
+		return nil
+	}
+	return json.RawMessage(data)
+}
+
+// WriteSlaDefaults replaces sla-defaults.json in the data directory root.
+func (s *TopologyStore) WriteSlaDefaults(data json.RawMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	path := filepath.Join(s.dataDir, "sla-defaults.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		s.logger.Error("Failed to write SLA defaults", "error", err)
+		return fmt.Errorf("failed to write SLA defaults")
+	}
+	return nil
+}
+
+// DeleteSlaDefaults removes sla-defaults.json from the data directory.
+func (s *TopologyStore) DeleteSlaDefaults() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	path := filepath.Join(s.dataDir, "sla-defaults.json")
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		s.logger.Error("Failed to delete SLA defaults", "error", err)
+		return fmt.Errorf("failed to delete SLA defaults")
+	}
+	return nil
 }
 
 // ─── Flows ──────────────────────────────────────────────────────────────────

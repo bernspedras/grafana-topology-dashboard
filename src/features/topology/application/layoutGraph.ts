@@ -3,6 +3,8 @@ import dagre from 'dagre';
 import type { TopologyGraph } from '../domain';
 import { FlowSummaryNode } from '../domain';
 import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
+import type { ColoringMode } from './metricColor';
+import type { SlaThresholdMap } from './slaThresholds';
 
 const NODE_WIDTH = 260;
 const NODE_HEIGHT = 200;
@@ -17,6 +19,8 @@ interface LayoutResult {
 export function layoutGraph(
   graph: TopologyGraph,
   positionOverrides?: Record<string, { x: number; y: number }>,
+  coloringMode?: ColoringMode,
+  slaMap?: Readonly<Record<string, SlaThresholdMap>>,
 ): LayoutResult {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: 'LR', nodesep: 100, ranksep: 400 });
@@ -76,8 +80,8 @@ export function layoutGraph(
       type: 'topologyEdge',
       reconnectable: true,
       animated: edge.animated,
-      style: edgeStrokeStyle(edge),
-      markerEnd: edgeMarkerEnd(edge),
+      style: edgeStrokeStyle(edge, coloringMode, slaMap?.[edge.id]),
+      markerEnd: edgeMarkerEnd(edge, coloringMode, slaMap?.[edge.id]),
       data: { domainEdge: edge },
     };
   });
