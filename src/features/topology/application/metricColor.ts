@@ -1,7 +1,7 @@
 import type { MetricDirection } from '../domain/metrics';
-import { METRIC_DIRECTIONS } from '../domain/metrics';
 import type { NodeStatus } from '../domain/metrics';
-import { baselineColor } from './baselineComparison';
+import { baselineColor, compareToBaseline } from './baselineComparison';
+import type { BaselineStatus } from './baselineComparison';
 import type { MetricSlaThreshold, SlaThresholdMap } from './slaThresholds';
 import { compareToSla } from './slaThresholds';
 import type { SlaStatus } from './slaThresholds';
@@ -45,10 +45,15 @@ export function metricColor(
   return slaColor(value, metricKey, slaThreshold, explicitDirection);
 }
 
-// ─── Baseline metric status (two-tier for aggregate health) ─────────────────
+// ─── Baseline metric status (derived from compareToBaseline for consistency) ─
 
-const BASELINE_WARNING_THRESHOLD = 0.15;
-const BASELINE_CRITICAL_THRESHOLD = 0.30;
+const BASELINE_STATUS_MAP: Readonly<Record<BaselineStatus, NodeStatus>> = {
+  better: 'healthy',
+  neutral: 'healthy',
+  'warning-worse': 'warning',
+  worse: 'critical',
+  'no-baseline': 'unknown',
+};
 
 export function baselineMetricStatus(
   current: number | undefined,
@@ -56,15 +61,8 @@ export function baselineMetricStatus(
   metricKey: string,
   explicitDirection?: MetricDirection,
 ): NodeStatus {
-  if (current === undefined || weekAgo === undefined || weekAgo === 0) return 'unknown';
-  const direction: MetricDirection | undefined = explicitDirection ?? (METRIC_DIRECTIONS[metricKey] as MetricDirection | undefined);
-  if (direction === undefined) return 'unknown';
-  const ratio = (current - weekAgo) / weekAgo;
-  // Positive `change` means the metric got worse
-  const change = direction === 'lower-is-better' ? ratio : -ratio;
-  if (change >= BASELINE_CRITICAL_THRESHOLD) return 'critical';
-  if (change >= BASELINE_WARNING_THRESHOLD) return 'warning';
-  return 'healthy';
+  if (current === undefined) return 'unknown';
+  return BASELINE_STATUS_MAP[compareToBaseline(current, weekAgo, metricKey, explicitDirection)];
 }
 
 // ─── Worst-of aggregation ───────────────────────────────────────────────────

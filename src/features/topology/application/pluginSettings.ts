@@ -17,6 +17,10 @@ export interface AppSettings {
   topologies?: StoredTopology[];
   nodeTemplates?: unknown[];
   edgeTemplates?: unknown[];
+  /** Baseline comparison warning threshold (percent, e.g. 20 = 20%). */
+  baselineWarningPercent?: number;
+  /** Baseline comparison critical threshold (percent, e.g. 50 = 50%). */
+  baselineCriticalPercent?: number;
 }
 
 /** Shape of the SLA defaults JSON — per-kind SLA threshold maps.

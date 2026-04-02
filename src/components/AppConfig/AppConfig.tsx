@@ -5,6 +5,7 @@ import type { AppPluginMeta, GrafanaTheme2, PluginConfigPageProps, PluginMeta, S
 import { getBackendSrv } from '@grafana/runtime';
 import { Button, FieldSet, InlineField, Select, useStyles2, CodeEditor, CollapsableSection } from '@grafana/ui';
 import type { AppSettings } from '../../module';
+import { DEFAULT_BASELINE_THRESHOLDS } from '../../features/topology/application/baselineThresholdConfig';
 import {
   fetchTopologyBundle,
   saveFlow,
@@ -267,6 +268,12 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
     jsonData?.editAllowList ?? [],
   );
   const [newEmail, setNewEmail] = useState('');
+  const [baselineWarning, setBaselineWarning] = useState(
+    jsonData?.baselineWarningPercent ?? DEFAULT_BASELINE_THRESHOLDS.warningPercent,
+  );
+  const [baselineCritical, setBaselineCritical] = useState(
+    jsonData?.baselineCriticalPercent ?? DEFAULT_BASELINE_THRESHOLDS.criticalPercent,
+  );
 
   // ─── Topology data from Go backend ──────────────────────────────────────
   const [bundle, setBundle] = useState<TopologyBundleResponse | null>(null);
@@ -293,7 +300,12 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
     await updatePlugin(plugin.meta.id, {
       enabled,
       pinned,
-      jsonData: { dataSourceMap, editAllowList: [...editAllowList] },
+      jsonData: {
+        dataSourceMap,
+        editAllowList: [...editAllowList],
+        baselineWarningPercent: baselineWarning,
+        baselineCriticalPercent: baselineCritical,
+      },
       secureJsonData,
     } as Partial<PluginMeta<AppSettings>>);
     window.location.reload();
@@ -489,6 +501,46 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
               </div>
             ))}
           </div>
+        )}
+        <div className={s.marginTop}>
+          <Button onClick={() => void onSubmitDs()}>Save</Button>
+        </div>
+      </FieldSet>
+
+      <FieldSet label="Baseline Comparison Thresholds">
+        <p className={s.muted}>
+          Percentage change compared to last week that triggers warning or critical status on metric values. Applied globally to all topologies.
+        </p>
+        <div className={s.dsRow}>
+          <span className={s.dsLabel}>Warning threshold (%)</span>
+          <input
+            className={s.input}
+            type="number"
+            min={1}
+            max={100}
+            value={baselineWarning}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!Number.isNaN(v) && v > 0 && v <= 100) setBaselineWarning(v);
+            }}
+          />
+        </div>
+        <div className={s.dsRow}>
+          <span className={s.dsLabel}>Critical threshold (%)</span>
+          <input
+            className={s.input}
+            type="number"
+            min={1}
+            max={100}
+            value={baselineCritical}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!Number.isNaN(v) && v > 0 && v <= 100) setBaselineCritical(v);
+            }}
+          />
+        </div>
+        {baselineWarning >= baselineCritical && (
+          <p className={s.muted} style={{ color: '#ef4444' }}>Warning threshold must be less than critical threshold.</p>
         )}
         <div className={s.marginTop}>
           <Button onClick={() => void onSubmitDs()}>Save</Button>
