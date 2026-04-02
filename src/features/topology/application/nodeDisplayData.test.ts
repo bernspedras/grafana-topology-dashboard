@@ -118,7 +118,7 @@ describe('nodeMetricRows', (): void => {
       ];
       const rows = nodeMetricRows(makeEksNode({ cpuPercent: 40, memoryPercent: 70, deployments }));
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'Pods', value: '3 / 4', color: '#22c55e', metricKey: undefined });
+      expect(rows[0]).toEqual({ label: 'Pods', value: '3 / 4', color: '#eab308', metricKey: undefined });
       expect(rows[1]).toEqual({ label: 'Avg CPU', value: '40%', color: '#e2e8f0', metricKey: 'cpu' });
       expect(rows[2]).toEqual({ label: 'Memory', value: '70%', color: '#e2e8f0', metricKey: 'memory' });
     });
@@ -130,7 +130,7 @@ describe('nodeMetricRows', (): void => {
       ];
       const rows = nodeMetricRows(makeEksNode({ deployments }), 'api');
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'Pods', value: '2 / 3', color: '#22c55e', metricKey: undefined });
+      expect(rows[0]).toEqual({ label: 'Pods', value: '2 / 3', color: '#eab308', metricKey: undefined });
       expect(rows[1]).toEqual({ label: 'Avg CPU', value: '85%', color: '#e2e8f0', metricKey: 'cpu' });
       expect(rows[2]).toEqual({ label: 'Memory', value: '55%', color: '#e2e8f0', metricKey: 'memory' });
     });

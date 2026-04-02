@@ -50,6 +50,12 @@ function mc(value: number | undefined, weekAgo: number | undefined, key: string,
   return unifiedMetricColor(value, weekAgo, key, mode, sla?.[key], undefined);
 }
 
+function podsColor(ready: number, desired: number): string {
+  if (ready === 0) return '#ef4444';
+  if (ready !== desired) return '#eab308';
+  return '#22c55e';
+}
+
 // ─── Type tag ───────────────────────────────────────────────────────────────
 
 export function nodeTypeTag(node: TopologyNode): string {
@@ -78,7 +84,7 @@ export function nodeMetricRows(
 
     if (dep !== undefined) {
       return [
-        { label: 'Pods', value: String(dep.readyReplicas) + ' / ' + String(dep.desiredReplicas), color: '#22c55e', metricKey: undefined },
+        { label: 'Pods', value: String(dep.readyReplicas) + ' / ' + String(dep.desiredReplicas), color: podsColor(dep.readyReplicas, dep.desiredReplicas), metricKey: undefined },
         { label: 'Avg CPU', value: pct(dep.cpuPercent), color: mc(dep.cpuPercent, dep.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
         { label: 'Memory', value: pct(dep.memoryPercent), color: mc(dep.memoryPercent, dep.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
         ...customMetricRows(dep.customMetrics.length > 0 ? dep : node, mode, sla),
@@ -89,7 +95,7 @@ export function nodeMetricRows(
     const totalDesired = node.deployments.reduce((sum, d) => sum + d.desiredReplicas, 0);
 
     return [
-      { label: 'Pods', value: String(totalReady) + ' / ' + String(totalDesired), color: '#22c55e', metricKey: undefined },
+      { label: 'Pods', value: String(totalReady) + ' / ' + String(totalDesired), color: podsColor(totalReady, totalDesired), metricKey: undefined },
       { label: 'Avg CPU', value: pct(node.metrics.cpuPercent), color: mc(node.metrics.cpuPercent, node.metrics.cpuPercentWeekAgo, 'cpuPercent', mode, sla), metricKey: 'cpu' },
       { label: 'Memory', value: pct(node.metrics.memoryPercent), color: mc(node.metrics.memoryPercent, node.metrics.memoryPercentWeekAgo, 'memoryPercent', mode, sla), metricKey: 'memory' },
       ...customMetricRows(node, mode, sla),
