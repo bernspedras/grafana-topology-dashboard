@@ -317,6 +317,7 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
+        minZoom={0.1}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
