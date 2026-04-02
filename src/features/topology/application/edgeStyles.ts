@@ -94,12 +94,12 @@ export function edgeLabelBgStyle(): CSSProperties {
 // ─── Low Poly Mode stroke (thickness by throughput, color by health) ─────────
 
 function throughputStrokeWidth(rps: number | undefined): number {
-  if (rps === undefined || rps <= 0) return 2;
-  if (rps < 10) return 2;
-  if (rps < 50) return 3;
-  if (rps < 200) return 5;
-  if (rps < 1000) return 7;
-  return 10;
+  if (rps === undefined || rps <= 0) return 4;
+  if (rps < 10) return 4;
+  if (rps < 50) return 6;
+  if (rps < 200) return 10;
+  if (rps < 1000) return 14;
+  return 20;
 }
 
 export function lowPolyEdgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): CSSProperties {
@@ -109,10 +109,14 @@ export function lowPolyEdgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, 
 }
 
 export function lowPolyEdgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): EdgeMarkerConfig {
+  // Scale marker inversely with stroke so the arrowhead stays a consistent visual size.
+  // SVG markers use markerUnits="strokeWidth" by default, so visual size = markerSize * strokeWidth.
+  const strokeW = throughputStrokeWidth(edge.metrics.rps);
+  const markerSize = Math.max(3, Math.round(48 / strokeW));
   return {
     type: MarkerType.ArrowClosed,
     color: edgeHealthColor(edge, mode, sla),
-    width: 24,
-    height: 24,
+    width: markerSize,
+    height: markerSize,
   };
 }
