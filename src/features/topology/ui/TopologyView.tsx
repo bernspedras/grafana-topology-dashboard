@@ -68,6 +68,7 @@ function useToast(): { visible: boolean; message: string; show: (msg: string) =>
 const VIEW_OPTION_LABELS: readonly { readonly key: ViewOptionKey; readonly label: string }[] = [
   { key: 'showNAMetrics', label: 'Show N/A metrics' },
   { key: 'showFlowStepCards', label: 'Show flow step cards' },
+  { key: 'lowPolyMode', label: 'Low Poly Mode' },
 ];
 
 // ─── Node kind metadata for the Add menu ────────────────────────────────────
@@ -247,7 +248,7 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
   const { options: viewOpts } = useViewOptions();
   const slaMap = useSlaMap();
   const { nodes, edges, onNodesChange, onReconnect, getCurrentLayout } =
-    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap);
+    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode);
 
   const topologyId = useTopologyId();
   const toast = useToast();
