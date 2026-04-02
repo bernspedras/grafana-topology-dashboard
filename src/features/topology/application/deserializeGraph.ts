@@ -379,7 +379,7 @@ function deserializeEdge(dto: TopologyEdgeDto): TopologyEdge {
 // ─── FlowStep deserialization ─────────────────────────────────────────────────
 
 function deserializeFlowStep(dto: FlowStepDto): FlowStepNode {
-  return new FlowStepNode({ id: dto.id, step: dto.step, text: dto.text });
+  return new FlowStepNode({ id: dto.id, step: dto.step, text: dto.text, moreDetails: dto.moreDetails });
 }
 
 // ─── Graph deserialization ────────────────────────────────────────────────────

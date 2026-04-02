@@ -157,15 +157,18 @@ export class FlowStepNode {
   public readonly id: string;
   public readonly step: number;
   public readonly text: string;
+  public readonly moreDetails: string | undefined;
 
   public constructor(params: {
     id: string;
     step: number;
     text: string;
+    moreDetails: string | undefined;
   }) {
     this.id = params.id;
     this.step = params.step;
     this.text = params.text;
+    this.moreDetails = params.moreDetails;
   }
 }
 

@@ -9,16 +9,15 @@ import {
 import type { NodeTypes, EdgeTypes, Node, Edge, Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { css } from '@emotion/css';
-import type { TopologyGraph } from '../domain';
+import type { TopologyGraph, FlowStepNode } from '../domain';
 import { useTopologyFlow } from '../application/useTopologyFlow';
-import { useTopologyPositionStore } from '../application/topologyPositionStore';
 import type { FlowLayout } from '../application/pluginSettings';
 import { TopologyNodeCard } from './TopologyNodeCard';
 import { TopologyFlowCard } from './TopologyFlowCard';
 import { TopologyFlowStepCard } from './TopologyFlowStepCard';
 import { TopologyEdgeCard } from './TopologyEdgeCard';
-import { FlowStepEditModal } from './FlowStepEditModal';
-import type { FlowStepDraft } from '../application/useFlowStepEditor';
+import { FlowStepSettingsModal } from './FlowStepSettingsModal';
+import { FlowStepDetailsModal } from './FlowStepDetailsModal';
 import { useTopologyId } from '../application/TopologyIdContext';
 import { useViewOptions } from './ViewOptionsContext';
 import type { ViewOptionKey } from './ViewOptionsContext';
@@ -32,9 +31,12 @@ interface TopologyViewProps {
   onAddNode?: (kind: AddableNodeKind) => void;
   onAddEdge?: (sourceId: string, targetId: string) => void;
   hideFlowSteps?: boolean;
-  showFlowStepEditor?: boolean;
-  onOpenFlowStepEditor?: () => void;
+  editingFlowStepId?: string;
+  onOpenFlowStepEditor?: (stepId: string) => void;
   onCloseFlowStepEditor?: () => void;
+  onSaveFlowStep?: (stepId: string, step: number, text: string, moreDetails: string | undefined) => void;
+  onDeleteFlowStep?: (stepId: string) => void;
+  onAddFlowStep?: () => void;
   onSaveLayout?: (topologyId: string, layout: FlowLayout) => Promise<boolean>;
   rawFlowJson?: unknown;
 }
@@ -84,13 +86,14 @@ const NODE_KIND_OPTIONS: readonly NodeKindOption[] = [
   { kind: 'external', label: 'External', description: 'External system', color: '#6b7280' },
 ];
 
-// ─── Add Node Menu ───────────────────────────────────────────────────────────
+// ─── Add Menu (nodes + flow steps) ──────────────────────────────────────────
 
-interface AddNodeMenuProps {
-  readonly onSelect: (kind: AddableNodeKind) => void;
+interface AddMenuProps {
+  readonly onSelectNode: (kind: AddableNodeKind) => void;
+  readonly onAddFlowStep: () => void;
 }
 
-function AddNodeMenu({ onSelect }: AddNodeMenuProps): React.JSX.Element {
+function AddMenu({ onSelectNode, onAddFlowStep }: AddMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -115,7 +118,7 @@ function AddNodeMenu({ onSelect }: AddNodeMenuProps): React.JSX.Element {
         type="button"
         onClick={(): void => { setOpen((prev) => !prev); }}
         className={addNodeStyles.button}
-        title="Add node to topology"
+        title="Add to topology"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <line x1="12" y1="5" x2="12" y2="19" />
@@ -132,7 +135,7 @@ function AddNodeMenu({ onSelect }: AddNodeMenuProps): React.JSX.Element {
               type="button"
               className={addNodeStyles.menuItem}
               onClick={(): void => {
-                onSelect(kind);
+                onSelectNode(kind);
                 setOpen(false);
               }}
             >
@@ -143,6 +146,22 @@ function AddNodeMenu({ onSelect }: AddNodeMenuProps): React.JSX.Element {
               </span>
             </button>
           ))}
+          <div className={addNodeStyles.menuDivider} />
+          <div className={addNodeStyles.menuHeader}>Add other</div>
+          <button
+            type="button"
+            className={addNodeStyles.menuItem}
+            onClick={(): void => {
+              onAddFlowStep();
+              setOpen(false);
+            }}
+          >
+            <span className={addNodeStyles.colorDot} style={{ backgroundColor: '#8b5cf6' }} />
+            <span className={addNodeStyles.menuItemContent}>
+              <span className={addNodeStyles.menuItemLabel}>Flow Step</span>
+              <span className={addNodeStyles.menuItemDesc}>Flow step card</span>
+            </span>
+          </button>
         </div>
       )}
     </div>
@@ -203,19 +222,24 @@ function SettingsMenu(): React.JSX.Element {
   );
 }
 
-export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, showFlowStepEditor, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveLayout, rawFlowJson }: TopologyViewProps): React.JSX.Element {
+export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson }: TopologyViewProps): React.JSX.Element {
   const { nodes, edges, onNodesChange, onReconnect, getCurrentLayout } =
     useTopologyFlow(graph, bundledLayout);
 
   const topologyId = useTopologyId();
   const toast = useToast();
-  const updateFlowSteps = useTopologyPositionStore((s) => s.updateFlowSteps);
 
-  const handleFlowStepsSaved = useCallback((drafts: readonly FlowStepDraft[]): void => {
-    const withId = drafts.filter((d): d is FlowStepDraft & { readonly id: string } => d.id !== undefined);
-    updateFlowSteps(withId);
-    onCloseFlowStepEditor?.();
-  }, [updateFlowSteps, onCloseFlowStepEditor]);
+  const editingFlowStep = useMemo((): FlowStepNode | undefined => {
+    if (editingFlowStepId === undefined) return undefined;
+    return graph.flowSteps.find((s) => s.id === editingFlowStepId);
+  }, [editingFlowStepId, graph.flowSteps]);
+
+  const [viewingFlowStepId, setViewingFlowStepId] = useState<string | undefined>(undefined);
+  const viewingFlowStep = useMemo((): FlowStepNode | undefined => {
+    if (viewingFlowStepId === undefined) return undefined;
+    return graph.flowSteps.find((s) => s.id === viewingFlowStepId);
+  }, [viewingFlowStepId, graph.flowSteps]);
+  const handleCloseDetailsModal = useCallback((): void => { setViewingFlowStepId(undefined); }, []);
 
   const handleSaveLayout = useCallback((): void => {
     if (onSaveLayout === undefined) return;
@@ -248,12 +272,20 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
       .filter((node): boolean => !(hideFlowSteps === true && node.type === 'topologyFlowStep'))
       .map((node): Node => {
         const patched: Node = { ...node, draggable };
-        if (patched.type === 'topologyFlowStep' && onOpenFlowStepEditor !== undefined) {
-          return { ...patched, data: { ...patched.data, onEditClick: onOpenFlowStepEditor } };
+        if (patched.type === 'topologyFlowStep') {
+          const stepId = (patched.data as { domainFlowStep: { id: string } }).domainFlowStep.id;
+          const extra: Record<string, unknown> = {};
+          if (isEditing === true && onOpenFlowStepEditor !== undefined) {
+            extra.onEditClick = (): void => { onOpenFlowStepEditor(stepId); };
+          }
+          if (isEditing !== true) {
+            extra.onViewClick = (): void => { setViewingFlowStepId(stepId); };
+          }
+          return { ...patched, data: { ...patched.data, ...extra } };
         }
         return patched;
       });
-  }, [nodes, onOpenFlowStepEditor, hideFlowSteps, draggable]);
+  }, [nodes, onOpenFlowStepEditor, isEditing, hideFlowSteps, draggable]);
 
   const edgesWithEditState: Edge[] = useMemo((): Edge[] => {
     return edges.map((edge): Edge => ({
@@ -306,8 +338,8 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
                 {isEditing === true ? 'Exit Edit Mode' : 'Edit'}
               </button>
             )}
-            {isEditing === true && onAddNode !== undefined && (
-              <AddNodeMenu onSelect={onAddNode} />
+            {isEditing === true && onAddNode !== undefined && onAddFlowStep !== undefined && (
+              <AddMenu onSelectNode={onAddNode} onAddFlowStep={onAddFlowStep} />
             )}
             {isEditing === true && onSaveLayout !== undefined && (
               <button
@@ -348,12 +380,18 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
           </Panel>
         )}
       </ReactFlow>
-      {showFlowStepEditor === true && onCloseFlowStepEditor !== undefined && (
-        <FlowStepEditModal
-          topologyId={topologyId}
-          flowSteps={graph.flowSteps}
+      {editingFlowStep !== undefined && onCloseFlowStepEditor !== undefined && onSaveFlowStep !== undefined && onDeleteFlowStep !== undefined && (
+        <FlowStepSettingsModal
+          flowStep={editingFlowStep}
           onClose={onCloseFlowStepEditor}
-          onSaved={handleFlowStepsSaved}
+          onSave={onSaveFlowStep}
+          onDelete={onDeleteFlowStep}
+        />
+      )}
+      {viewingFlowStep !== undefined && (
+        <FlowStepDetailsModal
+          flowStep={viewingFlowStep}
+          onClose={handleCloseDetailsModal}
         />
       )}
     </div>
@@ -565,5 +603,9 @@ const addNodeStyles = {
     fontSize: '11px',
     color: '#94a3b8',
     lineHeight: 1.2,
+  }),
+  menuDivider: css({
+    margin: '4px 0',
+    borderTop: '1px solid #334155',
   }),
 };

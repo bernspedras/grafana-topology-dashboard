@@ -629,7 +629,7 @@ export function assembleTopologyGraph(
   );
 
   const flowSteps = (definition.flowSteps ?? []).map(
-    (def) => new FlowStepNode({ id: def.id, step: def.step, text: def.text }),
+    (def) => new FlowStepNode({ id: def.id, step: def.step, text: def.text, moreDetails: def.moreDetails }),
   );
 
   return new TopologyGraph({ nodes, edges, flowSteps, updatedAt: now });
