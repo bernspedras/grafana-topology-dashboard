@@ -456,6 +456,41 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const allMetrics = edgeMetricRows(edge, effectiveEndpoint, viewOptions.coloringMode, sla);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
 
+  if (viewOptions.lowPolyMode) {
+    return (
+      <>
+        <path
+          id={id}
+          className="react-flow__edge-path"
+          d={edgePath}
+          style={style}
+          markerEnd={markerEnd}
+        />
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: 'translate(-50%, -50%) translate(' + String(labelX) + 'px,' + String(labelY) + 'px)',
+              pointerEvents: 'all',
+            }}
+            className="nodrag nopan"
+          >
+            <div
+              className={lowPolyEdgeStyles.tag}
+              style={{
+                color: protocolColor,
+                borderColor: dotColor,
+                backgroundColor: dotColor + '1A',
+              }}
+            >
+              {tag}
+            </div>
+          </div>
+        </EdgeLabelRenderer>
+      </>
+    );
+  }
+
   return (
     <>
       <path
@@ -628,3 +663,20 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
 }
 
 export const TopologyEdgeCard = memo(TopologyEdgeCardInner);
+
+// ─── Low Poly Mode styles ────────────────────────────────────────────────────
+
+const lowPolyEdgeStyles = {
+  tag: css({
+    display: 'inline-block',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    border: '1px solid',
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.03em',
+    backgroundColor: '#1e293b',
+    whiteSpace: 'nowrap',
+    transition: 'border-color 300ms, background-color 300ms',
+  }),
+};

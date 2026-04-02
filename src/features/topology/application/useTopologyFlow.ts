@@ -4,7 +4,7 @@ import type { TopologyGraph, TopologyEdge } from '../domain';
 import { useTopologyPositionStore } from './topologyPositionStore';
 import type { FlowLayout } from './topologyRegistry';
 import { useTopologyId } from './TopologyIdContext';
-import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
+import { edgeStrokeStyle, edgeMarkerEnd, lowPolyEdgeStrokeStyle, lowPolyEdgeMarkerEnd } from './edgeStyles';
 import type { ColoringMode } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
 
@@ -21,6 +21,7 @@ export function useTopologyFlow(
   bundledLayout: FlowLayout | undefined,
   coloringMode?: ColoringMode,
   slaMap?: Readonly<Record<string, SlaThresholdMap>>,
+  lowPolyMode?: boolean,
 ): UseTopologyFlowResult {
   const topologyId = useTopologyId();
 
@@ -55,19 +56,24 @@ export function useTopologyFlow(
     initialize(graph, topologyId);
   }, [graph, topologyId, initialize, layoutVersion, bundledLayout, setBundledLayout]);
 
-  // Re-derive edge styles when coloringMode or slaMap changes
+  // Re-derive edge styles when coloringMode, slaMap, or lowPolyMode changes
   const edges = useMemo((): Edge[] => {
     if (coloringMode === undefined) return storeEdges;
     return storeEdges.map((edge) => {
       const domainEdge = (edge.data as { domainEdge?: TopologyEdge } | undefined)?.domainEdge;
       if (domainEdge === undefined) return edge;
+      const sla = slaMap?.[domainEdge.id];
       return {
         ...edge,
-        style: edgeStrokeStyle(domainEdge, coloringMode, slaMap?.[domainEdge.id]),
-        markerEnd: edgeMarkerEnd(domainEdge, coloringMode, slaMap?.[domainEdge.id]),
+        style: lowPolyMode === true
+          ? lowPolyEdgeStrokeStyle(domainEdge, coloringMode, sla)
+          : edgeStrokeStyle(domainEdge, coloringMode, sla),
+        markerEnd: lowPolyMode === true
+          ? lowPolyEdgeMarkerEnd(domainEdge, coloringMode, sla)
+          : edgeMarkerEnd(domainEdge, coloringMode, sla),
       };
     });
-  }, [storeEdges, coloringMode, slaMap]);
+  }, [storeEdges, coloringMode, slaMap, lowPolyMode]);
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {

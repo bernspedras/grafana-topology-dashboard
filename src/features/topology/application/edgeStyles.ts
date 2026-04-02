@@ -184,3 +184,29 @@ export function edgeLabelBgStyle(): CSSProperties {
     fillOpacity: 0.9,
   };
 }
+
+// ─── Low Poly Mode stroke (thickness by throughput, color by health) ─────────
+
+function throughputStrokeWidth(rps: number | undefined): number {
+  if (rps === undefined || rps <= 0) return 2;
+  if (rps < 10) return 2;
+  if (rps < 50) return 3;
+  if (rps < 200) return 5;
+  if (rps < 1000) return 7;
+  return 10;
+}
+
+export function lowPolyEdgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): CSSProperties {
+  const color = edgeHealthColor(edge, mode, sla);
+  const width = throughputStrokeWidth(edge.metrics.rps);
+  return { stroke: color, strokeWidth: width };
+}
+
+export function lowPolyEdgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): EdgeMarkerConfig {
+  return {
+    type: MarkerType.ArrowClosed,
+    color: edgeHealthColor(edge, mode, sla),
+    width: 24,
+    height: 24,
+  };
+}

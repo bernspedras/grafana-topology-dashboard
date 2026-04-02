@@ -126,6 +126,37 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const isEKS = node instanceof EKSServiceNode;
   const hasDeployments = isEKS && node.deployments.length > 0;
 
+  if (viewOptions.lowPolyMode) {
+    return (
+      <div className={styles.group}>
+        <Handle type="target" position={Position.Top} id="top" className={handleCls} />
+        <Handle type="target" position={Position.Right} id="right" className={handleCls} />
+        <Handle type="target" position={Position.Bottom} id="bottom" className={handleCls} />
+        <Handle type="target" position={Position.Left} id="left" className={handleCls} />
+        <Handle type="source" position={Position.Top} id="top" className={handleCls} />
+        <Handle type="source" position={Position.Right} id="right" className={handleCls} />
+        <Handle type="source" position={Position.Bottom} id="bottom" className={handleCls} />
+        <Handle type="source" position={Position.Left} id="left" className={handleCls} />
+        <div
+          className={'drag-handle ' + lowPolyStyles.card}
+          style={{
+            borderColor: dotColor,
+            backgroundColor: dotColor + '1A',
+          }}
+        >
+          <div className={lowPolyStyles.header}>
+            <span className={lowPolyStyles.typeTag}>{typeTag}</span>
+            <span
+              className={isCritical ? styles.statusDotCritical : styles.statusDot}
+              style={{ backgroundColor: dotColor }}
+            />
+          </div>
+          <h3 className={lowPolyStyles.nodeLabel}>{node.label}</h3>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.group}>
       {/* Target handles (4 sides) */}
@@ -426,5 +457,41 @@ const styles = {
     flexShrink: 0,
     borderRadius: '9999px',
     animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+  }),
+};
+
+// ─── Low Poly Mode styles ────────────────────────────────────────────────────
+
+const lowPolyStyles = {
+  card: css({
+    pointerEvents: 'auto',
+    position: 'relative',
+    minWidth: '140px',
+    borderRadius: '10px',
+    border: '2px solid',
+    backgroundColor: '#1e293b',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+    padding: '10px 14px',
+    transition: 'border-color 300ms, background-color 300ms',
+  }),
+  header: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '4px',
+  }),
+  typeTag: css({
+    fontSize: '10px',
+    fontWeight: 600,
+    letterSpacing: '0.05em',
+    color: '#94a3b8',
+    textTransform: 'uppercase' as const,
+  }),
+  nodeLabel: css({
+    fontSize: '14px',
+    fontWeight: 700,
+    lineHeight: 1.3,
+    color: '#fff',
+    margin: 0,
   }),
 };

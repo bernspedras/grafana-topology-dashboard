@@ -4,10 +4,11 @@ import type { ColoringMode } from '../application/metricColor';
 export interface ViewOptions {
   readonly showNAMetrics: boolean;
   readonly showFlowStepCards: boolean;
+  readonly lowPolyMode: boolean;
   readonly coloringMode: ColoringMode;
 }
 
-export type ViewOptionKey = 'showNAMetrics' | 'showFlowStepCards';
+export type ViewOptionKey = 'showNAMetrics' | 'showFlowStepCards' | 'lowPolyMode';
 
 export interface ViewOptionsContextValue {
   readonly options: ViewOptions;
@@ -16,7 +17,7 @@ export interface ViewOptionsContextValue {
 }
 
 const ViewOptionsContext = createContext<ViewOptionsContextValue>({
-  options: { showNAMetrics: true, showFlowStepCards: true, coloringMode: 'baseline' },
+  options: { showNAMetrics: true, showFlowStepCards: true, lowPolyMode: false, coloringMode: 'baseline' },
   toggle: () => { /* noop default */ },
   setColoringMode: () => { /* noop default */ },
 });
