@@ -7,6 +7,8 @@ export class TopologyGraph {
   public readonly edges: readonly TopologyEdge[];
   public readonly flowSteps: readonly FlowStepNode[];
   public readonly updatedAt: Date;
+  /** Structural identity — computed once at construction, never recalculated. */
+  public readonly structuralId: string;
 
   public constructor(params: {
     nodes: readonly TopologyNode[];
@@ -18,6 +20,18 @@ export class TopologyGraph {
     this.edges = params.edges;
     this.flowSteps = params.flowSteps ?? [];
     this.updatedAt = params.updatedAt;
+    this.structuralId = TopologyGraph.computeStructuralId(this.nodes, this.edges, this.flowSteps);
+  }
+
+  private static computeStructuralId(
+    nodes: readonly TopologyNode[],
+    edges: readonly TopologyEdge[],
+    flowSteps: readonly FlowStepNode[],
+  ): string {
+    const nodeIds = nodes.map((n) => n.id).toSorted().join(',');
+    const edgeIds = edges.map((e) => e.source + '>' + e.target).toSorted().join(',');
+    const stepIds = flowSteps.map((s) => s.id).toSorted().join(',');
+    return nodeIds + '|' + edgeIds + '|' + stepIds;
   }
 
   public getNodeById(id: string): TopologyNode | undefined {

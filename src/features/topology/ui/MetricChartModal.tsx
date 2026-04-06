@@ -372,6 +372,8 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
     return (): void => { document.removeEventListener('keydown', handleEsc); };
   }, [onClose]);
 
+  const rangeInflightRef = useRef(false);
+
   const fetchRangeData = useCallback(async (signal: AbortSignal, showLoading: boolean): Promise<void> => {
     // In edit mode, don't fetch — the user edits the raw template query
     if (isEditing) {
@@ -438,12 +440,17 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
     return (): void => { controller.abort(); };
   }, [fetchRangeData]);
 
-  // Silent re-fetch on SSE updates (no loading spinner)
+  // Silent re-fetch on SSE updates (no loading spinner).
+  // Guarded by rangeInflightRef to skip ticks while a range query is already in flight.
   const initialTickRef = useRef(refreshTick);
   useEffect((): (() => void) => {
     if (refreshTick === initialTickRef.current) return (): void => { /* noop */ };
+    if (rangeInflightRef.current) return (): void => { /* noop — previous range query still in flight */ };
+    rangeInflightRef.current = true;
     const controller = new AbortController();
-    void fetchRangeData(controller.signal, false);
+    void fetchRangeData(controller.signal, false).finally((): void => {
+      rangeInflightRef.current = false;
+    });
     return (): void => { controller.abort(); };
   }, [refreshTick, fetchRangeData]);
 
