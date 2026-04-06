@@ -50,6 +50,27 @@ func TestBaselineCache_Expiry(t *testing.T) {
 	}
 }
 
+func TestBaselineCache_RejectsWhenFull(t *testing.T) {
+	cache := NewBaselineCache(1 * time.Minute)
+
+	val := 1.0
+	for i := 0; i < maxCacheEntries; i++ {
+		cache.Set("key"+string(rune(i)), map[string]*float64{"x": &val})
+	}
+
+	// This entry should be silently dropped.
+	cache.Set("overflow", map[string]*float64{"x": &val})
+
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	if _, exists := cache.entries["overflow"]; exists {
+		t.Fatal("expected entry to be rejected when cache is full")
+	}
+	if len(cache.entries) > maxCacheEntries {
+		t.Fatalf("expected at most %d entries, got %d", maxCacheEntries, len(cache.entries))
+	}
+}
+
 func TestBaselineCache_EvictsExpiredOnSet(t *testing.T) {
 	cache := NewBaselineCache(1 * time.Millisecond)
 

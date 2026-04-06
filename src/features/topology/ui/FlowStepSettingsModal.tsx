@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { FlowStepNode } from '../domain';
 
@@ -54,7 +55,8 @@ export function FlowStepSettingsModal({ flowStep, onClose, onSave, onDelete, sav
     if (moreDetails.trim() === '') {
       return '<p style="color:#64748b;text-align:center;font-style:italic;">Markdown preview will appear here...</p>';
     }
-    return marked.parse(moreDetails, { async: false });
+    const raw = marked.parse(moreDetails, { async: false });
+    return DOMPurify.sanitize(raw);
   }, [moreDetails]);
 
   const isEmpty = text.trim() === '';
