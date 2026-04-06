@@ -87,9 +87,6 @@ func (a *App) executeQueries(
 
 	results := make(map[string]*float64, len(tasks))
 	var mu sync.Mutex
-
-	const maxConcurrency = 50
-	sem := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 
 	for _, dq := range deduped {
@@ -97,10 +94,11 @@ func (a *App) executeQueries(
 		go func(q deduplicatedQuery) {
 			defer wg.Done()
 
-			// Acquire semaphore slot.
+			// Acquire global semaphore slot — limits total concurrent
+			// Prometheus queries across all users/requests.
 			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
+			case a.promSem <- struct{}{}:
+				defer func() { <-a.promSem }()
 			case <-ctx.Done():
 				return
 			}
@@ -176,4 +174,145 @@ func (a *App) queryPrometheus(
 		return nil
 	}
 	return &val
+}
+
+// ─── Range queries ──────────────────────────────────────────────────────────
+
+// RangeQueryTask represents a single Prometheus range query to execute.
+type RangeQueryTask struct {
+	Key    string // Logical query key
+	DsUID  string // Grafana datasource UID
+	PromQL string // PromQL expression
+	Start  int64  // Unix timestamp
+	End    int64  // Unix timestamp
+	Step   int64  // Step in seconds
+}
+
+// RangeQueryResult holds the time-series data from a range query.
+type RangeQueryResult struct {
+	Timestamps []float64 `json:"timestamps"`
+	Values     []float64 `json:"values"`
+}
+
+// prometheusRangeResponse is the Prometheus HTTP API range query response shape.
+type prometheusRangeResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ResultType string `json:"resultType"`
+		Result     []struct {
+			Values [][]json.RawMessage `json:"values"`
+		} `json:"result"`
+	} `json:"data"`
+}
+
+// executeRangeQueries runs range queries concurrently using the global semaphore.
+func (a *App) executeRangeQueries(
+	ctx context.Context,
+	tasks []RangeQueryTask,
+	grafanaURL string,
+	authHeader string,
+) map[string]*RangeQueryResult {
+	results := make(map[string]*RangeQueryResult, len(tasks))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for _, task := range tasks {
+		wg.Add(1)
+		go func(t RangeQueryTask) {
+			defer wg.Done()
+
+			select {
+			case a.promSem <- struct{}{}:
+				defer func() { <-a.promSem }()
+			case <-ctx.Done():
+				return
+			}
+
+			result := a.queryPrometheusRange(ctx, grafanaURL, authHeader, t.DsUID, t.PromQL, t.Start, t.End, t.Step)
+
+			mu.Lock()
+			results[t.Key] = result
+			mu.Unlock()
+		}(task)
+	}
+
+	wg.Wait()
+	return results
+}
+
+// queryPrometheusRange executes a single range query against Prometheus via the
+// Grafana datasource proxy.
+func (a *App) queryPrometheusRange(
+	ctx context.Context,
+	grafanaURL string,
+	authHeader string,
+	dsUID string,
+	promql string,
+	start, end, step int64,
+) *RangeQueryResult {
+	u := fmt.Sprintf("%s/api/datasources/proxy/uid/%s/api/v1/query_range", grafanaURL, url.PathEscape(dsUID))
+	params := url.Values{
+		"query": {promql},
+		"start": {strconv.FormatInt(start, 10)},
+		"end":   {strconv.FormatInt(end, 10)},
+		"step":  {strconv.FormatInt(step, 10)},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u+"?"+params.Encode(), nil)
+	if err != nil {
+		a.logger.Warn("Failed to build Prometheus range request", "error", err)
+		return nil
+	}
+	req.Header.Set("Authorization", authHeader)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		a.logger.Warn("Prometheus range query failed", "error", err, "dsUID", dsUID)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		a.logger.Warn("Prometheus range query returned non-200", "status", resp.StatusCode, "body", string(body), "dsUID", dsUID)
+		return nil
+	}
+
+	var promResp prometheusRangeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&promResp); err != nil {
+		a.logger.Warn("Failed to decode Prometheus range response", "error", err, "dsUID", dsUID)
+		return nil
+	}
+
+	if len(promResp.Data.Result) == 0 {
+		return nil
+	}
+
+	values := promResp.Data.Result[0].Values
+	result := &RangeQueryResult{
+		Timestamps: make([]float64, 0, len(values)),
+		Values:     make([]float64, 0, len(values)),
+	}
+
+	for _, pair := range values {
+		if len(pair) != 2 {
+			continue
+		}
+		var ts float64
+		if err := json.Unmarshal(pair[0], &ts); err != nil {
+			continue
+		}
+		var valStr string
+		if err := json.Unmarshal(pair[1], &valStr); err != nil {
+			continue
+		}
+		val, err := strconv.ParseFloat(valStr, 64)
+		if err != nil || math.IsNaN(val) || math.IsInf(val, 0) {
+			continue
+		}
+		result.Timestamps = append(result.Timestamps, ts)
+		result.Values = append(result.Values, val)
+	}
+
+	return result
 }

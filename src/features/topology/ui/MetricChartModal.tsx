@@ -25,6 +25,7 @@ import type { MetricDefinition } from '../application/topologyDefinition';
 import { isNodeRef, isEdgeRef } from '../application/topologyDefinition';
 import type { FlowOverridePatch } from '../application/flowOverridePatch';
 import { metricDescription } from '../application/metricDescriptions';
+import { PLUGIN_ID } from '../application/pluginConstants';
 
 // ─── Query key resolution ───────────────────────────────────────────────────
 
@@ -363,15 +364,6 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
     }));
   }, [datasourceDefs]);
 
-  // ── Resolve datasource UID ──
-  const resolveDsUid = useCallback((dsName: string): string | undefined => {
-    const dsMapRecord: Readonly<Record<string, string | undefined>> = dsMap;
-    const uid = dsMapRecord[dsName];
-    if (uid !== undefined && uid !== '') return uid;
-    // Fallback: first available
-    return Object.values(dsMap).find((v): boolean => v !== '');
-  }, [dsMap]);
-
   useEffect((): (() => void) => {
     const handleEsc = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose();
@@ -402,48 +394,34 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
         return;
       }
 
-      // Resolve datasource UID using the metric's datasource name
-      const dsUid = resolveDsUid(metricDsName ?? '');
-      if (dsUid === undefined || dsUid === '') {
+      const dsName = metricDsName ?? '';
+      if (dsName === '') {
         setState({ status: 'error', message: 'No Prometheus datasource configured in plugin settings' });
         return;
       }
 
-      interface RangeResult {
-        readonly status: string;
-        readonly data: {
-          readonly resultType: string;
-          readonly result: readonly {
-            readonly values: readonly [number, string][];
-          }[];
-        };
+      interface BackendRangeResponse {
+        readonly results: Record<string, { readonly timestamps: number[]; readonly values: number[] } | null>;
       }
 
       const response = await firstValueFrom(getBackendSrv()
-        .fetch<RangeResult>({
-          url: `/api/datasources/proxy/uid/${dsUid}/api/v1/query_range`,
-          params: { query: promql, start: String(start), end: String(end), step: String(step) },
-          method: 'GET',
+        .fetch<BackendRangeResponse>({
+          url: `/api/plugins/${PLUGIN_ID}/resources/metric-range`,
+          method: 'POST',
+          data: { datasource: dsName, queries: { [effectiveKey]: promql }, start, end, step },
           requestId: `metric-chart-${entityId}-${metricKey}`,
           showErrorAlert: false,
         }));
 
       if (signal.aborted) return;
 
-      const series = response.data.data.result;
-      if (series.length === 0) {
+      const rangeResult = response.data.results[effectiveKey] ?? undefined;
+      if (rangeResult === undefined || rangeResult.timestamps.length === 0) {
         setState({ status: 'error', message: 'No data returned for this metric' });
         return;
       }
 
-      const timestamps: number[] = [];
-      const values: number[] = [];
-      for (const [ts, val] of series[0].values) {
-        timestamps.push(ts);
-        values.push(parseFloat(val));
-      }
-
-      setState({ status: 'success', data: { timestamps, values, promql } });
+      setState({ status: 'success', data: { timestamps: rangeResult.timestamps, values: rangeResult.values, promql } });
     } catch (err: unknown) {
       if (signal.aborted) return;
       setState({
@@ -451,7 +429,7 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
         message: err instanceof Error ? err.message : 'Unknown error',
       });
     }
-  }, [entityId, metricKey, deployment, endpointFilter, timeRange, topologyId, dsMap, metricDsName, resolveDsUid, promqlQueries, isEditing]);
+  }, [entityId, metricKey, deployment, endpointFilter, timeRange, topologyId, dsMap, metricDsName, promqlQueries, isEditing]);
 
   // Initial fetch + re-fetch on param/time-range changes (shows loading spinner)
   useEffect((): (() => void) => {
