@@ -11,12 +11,12 @@ import { statusColor, nodeColor } from '../application/nodeStyles';
 import { healthFromMetricRows } from '../application/healthFromMetricRows';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
-import { useRawPromqlQueries } from './RawPromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { useDirections } from './DirectionContext';
 import { PromQLModal } from './PromQLModal';
+import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
 import { PodsChartModal } from './PodsChartModal';
 
@@ -146,7 +146,6 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const [showQueries, setShowQueries] = useState(false);
   const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined } | undefined>(undefined);
   const resolvedQueries = usePromqlQueries(node.id);
-  const rawQueries = useRawPromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(node.id);
@@ -305,12 +304,20 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
         </div>
       </div>
 
-      {/* PromQL Modal */}
-      {showQueries && (
+      {/* Metric Edit Modal (layered view) or PromQL Modal (fallback for view-only) */}
+      {showQueries && editMode && (
+        <MetricEditModal
+          title={node.label}
+          entityId={node.id}
+          entityType="node"
+          onClose={(): void => { setShowQueries(false); }}
+        />
+      )}
+      {showQueries && !editMode && (
         <PromQLModal
           title={node.label}
           entityId={node.id}
-          queries={editMode ? (rawQueries ?? {}) : filterNodeQueries(resolvedQueries, selectedDeployment)}
+          queries={filterNodeQueries(resolvedQueries, selectedDeployment)}
           onClose={(): void => { setShowQueries(false); }}
         />
       )}
@@ -320,6 +327,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
         <MetricChartModal
           title={node.label + (selectedDeployment !== '' ? ' (' + selectedDeployment + ')' : '') + ' — ' + chartMetric.label}
           entityId={node.id}
+          entityType="node"
           metricKey={chartMetric.key}
           description={chartMetric.description}
           deployment={selectedDeployment !== '' ? selectedDeployment : undefined}

@@ -18,6 +18,12 @@ import { useEditMode } from './EditModeContext';
 import { useDatasourceDefs } from './DatasourceDefsContext';
 import { useMetricDatasource } from './MetricDatasourceContext';
 import { useSaveMetricQuery } from './SaveMetricQueryContext';
+import { useFlowData } from './FlowDataContext';
+import { computeLayeredMetrics } from '../application/computeLayeredMetrics';
+import type { LayeredMetricRow, LayeredMetricData } from '../application/layeredMetricTypes';
+import type { MetricDefinition } from '../application/topologyDefinition';
+import { isNodeRef, isEdgeRef } from '../application/topologyDefinition';
+import type { FlowOverridePatch } from '../application/flowOverridePatch';
 import { metricDescription } from '../application/metricDescriptions';
 
 // ─── Query key resolution ───────────────────────────────────────────────────
@@ -63,12 +69,98 @@ function resolveChartQueryKey(
 interface MetricChartModalProps {
   readonly title: string;
   readonly entityId: string;
+  readonly entityType: 'node' | 'edge';
   readonly metricKey: string;
   readonly description: string | undefined;
   readonly deployment: string | undefined;
   readonly endpointFilter: string | undefined;
   readonly onClose: () => void;
 }
+
+// ─── Override helpers (shared pattern with MetricEditModal) ──────────────────
+
+interface OverrideDraft {
+  readonly query: string;
+  readonly unit: string;
+  readonly direction: string;
+  readonly dataSource: string;
+  readonly slaWarning: string;
+  readonly slaCritical: string;
+}
+
+interface FieldToggles {
+  readonly query: boolean;
+  readonly unit: boolean;
+  readonly direction: boolean;
+  readonly dataSource: boolean;
+  readonly sla: boolean;
+}
+
+const ALL_TOGGLES_OFF: FieldToggles = { query: false, unit: false, direction: false, dataSource: false, sla: false };
+
+const UNIT_OPTIONS: readonly SelectableValue<string>[] = [
+  { label: 'percent', value: 'percent' },
+  { label: 'ms', value: 'ms' },
+  { label: 'req/s', value: 'req/s' },
+  { label: 'msg/s', value: 'msg/s' },
+  { label: 'count', value: 'count' },
+  { label: 'count/min', value: 'count/min' },
+  { label: 'GB', value: 'GB' },
+];
+
+const DIRECTION_OPTIONS: readonly SelectableValue<string>[] = [
+  { label: 'Lower is better', value: 'lower-is-better' },
+  { label: 'Higher is better', value: 'higher-is-better' },
+];
+
+function draftFromMetric(metric: MetricDefinition | undefined, defaultDs: string): OverrideDraft {
+  return {
+    query: metric?.query ?? '',
+    unit: metric?.unit ?? 'count',
+    direction: metric?.direction ?? 'lower-is-better',
+    dataSource: metric?.dataSource ?? defaultDs,
+    slaWarning: metric?.sla?.warning !== undefined ? String(metric.sla.warning) : '',
+    slaCritical: metric?.sla?.critical !== undefined ? String(metric.sla.critical) : '',
+  };
+}
+
+function togglesFromFlowValue(flowValue: MetricDefinition | undefined): FieldToggles {
+  if (flowValue === undefined) {
+    return ALL_TOGGLES_OFF;
+  }
+  const obj = flowValue as unknown as Record<string, unknown>;
+  return {
+    query: Object.hasOwn(obj, 'query'),
+    unit: Object.hasOwn(obj, 'unit'),
+    direction: Object.hasOwn(obj, 'direction'),
+    dataSource: Object.hasOwn(obj, 'dataSource'),
+    sla: Object.hasOwn(obj, 'sla'),
+  };
+}
+
+function draftToPartialMetric(draft: OverrideDraft, defaultDs: string, toggles: FieldToggles): Partial<MetricDefinition> {
+  const result: Record<string, unknown> = {};
+  if (toggles.query) {
+    result.query = draft.query;
+  }
+  if (toggles.unit) {
+    result.unit = draft.unit;
+  }
+  if (toggles.direction) {
+    result.direction = draft.direction;
+  }
+  if (toggles.dataSource) {
+    result.dataSource = draft.dataSource !== defaultDs ? draft.dataSource : undefined;
+  }
+  if (toggles.sla) {
+    const slaW = draft.slaWarning !== '' ? Number(draft.slaWarning) : undefined;
+    const slaC = draft.slaCritical !== '' ? Number(draft.slaCritical) : undefined;
+    result.sla = slaW !== undefined && slaC !== undefined ? { warning: slaW, critical: slaC } : undefined;
+  }
+  return result as Partial<MetricDefinition>;
+}
+
+// ─── Range data types ─────────────────────────────────────────��──────────────
 
 interface MetricRangeData {
   readonly timestamps: readonly number[];
@@ -165,7 +257,7 @@ function TimeSeriesChart({ data }: { readonly data: MetricRangeData }): React.JS
 
 // ─── Modal component ────────────────────────────────────────────────────────
 
-export function MetricChartModal({ title, entityId, metricKey, description, deployment, endpointFilter, onClose }: MetricChartModalProps): React.JSX.Element {
+export function MetricChartModal({ title, entityId, entityType, metricKey, description, deployment, endpointFilter, onClose }: MetricChartModalProps): React.JSX.Element {
   const backdropRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<FetchState>({ status: 'loading' });
   const [timeRange, setTimeRange] = useState<TimeRange>(loadTimeRange);
@@ -178,6 +270,46 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
   const datasourceDefs = useDatasourceDefs();
   const metricDsName = useMetricDatasource(entityId, metricKey);
   const onSaveQuery = useSaveMetricQuery();
+  const flowData = useFlowData();
+
+  // ── Layered metric row for override UI ──
+  const layeredData = useMemo((): LayeredMetricData | undefined => {
+    if (flowData === undefined) {
+      return undefined;
+    }
+    const { flowRefs, nodeTemplates, edgeTemplates } = flowData;
+    if (entityType === 'node') {
+      const template = nodeTemplates.find((t) => t.id === entityId);
+      if (template === undefined) {
+        return undefined;
+      }
+      const flowEntry = flowRefs.nodes.find((e) =>
+        isNodeRef(e) ? e.nodeId === entityId : e.id === entityId,
+      );
+      if (flowEntry === undefined) {
+        return undefined;
+      }
+      return computeLayeredMetrics('node', template, flowEntry, 0);
+    }
+    const template = edgeTemplates.find((t) => t.id === entityId);
+    if (template === undefined) {
+      return undefined;
+    }
+    const flowEntry = flowRefs.edges.find((e) =>
+      isEdgeRef(e) ? e.edgeId === entityId : e.id === entityId,
+    );
+    if (flowEntry === undefined) {
+      return undefined;
+    }
+    return computeLayeredMetrics('edge', template, flowEntry, 0);
+  }, [flowData, entityId, entityType]);
+
+  const layeredRow = useMemo((): LayeredMetricRow | undefined => {
+    return layeredData?.rows.find((r) => r.metricKey === metricKey);
+  }, [layeredData, metricKey]);
+
+  /** True when the flow override UI is available (flow data + matching row found). */
+  const useOverrideUI = isEditing && layeredRow !== undefined && layeredData !== undefined && !layeredData.isInline;
 
   // ── Edit state (uses raw template with placeholders like {{deployment}}) ──
   const rawPromql = rawPromqlQueries?.[metricKey] ?? '';
@@ -186,6 +318,31 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
   const [editQuery, setEditQuery] = useState(rawPromql);
   const [editDsName, setEditDsName] = useState(originalDsName);
   const [saving, setSaving] = useState(false);
+
+  // ── Override state (toggle-based, same pattern as MetricEditModal) ──
+  const [overrideDraft, setOverrideDraft] = useState(draftFromMetric(undefined, ''));
+  const [fieldToggles, setFieldToggles] = useState(ALL_TOGGLES_OFF);
+  const [overrideInitialized, setOverrideInitialized] = useState(false);
+
+  // Initialize override draft from the layered row when it becomes available
+  useEffect((): void => {
+    if (!useOverrideUI || overrideInitialized) {
+      return;
+    }
+    const defaultDs = layeredData.entityDefaultDataSource;
+    setOverrideDraft(draftFromMetric(layeredRow.effectiveValue ?? layeredRow.templateValue, defaultDs));
+    setFieldToggles(
+      layeredRow.source === 'flow' || layeredRow.source === 'flow-only'
+        ? togglesFromFlowValue(layeredRow.flowValue)
+        : ALL_TOGGLES_OFF,
+    );
+    setOverrideInitialized(true);
+  }, [useOverrideUI, layeredRow, layeredData, overrideInitialized]);
+
+  // Reset initialization flag when the layered row identity changes
+  useEffect((): void => {
+    setOverrideInitialized(false);
+  }, [entityId, metricKey]);
 
   // Sync edit state when originals change (e.g. after save + reload)
   useEffect((): void => {
@@ -336,6 +493,53 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
     }
   };
 
+  // ── Override save / revert handlers ──
+  const handleOverrideSave = useCallback(async (): Promise<void> => {
+    if (flowData === undefined || layeredData === undefined || layeredRow === undefined) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const hasAnyToggle = Object.values(fieldToggles).some(Boolean);
+      const patch: FlowOverridePatch = hasAnyToggle
+        ? {
+          metricKey: layeredRow.metricKey,
+          section: layeredRow.section,
+          value: draftToPartialMetric(overrideDraft, layeredData.entityDefaultDataSource, fieldToggles),
+          action: 'replace',
+        }
+        : {
+          metricKey: layeredRow.metricKey,
+          section: layeredRow.section,
+          value: undefined,
+          action: 'remove',
+        };
+      await flowData.saveFlowOverride(entityId, entityType, patch);
+      setOverrideInitialized(false); // re-init from updated data
+    } finally {
+      setSaving(false);
+    }
+  }, [flowData, layeredData, layeredRow, fieldToggles, overrideDraft, entityId, entityType]);
+
+  const handleOverrideRevert = useCallback(async (): Promise<void> => {
+    if (flowData === undefined || layeredRow === undefined) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const patch: FlowOverridePatch = {
+        metricKey: layeredRow.metricKey,
+        section: layeredRow.section,
+        value: undefined,
+        action: 'remove',
+      };
+      await flowData.saveFlowOverride(entityId, entityType, patch);
+      setOverrideInitialized(false);
+    } finally {
+      setSaving(false);
+    }
+  }, [flowData, layeredRow, entityId, entityType]);
+
   return createPortal(
     <div
       ref={backdropRef}
@@ -380,30 +584,197 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
             <TimeSeriesChart data={state.data} />
           )}
 
-          {/* Datasource picker — always visible, disabled when not editing */}
-          {state.status !== 'loading' && (
-            <div className={styles.datasourceSection}>
-              <span className={styles.sectionLabel}>Datasource</span>
-              <div className={isEditing ? undefined : styles.disabledOverlay}>
+          {/* ── Override UI (edit mode with flow data) ── */}
+          {useOverrideUI && (
+            <>
+              {/* Source badge + revert */}
+              <div className={styles.overrideHeader}>
+                <div className={styles.overrideSourceRow}>
+                  <span className={styles.overrideSectionLabel}>Source</span>
+                  <span className={layeredRow.source === 'flow' ? styles.sourceBadgeFlow : layeredRow.source === 'flow-only' ? styles.sourceBadgeFlowOnly : styles.sourceBadgeTemplate}>
+                    {layeredRow.source === 'flow' ? 'FLOW OVERRIDE' : layeredRow.source === 'flow-only' ? 'FLOW ONLY' : 'TEMPLATE'}
+                  </span>
+                  {(layeredRow.source === 'flow' || layeredRow.source === 'flow-only') && (
+                    <button
+                      type="button"
+                      className={styles.revertButton}
+                      onClick={(): void => { void handleOverrideRevert(); }}
+                      disabled={saving}
+                    >
+                      Revert to template
+                    </button>
+                  )}
+                </div>
+                {layeredData.templateId !== undefined && (
+                  <span className={styles.overrideTemplateHint}>Template: {layeredData.templateId}</span>
+                )}
+              </div>
+
+              {/* Toggle fields */}
+              <div className={styles.overrideFields}>
+                <span className={styles.overrideFieldsHint}>
+                  Toggle on the fields you want to override. Untouched fields stay inherited from the template.
+                </span>
+
+                {/* Query */}
+                <div className={styles.overrideFieldFull}>
+                  <div className={styles.overrideLabelRow}>
+                    <OverrideToggle on={fieldToggles.query} onChange={(on: boolean): void => { setFieldToggles({ ...fieldToggles, query: on }); }} />
+                    <span className={styles.overrideFieldLabel}>PromQL Query</span>
+                    {!fieldToggles.query && <span className={styles.inheritedBadge}>inherited</span>}
+                  </div>
+                  <textarea
+                    className={fieldToggles.query ? styles.promqlTextarea : styles.promqlTextareaDisabled}
+                    value={overrideDraft.query}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+                      setOverrideDraft({ ...overrideDraft, query: e.target.value });
+                    }}
+                    rows={3}
+                    spellCheck={false}
+                    disabled={!fieldToggles.query}
+                  />
+                  {layeredRow.templateValue !== undefined && fieldToggles.query && (
+                    <span className={styles.templateHintText}>Template: {layeredRow.templateValue.query}</span>
+                  )}
+                </div>
+
+                {/* Datasource + Unit */}
+                <div className={styles.overrideFieldGrid}>
+                  <div className={styles.overrideFieldHalf}>
+                    <div className={styles.overrideLabelRow}>
+                      <OverrideToggle on={fieldToggles.dataSource} onChange={(on: boolean): void => { setFieldToggles({ ...fieldToggles, dataSource: on }); }} />
+                      <span className={styles.overrideFieldLabel}>Datasource</span>
+                      {!fieldToggles.dataSource && <span className={styles.inheritedBadge}>inherited</span>}
+                    </div>
+                    {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
+                    <Select<string>
+                      options={dsOptions}
+                      value={overrideDraft.dataSource}
+                      onChange={(v: SelectableValue<string>): void => {
+                        setOverrideDraft({ ...overrideDraft, dataSource: v.value ?? layeredData.entityDefaultDataSource });
+                      }}
+                      isClearable={false}
+                      disabled={!fieldToggles.dataSource}
+                      menuShouldPortal
+                    />
+                  </div>
+                  <div className={styles.overrideFieldHalf}>
+                    <div className={styles.overrideLabelRow}>
+                      <OverrideToggle on={fieldToggles.unit} onChange={(on: boolean): void => { setFieldToggles({ ...fieldToggles, unit: on }); }} />
+                      <span className={styles.overrideFieldLabel}>Unit</span>
+                      {!fieldToggles.unit && <span className={styles.inheritedBadge}>inherited</span>}
+                    </div>
+                    {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
+                    <Select<string>
+                      options={[...UNIT_OPTIONS]}
+                      value={overrideDraft.unit}
+                      onChange={(v: SelectableValue<string>): void => {
+                        setOverrideDraft({ ...overrideDraft, unit: v.value ?? 'count' });
+                      }}
+                      isClearable={false}
+                      disabled={!fieldToggles.unit}
+                      menuShouldPortal
+                    />
+                  </div>
+                </div>
+
+                {/* Direction + SLA */}
+                <div className={styles.overrideFieldGrid}>
+                  <div className={styles.overrideFieldHalf}>
+                    <div className={styles.overrideLabelRow}>
+                      <OverrideToggle on={fieldToggles.direction} onChange={(on: boolean): void => { setFieldToggles({ ...fieldToggles, direction: on }); }} />
+                      <span className={styles.overrideFieldLabel}>Direction</span>
+                      {!fieldToggles.direction && <span className={styles.inheritedBadge}>inherited</span>}
+                    </div>
+                    {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
+                    <Select<string>
+                      options={[...DIRECTION_OPTIONS]}
+                      value={overrideDraft.direction}
+                      onChange={(v: SelectableValue<string>): void => {
+                        setOverrideDraft({ ...overrideDraft, direction: v.value ?? 'lower-is-better' });
+                      }}
+                      isClearable={false}
+                      disabled={!fieldToggles.direction}
+                      menuShouldPortal
+                    />
+                  </div>
+                  <div className={styles.overrideFieldHalf}>
+                    <div className={styles.overrideLabelRow}>
+                      <OverrideToggle on={fieldToggles.sla} onChange={(on: boolean): void => { setFieldToggles({ ...fieldToggles, sla: on }); }} />
+                      <span className={styles.overrideFieldLabel}>SLA Thresholds</span>
+                      {!fieldToggles.sla && <span className={styles.inheritedBadge}>inherited</span>}
+                    </div>
+                    <div className={styles.slaGrid}>
+                      <div>
+                        <span className={styles.slaSubLabel}>Warning</span>
+                        <input
+                          className={fieldToggles.sla ? styles.overrideInput : styles.overrideInputDisabled}
+                          type="number"
+                          value={overrideDraft.slaWarning}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
+                            setOverrideDraft({ ...overrideDraft, slaWarning: e.target.value });
+                          }}
+                          placeholder={layeredRow.templateValue?.sla?.warning !== undefined ? String(layeredRow.templateValue.sla.warning) : 'none'}
+                          disabled={!fieldToggles.sla}
+                        />
+                      </div>
+                      <div>
+                        <span className={styles.slaSubLabel}>Critical</span>
+                        <input
+                          className={fieldToggles.sla ? styles.overrideInput : styles.overrideInputDisabled}
+                          type="number"
+                          value={overrideDraft.slaCritical}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
+                            setOverrideDraft({ ...overrideDraft, slaCritical: e.target.value });
+                          }}
+                          placeholder={layeredRow.templateValue?.sla?.critical !== undefined ? String(layeredRow.templateValue.sla.critical) : 'none'}
+                          disabled={!fieldToggles.sla}
+                        />
+                      </div>
+                    </div>
+                    {layeredRow.templateValue?.sla !== undefined && fieldToggles.sla && (
+                      <span className={styles.templateHintText}>
+                        Template: W: {layeredRow.templateValue.sla.warning} C: {layeredRow.templateValue.sla.critical}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Save / Cancel */}
+              <div className={styles.editActions}>
+                <button type="button" className={styles.cancelButton} onClick={onClose}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.saveButton}
+                  onClick={(): void => { void handleOverrideSave(); }}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : Object.values(fieldToggles).some(Boolean) ? 'Save override' : 'Revert to template'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── Legacy edit UI (fallback when flow data is not available) ── */}
+          {isEditing && !useOverrideUI && state.status !== 'loading' && (
+            <>
+              <div className={styles.datasourceSection}>
+                <span className={styles.sectionLabel}>Datasource</span>
                 {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
                 <Select<string>
                   options={dsOptions}
-                  value={isEditing ? editDsName : originalDsName}
+                  value={editDsName}
                   onChange={(v: SelectableValue<string>): void => { setEditDsName(v.value ?? ''); }}
-                  disabled={!isEditing}
                   isClearable={false}
                   width={50}
                   menuShouldPortal
                 />
               </div>
-            </div>
-          )}
-
-          {/* PromQL section — editable when in edit mode */}
-          {state.status !== 'loading' && (
-            <div className={styles.promqlSection}>
-              <span className={styles.sectionLabel}>PromQL</span>
-              {isEditing ? (
+              <div className={styles.promqlSection}>
+                <span className={styles.sectionLabel}>PromQL</span>
                 <textarea
                   className={styles.promqlTextarea}
                   value={editQuery}
@@ -411,34 +782,43 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
                   rows={4}
                   spellCheck={false}
                 />
-              ) : (
+              </div>
+              <div className={styles.editActions}>
+                <button type="button" className={styles.cancelButton} onClick={handleCancel} disabled={!hasChanges || saving}>
+                  Cancel
+                </button>
+                <button type="button" className={styles.saveButton} onClick={(): void => { void handleSave(); }} disabled={!hasChanges || saving || onSaveQuery === undefined}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── View mode (not editing) ── */}
+          {!isEditing && state.status !== 'loading' && (
+            <>
+              <div className={styles.datasourceSection}>
+                <span className={styles.sectionLabel}>Datasource</span>
+                <div className={styles.disabledOverlay}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- Combobox requires Grafana 11.3+ */}
+                  <Select<string>
+                    options={dsOptions}
+                    value={originalDsName}
+                    onChange={(): void => { /* read-only */ }}
+                    disabled
+                    isClearable={false}
+                    width={50}
+                    menuShouldPortal
+                  />
+                </div>
+              </div>
+              <div className={styles.promqlSection}>
+                <span className={styles.sectionLabel}>PromQL</span>
                 <pre className={styles.promqlPre}>
                   {state.status === 'success' ? state.data.promql : resolvedPromql}
                 </pre>
-              )}
-            </div>
-          )}
-
-          {/* Save / Cancel buttons — only in edit mode */}
-          {isEditing && state.status !== 'loading' && (
-            <div className={styles.editActions}>
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={handleCancel}
-                disabled={!hasChanges || saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={styles.saveButton}
-                onClick={(): void => { void handleSave(); }}
-                disabled={!hasChanges || saving || onSaveQuery === undefined}
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+              </div>
+            </>
           )}
 
           {state.status !== 'loading' && (description ?? metricDescription(metricKey)) !== undefined && (
@@ -455,6 +835,27 @@ export function MetricChartModal({ title, entityId, metricKey, description, depl
       </div>
     </div>,
     document.body,
+  );
+}
+
+// ─── Toggle switch sub-component ─────────────────────────────────────────────
+
+interface OverrideToggleProps {
+  readonly on: boolean;
+  readonly onChange: (on: boolean) => void;
+}
+
+function OverrideToggle({ on, onChange }: OverrideToggleProps): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={on ? styles.toggleOn : styles.toggleOff}
+      onClick={(): void => { onChange(!on); }}
+      aria-pressed={on}
+      title={on ? 'Overriding — click to inherit from template' : 'Inherited — click to override'}
+    >
+      <span className={on ? styles.toggleKnobOn : styles.toggleKnobOff} />
+    </button>
   );
 }
 
@@ -620,9 +1021,238 @@ const styles = {
     lineHeight: 1.625,
     color: '#34d399',
     outline: 'none',
+    boxSizing: 'border-box' as const,
     '&:focus': {
       borderColor: '#3b82f6',
     },
+  }),
+
+  promqlTextareaDisabled: css({
+    width: '100%',
+    minHeight: '80px',
+    resize: 'none',
+    borderRadius: '0.5rem',
+    backgroundColor: '#0f172a',
+    border: '1px solid #1e293b',
+    paddingLeft: '1rem',
+    paddingRight: '1rem',
+    paddingTop: '0.75rem',
+    paddingBottom: '0.75rem',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    fontSize: '12px',
+    lineHeight: 1.625,
+    color: '#475569',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+    cursor: 'not-allowed' as const,
+    opacity: 0.6,
+  }),
+
+  // ── Override UI styles ──
+  overrideHeader: css({
+    marginTop: '1rem',
+    marginBottom: '0.75rem',
+  }),
+  overrideSourceRow: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  }),
+  overrideSectionLabel: css({
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase' as const,
+    color: '#64748b',
+  }),
+  sourceBadgeTemplate: css({
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '2px 8px',
+    borderRadius: '4px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.3px',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: '#94a3b8',
+  }),
+  sourceBadgeFlow: css({
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '2px 8px',
+    borderRadius: '4px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.3px',
+    backgroundColor: 'rgba(59,130,246,0.15)',
+    color: '#60a5fa',
+  }),
+  sourceBadgeFlowOnly: css({
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '2px 8px',
+    borderRadius: '4px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.3px',
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    color: '#4ade80',
+  }),
+  revertButton: css({
+    fontSize: '11px',
+    padding: '2px 10px',
+    borderRadius: '4px',
+    background: 'none',
+    border: '1px solid rgba(239,68,68,0.3)',
+    color: '#f87171',
+    cursor: 'pointer',
+    transition: 'all 150ms',
+    '&:hover': { backgroundColor: 'rgba(239,68,68,0.12)' },
+    '&:disabled': { opacity: 0.4, cursor: 'default' },
+  }),
+  overrideTemplateHint: css({
+    fontSize: '11px',
+    color: '#4b5563',
+    marginTop: '4px',
+  }),
+  overrideFields: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    padding: '12px 16px',
+    backgroundColor: 'rgba(59,130,246,0.04)',
+    border: '1px solid rgba(59,130,246,0.15)',
+    borderRadius: '8px',
+  }),
+  overrideFieldsHint: css({
+    fontSize: '11px',
+    color: '#64748b',
+    marginBottom: '4px',
+  }),
+  overrideFieldFull: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  }),
+  overrideFieldGrid: css({
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px',
+  }),
+  overrideFieldHalf: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  }),
+  overrideLabelRow: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  }),
+  overrideFieldLabel: css({
+    fontSize: '10px',
+    fontWeight: 600,
+    letterSpacing: '0.5px',
+    textTransform: 'uppercase' as const,
+    color: '#64748b',
+  }),
+  inheritedBadge: css({
+    fontSize: '9px',
+    fontWeight: 600,
+    padding: '1px 5px',
+    borderRadius: '3px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.3px',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    color: '#64748b',
+  }),
+  templateHintText: css({
+    fontSize: '10px',
+    color: '#4b5563',
+    fontStyle: 'italic',
+  }),
+  overrideInput: css({
+    width: '100%',
+    borderRadius: '6px',
+    backgroundColor: '#0f172a',
+    padding: '6px 12px',
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    color: '#e2e4e9',
+    border: '1px solid #334155',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+    '&:focus': { borderColor: '#60a5fa' },
+  }),
+  overrideInputDisabled: css({
+    width: '100%',
+    borderRadius: '6px',
+    backgroundColor: '#0f172a',
+    padding: '6px 12px',
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    color: '#475569',
+    border: '1px solid #1e293b',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+    cursor: 'not-allowed' as const,
+    opacity: 0.6,
+  }),
+  slaGrid: css({
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '8px',
+  }),
+  slaSubLabel: css({
+    display: 'block',
+    fontSize: '10px',
+    color: '#4b5563',
+    marginBottom: '2px',
+  }),
+
+  // ── Toggle switch ──
+  toggleOff: css({
+    position: 'relative',
+    width: '28px',
+    height: '16px',
+    borderRadius: '8px',
+    backgroundColor: '#334155',
+    border: '1px solid #475569',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+    transition: 'background-color 150ms, border-color 150ms',
+    '&:hover': { backgroundColor: '#475569', borderColor: '#64748b' },
+  }),
+  toggleOn: css({
+    position: 'relative',
+    width: '28px',
+    height: '16px',
+    borderRadius: '8px',
+    backgroundColor: '#3b82f6',
+    border: '1px solid #60a5fa',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+    transition: 'background-color 150ms, border-color 150ms',
+    '&:hover': { backgroundColor: '#2563eb', borderColor: '#3b82f6' },
+  }),
+  toggleKnobOff: css({
+    position: 'absolute',
+    top: '2px',
+    left: '2px',
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#94a3b8',
+    transition: 'left 150ms, background-color 150ms',
+  }),
+  toggleKnobOn: css({
+    position: 'absolute',
+    top: '2px',
+    left: '14px',
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    backgroundColor: '#fff',
+    transition: 'left 150ms, background-color 150ms',
   }),
 
   editActions: css({

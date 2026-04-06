@@ -9,7 +9,9 @@ import { useGrafanaMetrics } from '../features/topology/application/useGrafanaMe
 import { buildMetricQueriesMap, buildRawMetricQueriesMap } from '../features/topology/application/metricQueriesMap';
 import { buildMetricDatasourceMap, buildEntityDefaultDatasourceMap } from '../features/topology/application/metricDatasourceMap';
 import { saveNodeTemplate, saveEdgeTemplate, saveFlow } from '../features/topology/application/topologyApi';
-import type { NodeTemplate } from '../features/topology/application/topologyDefinition';
+import type { NodeTemplate, TopologyDefinitionRefs } from '../features/topology/application/topologyDefinition';
+import { applyFlowOverridePatch } from '../features/topology/application/flowOverridePatch';
+import type { FlowOverridePatch } from '../features/topology/application/flowOverridePatch';
 import { TopologyView } from '../features/topology/ui/TopologyView';
 import type { AddableNodeKind } from '../features/topology/ui/TopologyView';
 import { AddNodeModal } from '../features/topology/ui/AddNodeModal';
@@ -37,6 +39,7 @@ import { EntityDatasourceProvider } from '../features/topology/ui/EntityDatasour
 import { DeleteCardProvider } from '../features/topology/ui/DeleteCardContext';
 import { SaveAllMetricQueriesProvider } from '../features/topology/ui/SaveAllMetricQueriesContext';
 import type { MetricChange } from '../features/topology/ui/SaveAllMetricQueriesContext';
+import { FlowDataProvider } from '../features/topology/ui/FlowDataContext';
 
 const POLL_INTERVAL_MS = 30000;
 
@@ -122,6 +125,27 @@ function TopologyPage(): React.JSX.Element {
   const entry = useMemo(
     () => topologies.find((t) => t.id === effectiveId),
     [topologies, effectiveId],
+  );
+
+  const flowRefs = useMemo((): TopologyDefinitionRefs | undefined => {
+    if (entry === undefined) {
+      return undefined;
+    }
+    return (entry.raw as Record<string, unknown>).definition as TopologyDefinitionRefs;
+  }, [entry]);
+
+  const handleSaveFlowOverride = useCallback(
+    async (entityId: string, entityType: 'node' | 'edge', patch: FlowOverridePatch): Promise<void> => {
+      if (flowRefs === undefined || entry === undefined) {
+        return;
+      }
+      const updatedRefs = applyFlowOverridePatch(flowRefs, entityId, entityType, patch);
+      const rawFlow = entry.raw as Record<string, unknown>;
+      const updatedFlow = { ...rawFlow, definition: updatedRefs };
+      await saveFlow(effectiveId, updatedFlow);
+      reload();
+    },
+    [flowRefs, entry, effectiveId, reload],
   );
 
   const dataSourceNames = useMemo(
@@ -743,6 +767,7 @@ function TopologyPage(): React.JSX.Element {
                     <EntityDatasourceProvider value={entityDefaultDsMap}>
                       <SaveMetricQueryProvider value={handleSaveMetricQuery}>
                         <SaveAllMetricQueriesProvider value={handleSaveAllMetricQueries}>
+                          <FlowDataProvider value={flowRefs !== undefined ? { flowId: effectiveId, flowRefs, nodeTemplates, edgeTemplates, saveFlowOverride: handleSaveFlowOverride } : undefined}>
                           <DeleteCardProvider value={handleDeleteCard}>
                             <SseRefreshProvider value={0}>
                               <ViewOptionsProvider value={viewOptionsCtx}>
@@ -773,6 +798,7 @@ function TopologyPage(): React.JSX.Element {
                               </ViewOptionsProvider>
                             </SseRefreshProvider>
                           </DeleteCardProvider>
+                          </FlowDataProvider>
                         </SaveAllMetricQueriesProvider>
                       </SaveMetricQueryProvider>
                     </EntityDatasourceProvider>
