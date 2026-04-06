@@ -35,6 +35,45 @@ func withPluginContext(r *http.Request, grafanaURL string, dsMap map[string]stri
 	return r.WithContext(ctx)
 }
 
+func TestValidateQueries_RejectsTooManyQueries(t *testing.T) {
+	queries := make(map[string]string, maxQueriesPerDS+1)
+	for i := 0; i <= maxQueriesPerDS; i++ {
+		queries[fmt.Sprintf("key-%d", i)] = "up"
+	}
+	req := MetricsBatchRequest{
+		Queries: map[string]map[string]string{"ds1": queries},
+	}
+	if err := validateQueries(req); err == nil {
+		t.Fatal("expected error for too many queries")
+	}
+}
+
+func TestValidateQueries_RejectsTooLongPromQL(t *testing.T) {
+	long := make([]byte, maxPromQLLen+1)
+	for i := range long {
+		long[i] = 'x'
+	}
+	req := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"k": string(long)},
+		},
+	}
+	if err := validateQueries(req); err == nil {
+		t.Fatal("expected error for too-long PromQL expression")
+	}
+}
+
+func TestValidateQueries_AcceptsValidRequest(t *testing.T) {
+	req := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"k1": "up", "k2": "avg(cpu)"},
+		},
+	}
+	if err := validateQueries(req); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
 func TestHandleMetrics_EmptyQueries(t *testing.T) {
 	app := &App{
 		httpClient:    http.DefaultClient,

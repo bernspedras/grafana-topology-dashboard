@@ -137,6 +137,7 @@ func TestSafeFileName(t *testing.T) {
 		{"a->b", "a-_b"},
 		{"../../etc/passwd", "______etc_passwd"},
 		{"normal_id-123", "normal_id-123"},
+		{"", "_empty_"},
 	}
 	for _, c := range cases {
 		got := safeFileName(c.in)

@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const maxCacheEntries = 500
+
 // BaselineCache is a simple in-memory TTL cache for week-ago (baseline)
 // Prometheus query results. Baseline data is 7 days old and barely changes,
 // so caching avoids re-fetching it on every 30-second poll.
@@ -50,6 +52,10 @@ func (c *BaselineCache) Set(key string, results map[string]*float64) {
 		if now.After(e.expiresAt) {
 			delete(c.entries, k)
 		}
+	}
+
+	if len(c.entries) >= maxCacheEntries {
+		return
 	}
 
 	c.entries[key] = cacheEntry{

@@ -13,6 +13,13 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
+// ─── Query limits ───────────────────────────────────────────────────────────
+
+const (
+	maxPromQLLen    = 2048 // max characters per PromQL expression
+	maxQueriesPerDS = 500  // max queries per datasource per request
+)
+
 // ─── Request / Response types ────────────────────────────────────────────────
 
 // MetricsBatchRequest is the JSON body sent by the frontend.
@@ -44,7 +51,13 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 	var req MetricsBatchRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		a.logger.Warn("Invalid request body", "error", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validateQueries(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -230,6 +243,22 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string)
 		}
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// validateQueries checks that the request does not exceed per-datasource query
+// count or per-expression length limits.
+func validateQueries(req MetricsBatchRequest) error {
+	for dsName, queries := range req.Queries {
+		if len(queries) > maxQueriesPerDS {
+			return fmt.Errorf("too many queries for datasource %q: %d (max %d)", dsName, len(queries), maxQueriesPerDS)
+		}
+		for key, promql := range queries {
+			if len(promql) > maxPromQLLen {
+				return fmt.Errorf("PromQL expression too long for key %q: %d chars (max %d)", key, len(promql), maxPromQLLen)
+			}
+		}
+	}
+	return nil
 }
 
 // basicAuth encodes credentials for HTTP Basic Authentication.

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { FlowStepNode } from '../domain';
 
@@ -34,7 +35,8 @@ export function FlowStepDetailsModal({ flowStep, onClose }: FlowStepDetailsModal
     if (flowStep.moreDetails === undefined || flowStep.moreDetails.trim() === '') {
       return '<p style="color:#94a3b8;text-align:center;">No additional details.</p>';
     }
-    return marked.parse(flowStep.moreDetails, { async: false });
+    const raw = marked.parse(flowStep.moreDetails, { async: false });
+    return DOMPurify.sanitize(raw);
   }, [flowStep.moreDetails]);
 
   return createPortal(

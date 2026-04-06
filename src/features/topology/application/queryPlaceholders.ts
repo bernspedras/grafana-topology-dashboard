@@ -1,5 +1,15 @@
 import type { EdgeDefinition } from './topologyDefinition';
 
+// ─── PromQL label value escaping ────────────────────────────────────────────
+
+/**
+ * Escapes characters that are special inside a double-quoted PromQL label value.
+ * Inside `"..."`, only `\` and `"` need escaping per the PromQL spec.
+ */
+function escapePromqlLabelValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 // ─── Deployment placeholder (nodes) ─────────────────────────────────────────
 
 /**
@@ -7,7 +17,7 @@ import type { EdgeDefinition } from './topologyDefinition';
  * If `deployment` is undefined, replaces with `.*` (aggregate over all).
  */
 export function resolveDeploymentPlaceholder(promql: string, deployment: string | undefined): string {
-  return promql.replaceAll('{{deployment}}', deployment ?? '.*');
+  return promql.replaceAll('{{deployment}}', escapePromqlLabelValue(deployment ?? '.*'));
 }
 
 // ─── HTTP edge placeholders ─────────────────────────────────────────────────
@@ -19,11 +29,11 @@ export function resolveDeploymentPlaceholder(promql: string, deployment: string 
 export function resolveHttpPlaceholders(promql: string, edge: EdgeDefinition): string {
   let resolved = promql;
   if (edge.kind === 'http-json' || edge.kind === 'http-xml') {
-    resolved = resolved.replaceAll('{{method}}', edge.method ?? '.*');
-    resolved = resolved.replaceAll('{{endpointPath}}', edge.endpointPath ?? '.*');
+    resolved = resolved.replaceAll('{{method}}', escapePromqlLabelValue(edge.method ?? '.*'));
+    resolved = resolved.replaceAll('{{endpointPath}}', escapePromqlLabelValue(edge.endpointPath ?? '.*'));
   }
   if (edge.kind === 'http-xml') {
-    resolved = resolved.replaceAll('{{soapAction}}', edge.soapAction ?? '.*');
+    resolved = resolved.replaceAll('{{soapAction}}', escapePromqlLabelValue(edge.soapAction ?? '.*'));
   }
   return resolved;
 }
@@ -41,11 +51,11 @@ export function resolveHttpPlaceholdersWithEndpoint(
 ): string {
   let resolved = promql;
   if (edge.kind === 'http-json' || edge.kind === 'http-xml') {
-    resolved = resolved.replaceAll('{{method}}', edge.method ?? '.*');
-    resolved = resolved.replaceAll('{{endpointPath}}', endpointPath);
+    resolved = resolved.replaceAll('{{method}}', escapePromqlLabelValue(edge.method ?? '.*'));
+    resolved = resolved.replaceAll('{{endpointPath}}', escapePromqlLabelValue(endpointPath));
   }
   if (edge.kind === 'http-xml') {
-    resolved = resolved.replaceAll('{{soapAction}}', (edge as { soapAction?: string }).soapAction ?? '.*');
+    resolved = resolved.replaceAll('{{soapAction}}', escapePromqlLabelValue((edge as { soapAction?: string }).soapAction ?? '.*'));
   }
   return resolved;
 }
@@ -58,7 +68,7 @@ export function resolveHttpPlaceholdersWithEndpoint(
  * If `routingKeyFilter` is undefined, replaces with `.*` (aggregate over all).
  */
 export function resolveRoutingKeyPlaceholder(promql: string, routingKeyFilter: string | undefined): string {
-  return promql.replaceAll('{{routingKeyFilter}}', (routingKeyFilter ?? '.*').replaceAll('\\', '\\\\'));
+  return promql.replaceAll('{{routingKeyFilter}}', escapePromqlLabelValue(routingKeyFilter ?? '.*'));
 }
 
 // ─── Aggregate (all placeholders → .*) ────────────────────────────────────

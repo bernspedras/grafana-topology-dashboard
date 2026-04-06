@@ -45,6 +45,9 @@ type FlowListItem struct {
 var unsafeChars = regexp.MustCompile(`[^a-zA-Z0-9_\-]`)
 
 func safeFileName(id string) string {
+	if id == "" {
+		return "_empty_"
+	}
 	return unsafeChars.ReplaceAllString(id, "_")
 }
 
