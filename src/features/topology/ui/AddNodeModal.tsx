@@ -33,7 +33,7 @@ interface EKSPayload {
   readonly dataSource: string;
   readonly namespace: string;
   readonly deploymentNames: readonly string[];
-  readonly prometheus: Record<string, never>;
+  readonly metrics: Record<string, never>;
 }
 
 interface EC2Payload {
@@ -45,7 +45,7 @@ interface EC2Payload {
   readonly instanceType: string;
   readonly availabilityZone: string;
   readonly amiId: string | undefined;
-  readonly prometheus: Record<string, never>;
+  readonly metrics: Record<string, never>;
 }
 
 interface DatabasePayload {
@@ -55,7 +55,7 @@ interface DatabasePayload {
   readonly dataSource: string;
   readonly engine: string;
   readonly isReadReplica: boolean;
-  readonly prometheus: Record<string, never>;
+  readonly metrics: Record<string, never>;
 }
 
 interface ExternalPayload {
@@ -64,7 +64,7 @@ interface ExternalPayload {
   readonly label: string;
   readonly dataSource: string;
   readonly provider: string;
-  readonly prometheus: Record<string, never>;
+  readonly metrics: Record<string, never>;
 }
 
 export type NodeTemplatePayload = EKSPayload | EC2Payload | DatabasePayload | ExternalPayload;
@@ -175,7 +175,7 @@ export function AddNodeModal({ kind, templates, dataSourceNames, onClose, onSele
       return;
     }
 
-    const base = { id, label: label.trim(), dataSource, prometheus: {} as Record<string, never> };
+    const base = { id, label: label.trim(), dataSource, metrics: {} as Record<string, never> };
 
     switch (kind) {
       case 'eks-service': {

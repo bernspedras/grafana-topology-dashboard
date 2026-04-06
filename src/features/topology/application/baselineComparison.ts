@@ -1,4 +1,3 @@
-import { METRIC_DIRECTIONS } from '../domain/metrics';
 import type { MetricDirection } from '../domain/metrics';
 import { getBaselineThresholds } from './baselineThresholdConfig';
 
@@ -11,7 +10,7 @@ export function compareToBaseline(
   explicitDirection?: MetricDirection,
 ): BaselineStatus {
   if (weekAgo === undefined || weekAgo === 0) return 'no-baseline';
-  const direction: MetricDirection | undefined = explicitDirection ?? (METRIC_DIRECTIONS[metricKey] as MetricDirection | undefined);
+  const direction: MetricDirection | undefined = explicitDirection;
   if (direction === undefined) return 'no-baseline';
   const { warningRatio, criticalRatio } = getBaselineThresholds();
   const ratio = (current - weekAgo) / weekAgo;

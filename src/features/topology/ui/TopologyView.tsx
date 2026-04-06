@@ -22,6 +22,7 @@ import { useTopologyId } from '../application/TopologyIdContext';
 import { useViewOptions } from './ViewOptionsContext';
 import type { ViewOptionKey } from './ViewOptionsContext';
 import { useSlaMap } from './SlaContext';
+import { useDirectionMap } from './DirectionContext';
 import type { ColoringMode } from '../application/metricColor';
 
 interface TopologyViewProps {
@@ -247,8 +248,9 @@ function SettingsMenu(): React.JSX.Element {
 export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson }: TopologyViewProps): React.JSX.Element {
   const { options: viewOpts } = useViewOptions();
   const slaMap = useSlaMap();
+  const dirMap = useDirectionMap();
   const { nodes, edges, onNodesChange, onReconnect, getCurrentLayout } =
-    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode);
+    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode, dirMap);
 
   const topologyId = useTopologyId();
   const toast = useToast();

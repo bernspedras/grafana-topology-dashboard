@@ -7,6 +7,7 @@ import { useTopologyId } from './TopologyIdContext';
 import { edgeStrokeStyle, edgeMarkerEnd, lowPolyEdgeStrokeStyle, lowPolyEdgeMarkerEnd } from './edgeStyles';
 import type { ColoringMode } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
+import type { MetricDirectionMap } from './directionMap';
 
 interface UseTopologyFlowResult {
   readonly nodes: Node[];
@@ -22,6 +23,7 @@ export function useTopologyFlow(
   coloringMode?: ColoringMode,
   slaMap?: Readonly<Record<string, SlaThresholdMap>>,
   lowPolyMode?: boolean,
+  directionMap?: Readonly<Record<string, MetricDirectionMap>>,
 ): UseTopologyFlowResult {
   const topologyId = useTopologyId();
 
@@ -63,17 +65,18 @@ export function useTopologyFlow(
       const domainEdge = (edge.data as { domainEdge?: TopologyEdge } | undefined)?.domainEdge;
       if (domainEdge === undefined) return edge;
       const sla = slaMap?.[domainEdge.id];
+      const dirs = directionMap?.[domainEdge.id];
       return {
         ...edge,
         style: lowPolyMode === true
-          ? lowPolyEdgeStrokeStyle(domainEdge, coloringMode, sla)
-          : edgeStrokeStyle(domainEdge, coloringMode, sla),
+          ? lowPolyEdgeStrokeStyle(domainEdge, coloringMode, sla, dirs)
+          : edgeStrokeStyle(domainEdge, coloringMode, sla, dirs),
         markerEnd: lowPolyMode === true
-          ? lowPolyEdgeMarkerEnd(domainEdge, coloringMode, sla)
-          : edgeMarkerEnd(domainEdge, coloringMode, sla),
+          ? lowPolyEdgeMarkerEnd(domainEdge, coloringMode, sla, dirs)
+          : edgeMarkerEnd(domainEdge, coloringMode, sla, dirs),
       };
     });
-  }, [storeEdges, coloringMode, slaMap, lowPolyMode]);
+  }, [storeEdges, coloringMode, slaMap, lowPolyMode, directionMap]);
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {

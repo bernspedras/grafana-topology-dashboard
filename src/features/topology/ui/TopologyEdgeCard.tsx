@@ -23,6 +23,7 @@ import { useRawPromqlQueries } from './RawPromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
+import { useDirections } from './DirectionContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricChartModal } from './MetricChartModal';
 import { useTopologyId } from '../application/TopologyIdContext';
@@ -475,7 +476,8 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const protocolColor = edgeProtocolColor(edge);
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(edge.id);
-  const health = edgeHealth(edge, viewOptions.coloringMode, sla);
+  const directions = useDirections(edge.id);
+  const health = edgeHealth(edge, viewOptions.coloringMode, sla, directions);
   const dotColor = HEALTH_DOT[health];
   const endpoint = edgeEndpointLabel(edge);
   const showEndpointSelect = isHttpEdge(edge) || hasSelectableRoutingKeys(edge) || hasSelectableEndpointPaths(edge);
@@ -483,7 +485,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
 
   // If no endpoint/routing key defined, force "all"
   const effectiveEndpoint = edgeHasEndpoint ? selectedEndpoint : 'all';
-  const allMetrics = edgeMetricRows(edge, effectiveEndpoint, viewOptions.coloringMode, sla);
+  const allMetrics = edgeMetricRows(edge, effectiveEndpoint, viewOptions.coloringMode, sla, directions);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
 
   if (viewOptions.lowPolyMode) {

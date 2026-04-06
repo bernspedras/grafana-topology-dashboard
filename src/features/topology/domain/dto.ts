@@ -5,22 +5,22 @@
 // ─── Metrics DTOs ───────────────────────────────────────────────────────────
 
 export interface NodeMetricsDto {
-  readonly cpuPercent: number | undefined;
-  readonly memoryPercent: number | undefined;
-  readonly cpuPercentWeekAgo: number | undefined;
-  readonly memoryPercentWeekAgo: number | undefined;
+  readonly cpu: number | undefined;
+  readonly memory: number | undefined;
+  readonly cpuWeekAgo: number | undefined;
+  readonly memoryWeekAgo: number | undefined;
   readonly lastUpdatedAt: string;
 }
 
 export interface BaseEdgeMetricsDto {
-  readonly latencyP95Ms: number | undefined;
-  readonly latencyAvgMs: number | undefined;
+  readonly latencyP95: number | undefined;
+  readonly latencyAvg: number | undefined;
   readonly rps: number | undefined;
-  readonly errorRatePercent: number | undefined;
-  readonly latencyP95MsWeekAgo: number | undefined;
-  readonly latencyAvgMsWeekAgo: number | undefined;
+  readonly errorRate: number | undefined;
+  readonly latencyP95WeekAgo: number | undefined;
+  readonly latencyAvgWeekAgo: number | undefined;
   readonly rpsWeekAgo: number | undefined;
-  readonly errorRatePercentWeekAgo: number | undefined;
+  readonly errorRateWeekAgo: number | undefined;
   readonly lastUpdatedAt: string;
 }
 
@@ -57,10 +57,10 @@ export interface DeploymentMetricsDto {
   readonly name: string;
   readonly readyReplicas: number | undefined;
   readonly desiredReplicas: number | undefined;
-  readonly cpuPercent: number;
-  readonly memoryPercent: number;
-  readonly cpuPercentWeekAgo: number | undefined;
-  readonly memoryPercentWeekAgo: number | undefined;
+  readonly cpu: number;
+  readonly memory: number;
+  readonly cpuWeekAgo: number | undefined;
+  readonly memoryWeekAgo: number | undefined;
   readonly customMetrics?: readonly CustomMetricValueDto[];
 }
 
@@ -182,24 +182,24 @@ export interface TcpDbConnectionEdgeDto {
 }
 
 export interface AmqpEdgeMetricsDto extends BaseEdgeMetricsDto {
-  readonly queueResidenceTimeP95Ms: number | undefined;
-  readonly queueResidenceTimeAvgMs: number | undefined;
-  readonly queueResidenceTimeP95MsWeekAgo: number | undefined;
-  readonly queueResidenceTimeAvgMsWeekAgo: number | undefined;
-  readonly consumerProcessingTimeP95Ms: number | undefined;
-  readonly consumerProcessingTimeAvgMs: number | undefined;
-  readonly consumerProcessingTimeP95MsWeekAgo: number | undefined;
-  readonly consumerProcessingTimeAvgMsWeekAgo: number | undefined;
-  readonly e2eLatencyP95Ms: number | undefined;
-  readonly e2eLatencyAvgMs: number | undefined;
-  readonly e2eLatencyP95MsWeekAgo: number | undefined;
-  readonly e2eLatencyAvgMsWeekAgo: number | undefined;
+  readonly queueResidenceTimeP95: number | undefined;
+  readonly queueResidenceTimeAvg: number | undefined;
+  readonly queueResidenceTimeP95WeekAgo: number | undefined;
+  readonly queueResidenceTimeAvgWeekAgo: number | undefined;
+  readonly consumerProcessingTimeP95: number | undefined;
+  readonly consumerProcessingTimeAvg: number | undefined;
+  readonly consumerProcessingTimeP95WeekAgo: number | undefined;
+  readonly consumerProcessingTimeAvgWeekAgo: number | undefined;
+  readonly e2eLatencyP95: number | undefined;
+  readonly e2eLatencyAvg: number | undefined;
+  readonly e2eLatencyP95WeekAgo: number | undefined;
+  readonly e2eLatencyAvgWeekAgo: number | undefined;
   readonly queueDepth: number | undefined;
   readonly queueDepthWeekAgo: number | undefined;
   readonly consumerRps: number | undefined;
   readonly consumerRpsWeekAgo: number | undefined;
-  readonly consumerErrorRatePercent: number | undefined;
-  readonly consumerErrorRatePercentWeekAgo: number | undefined;
+  readonly consumerErrorRate: number | undefined;
+  readonly consumerErrorRateWeekAgo: number | undefined;
 }
 
 export interface AmqpEdgeDto {
@@ -218,24 +218,24 @@ export interface AmqpEdgeDto {
 }
 
 export interface KafkaEdgeMetricsDto extends BaseEdgeMetricsDto {
-  readonly queueResidenceTimeP95Ms: number | undefined;
-  readonly queueResidenceTimeAvgMs: number | undefined;
-  readonly queueResidenceTimeP95MsWeekAgo: number | undefined;
-  readonly queueResidenceTimeAvgMsWeekAgo: number | undefined;
-  readonly consumerProcessingTimeP95Ms: number | undefined;
-  readonly consumerProcessingTimeAvgMs: number | undefined;
-  readonly consumerProcessingTimeP95MsWeekAgo: number | undefined;
-  readonly consumerProcessingTimeAvgMsWeekAgo: number | undefined;
-  readonly e2eLatencyP95Ms: number | undefined;
-  readonly e2eLatencyAvgMs: number | undefined;
-  readonly e2eLatencyP95MsWeekAgo: number | undefined;
-  readonly e2eLatencyAvgMsWeekAgo: number | undefined;
+  readonly queueResidenceTimeP95: number | undefined;
+  readonly queueResidenceTimeAvg: number | undefined;
+  readonly queueResidenceTimeP95WeekAgo: number | undefined;
+  readonly queueResidenceTimeAvgWeekAgo: number | undefined;
+  readonly consumerProcessingTimeP95: number | undefined;
+  readonly consumerProcessingTimeAvg: number | undefined;
+  readonly consumerProcessingTimeP95WeekAgo: number | undefined;
+  readonly consumerProcessingTimeAvgWeekAgo: number | undefined;
+  readonly e2eLatencyP95: number | undefined;
+  readonly e2eLatencyAvg: number | undefined;
+  readonly e2eLatencyP95WeekAgo: number | undefined;
+  readonly e2eLatencyAvgWeekAgo: number | undefined;
   readonly consumerLag: number | undefined;
   readonly consumerLagWeekAgo: number | undefined;
   readonly consumerRps: number | undefined;
   readonly consumerRpsWeekAgo: number | undefined;
-  readonly consumerErrorRatePercent: number | undefined;
-  readonly consumerErrorRatePercentWeekAgo: number | undefined;
+  readonly consumerErrorRate: number | undefined;
+  readonly consumerErrorRateWeekAgo: number | undefined;
 }
 
 export interface KafkaEdgeDto {
@@ -281,9 +281,9 @@ export interface FlowStepDto {
   readonly moreDetails: string | undefined;
 }
 
-// ─── PromQL queries map ─────────────────────────────────────────────────────
+// ─── Metric queries map ─────────────────────────────────────────────────────
 
-export type PromqlQueriesMap = Record<string, Record<string, string>>;
+export type MetricQueriesMap = Record<string, Record<string, string>>;
 
 // ─── Graph DTO ──────────────────────────────────────────────────────────────
 
@@ -292,6 +292,6 @@ export interface TopologyGraphDto {
   readonly edges: readonly TopologyEdgeDto[];
   readonly flowSteps?: readonly FlowStepDto[];
   readonly updatedAt: string;
-  readonly promqlQueries: PromqlQueriesMap;
+  readonly metricQueries: MetricQueriesMap;
   readonly pollIntervalMs: number;
 }

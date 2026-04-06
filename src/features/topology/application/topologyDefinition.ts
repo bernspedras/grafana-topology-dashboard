@@ -1,55 +1,131 @@
-// ─── Per-metric datasource support ──────────────────────────────────────────
-// A metric query is either a plain PromQL string (uses the entity's dataSource)
-// or an object with an explicit dataSource override.
+import type { MetricDirection } from '../domain/metrics';
 
-export type MetricQuery = string | { readonly query: string; readonly dataSource: string };
+// ─── Metric definition ──────────────────────────────────────────────────────
+// Every metric — built-in or custom — is always an object with query, unit,
+// direction, and optional datasource/SLA overrides.
 
-/** Extract the PromQL string from a MetricQuery. */
-export function metricQueryPromql(m: MetricQuery | null | undefined): string | undefined {
-  if (m == null) return undefined;
-  return typeof m === 'string' ? m : m.query;
+export type BuiltinMetricUnit = 'percent' | 'ms' | 'req/s' | 'msg/s' | 'count' | 'count/min' | 'GB';
+export type MetricUnit = BuiltinMetricUnit | (string & {});
+
+export interface MetricDefinition {
+  readonly query: string;
+  readonly unit: MetricUnit;
+  readonly direction: MetricDirection;
+  readonly dataSource: string | undefined;
+  readonly sla: { readonly warning: number; readonly critical: number } | undefined;
 }
 
-/** Extract the per-metric dataSource override, if any. */
-export function metricQueryDataSource(m: MetricQuery | null | undefined): string | undefined {
-  if (m == null) return undefined;
-  return typeof m === 'string' ? undefined : m.dataSource;
+// ─── Node metric queries ────────────────────────────────────────────────────
+
+export interface NodeMetricQueries {
+  readonly cpu: MetricDefinition | undefined;
+  readonly memory: MetricDefinition | undefined;
+  readonly readyReplicas: MetricDefinition | undefined;
+  readonly desiredReplicas: MetricDefinition | undefined;
 }
 
-// ─── Metric query keys ──────────────────────────────────────────────────────
+// ─── HTTP / gRPC edge metric queries ────────────────────────────────────────
 
-export interface NodePrometheusQueries {
-  readonly cpu: MetricQuery | undefined;
-  readonly memory: MetricQuery | undefined;
-  readonly readyReplicas?: MetricQuery;
-  readonly desiredReplicas?: MetricQuery;
+export interface HttpEdgeMetricQueries {
+  readonly rps: MetricDefinition | undefined;
+  readonly latencyP95: MetricDefinition | undefined;
+  readonly latencyAvg: MetricDefinition | undefined;
+  readonly errorRate: MetricDefinition | undefined;
 }
 
-export interface HttpEdgePrometheusQueries {
-  readonly rps: MetricQuery;
-  readonly latencyP95: MetricQuery | undefined;
-  readonly latencyAvg: MetricQuery | undefined;
-  readonly errorRate: MetricQuery;
+// ─── TCP-DB edge metric queries ─────────────────────────────────────────────
+
+export interface DbEdgeMetricQueries extends HttpEdgeMetricQueries {
+  readonly activeConnections: MetricDefinition | undefined;
+  readonly idleConnections: MetricDefinition | undefined;
+  readonly avgQueryTimeMs: MetricDefinition | undefined;
+  readonly poolHitRatePercent: MetricDefinition | undefined;
+  readonly poolTimeoutsPerMin: MetricDefinition | undefined;
+  readonly staleConnectionsPerMin: MetricDefinition | undefined;
 }
 
-export interface DbEdgePrometheusQueries extends HttpEdgePrometheusQueries {
-  readonly activeConnections: MetricQuery;
-  readonly idleConnections: MetricQuery;
-  readonly avgQueryTimeMs: MetricQuery | undefined;
-  readonly poolHitRatePercent: MetricQuery;
-  readonly poolTimeoutsPerMin: MetricQuery;
-  readonly staleConnectionsPerMin: MetricQuery;
+// ─── AMQP metric queries (publish / queue / consumer) ───────────────────────
+
+export interface AmqpPublishMetricQueries {
+  readonly rps: MetricDefinition | undefined;
+  readonly latencyP95: MetricDefinition | undefined;
+  readonly latencyAvg: MetricDefinition | undefined;
+  readonly errorRate: MetricDefinition | undefined;
 }
 
-// ─── Custom metrics (per-topology overrides) ─────────────────────────────────
+export interface AmqpQueueMetricQueries {
+  readonly queueDepth: MetricDefinition | undefined;
+  readonly queueResidenceTimeP95: MetricDefinition | undefined;
+  readonly queueResidenceTimeAvg: MetricDefinition | undefined;
+  readonly e2eLatencyP95: MetricDefinition | undefined;
+  readonly e2eLatencyAvg: MetricDefinition | undefined;
+}
+
+export interface AmqpConsumerMetricQueries {
+  readonly rps: MetricDefinition | undefined;
+  readonly errorRate: MetricDefinition | undefined;
+  readonly processingTimeP95: MetricDefinition | undefined;
+  readonly processingTimeAvg: MetricDefinition | undefined;
+}
+
+export interface AmqpPublishSection {
+  readonly routingKeyFilter: string | undefined;
+  readonly metrics: AmqpPublishMetricQueries;
+}
+
+export interface AmqpQueueSection {
+  readonly metrics: AmqpQueueMetricQueries;
+}
+
+export interface AmqpConsumerSection {
+  readonly routingKeyFilter: string | undefined;
+  readonly metrics: AmqpConsumerMetricQueries;
+}
+
+// ─── Kafka metric queries (publish / topic / consumer) ──────────────────────
+
+export interface KafkaPublishMetricQueries {
+  readonly rps: MetricDefinition | undefined;
+  readonly latencyP95: MetricDefinition | undefined;
+  readonly latencyAvg: MetricDefinition | undefined;
+  readonly errorRate: MetricDefinition | undefined;
+}
+
+export interface KafkaTopicMetricQueries {
+  readonly consumerLag: MetricDefinition | undefined;
+  readonly e2eLatencyP95: MetricDefinition | undefined;
+  readonly e2eLatencyAvg: MetricDefinition | undefined;
+}
+
+export interface KafkaConsumerMetricQueries {
+  readonly rps: MetricDefinition | undefined;
+  readonly errorRate: MetricDefinition | undefined;
+  readonly processingTimeP95: MetricDefinition | undefined;
+  readonly processingTimeAvg: MetricDefinition | undefined;
+}
+
+export interface KafkaPublishSection {
+  readonly metrics: KafkaPublishMetricQueries;
+}
+
+export interface KafkaTopicSection {
+  readonly metrics: KafkaTopicMetricQueries;
+}
+
+export interface KafkaConsumerSection {
+  readonly metrics: KafkaConsumerMetricQueries;
+}
+
+// ─── Custom metrics (per-topology overrides) ────────────────────────────────
 
 export interface CustomMetricDefinition {
   readonly key: string;
   readonly label: string;
-  readonly promql: string;
+  readonly query: string;
+  readonly unit: MetricUnit;
+  readonly direction: MetricDirection;
   readonly dataSource: string | undefined;
-  readonly unit: string | undefined;
-  readonly direction: 'lower-is-better' | 'higher-is-better' | undefined;
+  readonly sla: { readonly warning: number; readonly critical: number } | undefined;
   readonly description: string | undefined;
 }
 
@@ -61,16 +137,15 @@ export interface BaseNodeDefinition {
   readonly id: string;
   readonly label: string;
   readonly dataSource: string;
-  readonly prometheus: NodePrometheusQueries;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly metrics: NodeMetricQueries;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface EKSServiceNodeDefinition extends BaseNodeDefinition {
   readonly kind: 'eks-service';
   readonly namespace: string;
-  readonly deploymentNames?: readonly string[];
-  readonly usedDeployment?: string;
+  readonly deploymentNames: readonly string[] | undefined;
+  readonly usedDeployment: string | undefined;
 }
 
 export interface EC2ServiceNodeDefinition extends BaseNodeDefinition {
@@ -118,12 +193,11 @@ export interface HttpJsonEdgeDefinition {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: HttpEdgePrometheusQueries;
+  readonly metrics: HttpEdgeMetricQueries;
   readonly method: string | undefined;
   readonly endpointPath: string | undefined;
-  readonly endpointPaths?: readonly string[];
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly endpointPaths: readonly string[] | undefined;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface HttpXmlEdgeDefinition {
@@ -132,13 +206,12 @@ export interface HttpXmlEdgeDefinition {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: HttpEdgePrometheusQueries;
+  readonly metrics: HttpEdgeMetricQueries;
   readonly method: string | undefined;
   readonly endpointPath: string | undefined;
   readonly soapAction: string | undefined;
-  readonly endpointPaths?: readonly string[];
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly endpointPaths: readonly string[] | undefined;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface TcpDbEdgeDefinition {
@@ -147,40 +220,10 @@ export interface TcpDbEdgeDefinition {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: DbEdgePrometheusQueries;
+  readonly metrics: DbEdgeMetricQueries;
   readonly poolSize: number | undefined;
   readonly port: number | undefined;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
-}
-
-export interface AmqpPublishPrometheusQueries {
-  readonly rps: MetricQuery | undefined;
-  readonly latencyP95: MetricQuery | undefined;
-  readonly latencyAvg: MetricQuery | undefined;
-  readonly errorRate: MetricQuery | undefined;
-}
-
-export interface AmqpConsumerPrometheusQueries {
-  readonly rps: MetricQuery | undefined;
-  readonly latencyP95: MetricQuery | undefined;
-  readonly latencyAvg: MetricQuery | undefined;
-  readonly errorRate: MetricQuery | undefined;
-  readonly processingTimeP95: MetricQuery | undefined;
-  readonly processingTimeAvg: MetricQuery | undefined;
-  readonly queueDepth: MetricQuery | undefined;
-  readonly queueResidenceTimeP95: MetricQuery | undefined;
-  readonly queueResidenceTimeAvg: MetricQuery | undefined;
-}
-
-export interface AmqpPublishSection {
-  readonly routingKeyFilter: string | undefined;
-  readonly prometheus: AmqpPublishPrometheusQueries;
-}
-
-export interface AmqpConsumerSection {
-  readonly routingKeyFilter: string | undefined;
-  readonly prometheus: AmqpConsumerPrometheusQueries;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface AmqpEdgeDefinition {
@@ -191,35 +234,10 @@ export interface AmqpEdgeDefinition {
   readonly dataSource: string;
   readonly exchange: string;
   readonly publish: AmqpPublishSection;
+  readonly queue: AmqpQueueSection | undefined;
   readonly consumer: AmqpConsumerSection | undefined;
-  readonly routingKeyFilters?: readonly string[];
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
-}
-
-export interface KafkaPublishPrometheusQueries {
-  readonly rps: MetricQuery | undefined;
-  readonly latencyP95: MetricQuery | undefined;
-  readonly latencyAvg: MetricQuery | undefined;
-  readonly errorRate: MetricQuery | undefined;
-}
-
-export interface KafkaConsumerPrometheusQueries {
-  readonly rps: MetricQuery | undefined;
-  readonly latencyP95: MetricQuery | undefined;
-  readonly latencyAvg: MetricQuery | undefined;
-  readonly errorRate: MetricQuery | undefined;
-  readonly processingTimeP95: MetricQuery | undefined;
-  readonly processingTimeAvg: MetricQuery | undefined;
-  readonly consumerLag: MetricQuery | undefined;
-}
-
-export interface KafkaPublishSection {
-  readonly prometheus: KafkaPublishPrometheusQueries;
-}
-
-export interface KafkaConsumerSection {
-  readonly prometheus: KafkaConsumerPrometheusQueries;
+  readonly routingKeyFilters: readonly string[] | undefined;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface KafkaEdgeDefinition {
@@ -231,9 +249,9 @@ export interface KafkaEdgeDefinition {
   readonly topic: string;
   readonly consumerGroup: string | undefined;
   readonly publish: KafkaPublishSection;
+  readonly topicMetrics: KafkaTopicSection | undefined;
   readonly consumer: KafkaConsumerSection | undefined;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface GrpcEdgeDefinition {
@@ -242,11 +260,10 @@ export interface GrpcEdgeDefinition {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: HttpEdgePrometheusQueries;
+  readonly metrics: HttpEdgeMetricQueries;
   readonly grpcService: string;
   readonly grpcMethod: string;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export type EdgeDefinition =
@@ -262,7 +279,7 @@ export type EdgeDefinition =
 export interface TopologyDefinition {
   readonly nodes: readonly NodeDefinition[];
   readonly edges: readonly EdgeDefinition[];
-  readonly flowSteps?: readonly FlowStepDefinition[];
+  readonly flowSteps: readonly FlowStepDefinition[] | undefined;
 }
 
 /** Alias for TopologyDefinition — returned by the resolution layer. */
@@ -273,7 +290,8 @@ export type ResolvedTopologyDefinition = TopologyDefinition;
 export interface EKSServiceNodeTemplate extends BaseNodeDefinition {
   readonly kind: 'eks-service';
   readonly namespace: string;
-  readonly deploymentNames?: readonly string[];
+  readonly deploymentNames: readonly string[] | undefined;
+  readonly usedDeployment: string | undefined;
 }
 
 export type NodeTemplate =
@@ -290,9 +308,9 @@ export interface HttpJsonEdgeTemplate {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: HttpEdgePrometheusQueries;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly metrics: HttpEdgeMetricQueries;
+  readonly endpointPaths: readonly string[] | undefined;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export interface HttpXmlEdgeTemplate {
@@ -301,9 +319,9 @@ export interface HttpXmlEdgeTemplate {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: HttpEdgePrometheusQueries;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
-  readonly sla?: Readonly<Record<string, { readonly warning: number; readonly critical: number }>>;
+  readonly metrics: HttpEdgeMetricQueries;
+  readonly endpointPaths: readonly string[] | undefined;
+  readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
 }
 
 export type EdgeTemplate =
@@ -318,18 +336,83 @@ export type EdgeTemplate =
 
 export interface TopologyNodeRef {
   readonly nodeId: string;
-  readonly usedDeployment?: string;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly label?: string | undefined;
+  readonly dataSource?: string | undefined;
+  readonly metrics?: Partial<NodeMetricQueries> | undefined;
+  readonly customMetrics?: readonly CustomMetricDefinition[] | undefined;
+  readonly usedDeployment?: string | undefined;
 }
 
-export interface TopologyEdgeRef {
+// ─── Edge refs (discriminated by kind) ──────────────────────────────────────
+
+interface BaseEdgeRef {
   readonly edgeId: string;
-  readonly method?: string;
-  readonly endpointPath?: string;
-  readonly endpointPaths?: readonly string[];
-  readonly soapAction?: string;
-  readonly routingKeyFilter?: string;
-  readonly customMetrics?: readonly CustomMetricDefinition[];
+  readonly label?: string | undefined;
+  readonly dataSource?: string | undefined;
+  readonly customMetrics?: readonly CustomMetricDefinition[] | undefined;
+}
+
+export interface HttpJsonEdgeRef extends BaseEdgeRef {
+  readonly kind: 'http-json';
+  readonly metrics?: Partial<HttpEdgeMetricQueries> | undefined;
+  readonly method?: string | undefined;
+  readonly endpointPath?: string | undefined;
+  readonly endpointPaths?: readonly string[] | undefined;
+}
+
+export interface HttpXmlEdgeRef extends BaseEdgeRef {
+  readonly kind: 'http-xml';
+  readonly metrics?: Partial<HttpEdgeMetricQueries> | undefined;
+  readonly method?: string | undefined;
+  readonly endpointPath?: string | undefined;
+  readonly soapAction?: string | undefined;
+}
+
+export interface TcpDbEdgeRef extends BaseEdgeRef {
+  readonly kind: 'tcp-db';
+  readonly metrics?: Partial<DbEdgeMetricQueries> | undefined;
+}
+
+export interface AmqpEdgeRef extends BaseEdgeRef {
+  readonly kind: 'amqp';
+  readonly routingKeyFilter?: string | undefined;
+  readonly publish?: { readonly metrics?: Partial<AmqpPublishMetricQueries> | undefined } | undefined;
+  readonly queue?: { readonly metrics?: Partial<AmqpQueueMetricQueries> | undefined } | undefined;
+  readonly consumer?: { readonly metrics?: Partial<AmqpConsumerMetricQueries> | undefined } | undefined;
+}
+
+export interface KafkaEdgeRef extends BaseEdgeRef {
+  readonly kind: 'kafka';
+  readonly consumerGroup?: string | undefined;
+  readonly publish?: { readonly metrics?: Partial<KafkaPublishMetricQueries> | undefined } | undefined;
+  readonly topicMetrics?: { readonly metrics?: Partial<KafkaTopicMetricQueries> | undefined } | undefined;
+  readonly consumer?: { readonly metrics?: Partial<KafkaConsumerMetricQueries> | undefined } | undefined;
+}
+
+export interface GrpcEdgeRef extends BaseEdgeRef {
+  readonly kind: 'grpc';
+  readonly metrics?: Partial<HttpEdgeMetricQueries> | undefined;
+}
+
+export type TopologyEdgeRef =
+  | HttpJsonEdgeRef
+  | HttpXmlEdgeRef
+  | TcpDbEdgeRef
+  | AmqpEdgeRef
+  | KafkaEdgeRef
+  | GrpcEdgeRef;
+
+// ─── Inline definitions & entry types ───────────────────────────────────────
+
+export type TopologyNodeEntry = TopologyNodeRef | NodeTemplate;
+export type TopologyEdgeEntry = TopologyEdgeRef | EdgeTemplate;
+
+export function isNodeRef(entry: TopologyNodeEntry): entry is TopologyNodeRef {
+  return 'nodeId' in entry;
+}
+
+export function isEdgeRef(entry: TopologyEdgeEntry): entry is TopologyEdgeRef {
+  return 'edgeId' in entry;
 }
 
 // ─── Refs-based topology definition (stored in DB) ──────────────────────────
@@ -349,10 +432,10 @@ export interface FlowStepDefinition {
 }
 
 export interface TopologyDefinitionRefs {
-  readonly nodes: readonly TopologyNodeRef[];
-  readonly edges: readonly TopologyEdgeRef[];
-  readonly flowSummary?: FlowSummaryRef;
-  readonly flowSteps?: readonly FlowStepDefinition[];
+  readonly nodes: readonly TopologyNodeEntry[];
+  readonly edges: readonly TopologyEdgeEntry[];
+  readonly flowSummary?: FlowSummaryRef | undefined;
+  readonly flowSteps?: readonly FlowStepDefinition[] | undefined;
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────

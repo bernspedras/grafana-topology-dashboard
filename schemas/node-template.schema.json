@@ -10,67 +10,73 @@
     { "$ref": "#/$defs/externalNodeTemplate" }
   ],
   "$defs": {
-    "metricQuery": {
-      "description": "A PromQL query string, a cross-datasource query object, or null if not configured.",
+    "metricDefinition": {
+      "description": "A metric definition with query, unit, direction, and optional datasource/SLA — or null if not configured.",
       "oneOf": [
-        { "type": "string" },
         {
           "type": "object",
-          "required": ["query", "dataSource"],
+          "required": ["query", "unit", "direction"],
           "additionalProperties": false,
           "properties": {
             "query": { "type": "string" },
-            "dataSource": { "type": "string" }
+            "unit": { "type": "string" },
+            "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            "dataSource": { "type": "string" },
+            "sla": {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            }
           }
         },
         { "type": "null" }
       ]
     },
-    "nodePrometheusQueries": {
+    "nodeMetricQueries": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "cpu": { "$ref": "#/$defs/metricQuery" },
-        "memory": { "$ref": "#/$defs/metricQuery" },
-        "readyReplicas": { "$ref": "#/$defs/metricQuery" },
-        "desiredReplicas": { "$ref": "#/$defs/metricQuery" }
+        "cpu": { "$ref": "#/$defs/metricDefinition" },
+        "memory": { "$ref": "#/$defs/metricDefinition" },
+        "readyReplicas": { "$ref": "#/$defs/metricDefinition" },
+        "desiredReplicas": { "$ref": "#/$defs/metricDefinition" }
       }
     },
     "customMetricDefinition": {
       "type": "object",
-      "required": ["key", "label", "promql"],
+      "required": ["key", "label", "query", "unit", "direction"],
       "additionalProperties": false,
       "properties": {
         "key": { "type": "string" },
         "label": { "type": "string" },
-        "promql": { "type": "string" },
+        "query": { "type": "string" },
+        "unit": { "type": "string" },
+        "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
         "dataSource": { "type": ["string", "null"] },
-        "unit": { "type": ["string", "null"] },
-        "direction": {
+        "sla": {
           "oneOf": [
-            { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            },
             { "type": "null" }
           ]
         },
         "description": { "type": ["string", "null"] }
       }
     },
-    "slaThresholdMap": {
-      "type": "object",
-      "description": "Per-metric SLA thresholds. Keys are metric names, values define warning and critical thresholds.",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["warning", "critical"],
-        "additionalProperties": false,
-        "properties": {
-          "warning": { "type": "number" },
-          "critical": { "type": "number" }
-        }
-      }
-    },
     "eksServiceNodeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "label", "dataSource", "namespace", "prometheus"],
+      "required": ["kind", "id", "label", "dataSource", "namespace", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "eks-service" },
@@ -78,7 +84,7 @@
         "label": { "type": "string" },
         "dataSource": { "type": "string" },
         "namespace": { "type": "string" },
-        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
         "deploymentNames": {
           "type": "array",
           "items": { "type": "string" }
@@ -86,13 +92,12 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "ec2ServiceNodeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "label", "dataSource", "instanceId", "instanceType", "availabilityZone", "prometheus"],
+      "required": ["kind", "id", "label", "dataSource", "instanceId", "instanceType", "availabilityZone", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "ec2-service" },
@@ -103,17 +108,16 @@
         "instanceType": { "type": "string" },
         "availabilityZone": { "type": "string" },
         "amiId": { "type": ["string", "null"] },
-        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "databaseNodeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "label", "dataSource", "engine", "isReadReplica", "prometheus"],
+      "required": ["kind", "id", "label", "dataSource", "engine", "isReadReplica", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "database" },
@@ -123,17 +127,16 @@
         "engine": { "type": "string" },
         "isReadReplica": { "type": "boolean" },
         "storageGb": { "type": ["number", "null"] },
-        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "externalNodeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "label", "dataSource", "provider", "prometheus"],
+      "required": ["kind", "id", "label", "dataSource", "provider", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "external" },
@@ -143,12 +146,11 @@
         "provider": { "type": "string" },
         "contactEmail": { "type": ["string", "null"] },
         "slaPercent": { "type": ["number", "null"] },
-        "prometheus": { "$ref": "#/$defs/nodePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     }
   }

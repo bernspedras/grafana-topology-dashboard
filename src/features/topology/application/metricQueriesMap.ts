@@ -1,11 +1,11 @@
 import type { TopologyDefinition } from './topologyDefinition';
-import type { PromqlQueriesMap } from '../domain/dto';
+import type { MetricQueriesMap } from '../domain/dto';
 import { visitDefinitionQueries } from './queryVisitor';
 
-export function buildPromqlQueriesMap(definition: TopologyDefinition | undefined): PromqlQueriesMap {
+export function buildMetricQueriesMap(definition: TopologyDefinition | undefined): MetricQueriesMap {
   if (definition === undefined) return {};
 
-  const map: PromqlQueriesMap = {};
+  const map: MetricQueriesMap = {};
 
   visitDefinitionQueries(definition, (_entityType, entityId, metricKey, promql) => {
     if (!Object.hasOwn(map, entityId)) {
@@ -23,10 +23,10 @@ export function buildPromqlQueriesMap(definition: TopologyDefinition | undefined
  * Only base metric keys are kept (no deploy:, ep:, rk:, agg: variants).
  * Used in edit mode so the user sees and edits the exact template stored in JSON.
  */
-export function buildRawPromqlQueriesMap(definition: TopologyDefinition | undefined): PromqlQueriesMap {
+export function buildRawMetricQueriesMap(definition: TopologyDefinition | undefined): MetricQueriesMap {
   if (definition === undefined) return {};
 
-  const map: PromqlQueriesMap = {};
+  const map: MetricQueriesMap = {};
   const identity = (q: string): string => q;
 
   visitDefinitionQueries(definition, (_entityType, entityId, metricKey, promql) => {

@@ -5,91 +5,212 @@ import type {
   EdgeTemplate,
   NodeDefinition,
   EdgeDefinition,
+  MetricDefinition,
   TopologyNodeRef,
   TopologyEdgeRef,
+  TopologyNodeEntry,
+  TopologyEdgeEntry,
   HttpJsonEdgeDefinition,
   HttpXmlEdgeDefinition,
+  TcpDbEdgeDefinition,
   AmqpEdgeDefinition,
+  KafkaEdgeDefinition,
+  GrpcEdgeDefinition,
+  AmqpPublishSection,
+  AmqpQueueSection,
+  AmqpConsumerSection,
+  KafkaPublishSection,
+  KafkaTopicSection,
+  KafkaConsumerSection,
   EKSServiceNodeDefinition,
   FlowSummaryNodeDefinition,
 } from './topologyDefinition';
+import { isNodeRef, isEdgeRef } from './topologyDefinition';
+
+// ─── Two-level metric merge ──────────────────────────────────────────────────
+// For each key in the template metrics:
+//   - absent in overrides → inherit template value
+//   - present as undefined (JSON null) → disable metric
+//   - present as MetricDefinition → field-level merge into template value
+
+function mergeMetrics<T extends object>(
+  template: T,
+  overrides: Partial<T> | undefined,
+): T {
+  if (overrides === undefined) {
+    return template;
+  }
+  // Internal casts are safe — all metric query interfaces have only MetricDefinition | undefined values.
+  const result = { ...template } as Record<string, MetricDefinition | undefined>;
+  const over = overrides as Record<string, MetricDefinition | undefined>;
+  for (const key of Object.keys(result)) {
+    if (!Object.hasOwn(over, key)) {
+      continue;
+    }
+    const override = over[key];
+    if (override === undefined) {
+      result[key] = undefined;
+    } else {
+      const existing = result[key];
+      result[key] = existing !== undefined ? { ...existing, ...override } : override;
+    }
+  }
+  return result as T;
+}
+
+// ─── Template → Definition conversion ────────────────────────────────────────
+
+function edgeTemplateToDefinition(template: EdgeTemplate): EdgeDefinition {
+  if (template.kind === 'http-json') {
+    return { ...template, method: undefined, endpointPath: undefined, endpointPaths: undefined };
+  }
+  if (template.kind === 'http-xml') {
+    return { ...template, method: undefined, endpointPath: undefined, soapAction: undefined, endpointPaths: undefined };
+  }
+  return template;
+}
 
 // ─── Node resolution ─────────────────────────────────────────────────────────
 
 function resolveNodeRef(template: NodeTemplate, ref: TopologyNodeRef): NodeDefinition {
-  const customMetrics = ref.customMetrics;
-  if (template.kind === 'eks-service' && (ref.usedDeployment !== undefined || customMetrics !== undefined)) {
+  const label = ref.label ?? template.label;
+  const dataSource = ref.dataSource ?? template.dataSource;
+  const metrics = mergeMetrics(template.metrics, ref.metrics);
+  const customMetrics = ref.customMetrics ?? template.customMetrics;
+
+  if (template.kind === 'eks-service') {
     return {
       ...template,
-      ...(ref.usedDeployment !== undefined ? { usedDeployment: ref.usedDeployment } : {}),
-      ...(customMetrics !== undefined ? { customMetrics } : {}),
+      label,
+      dataSource,
+      metrics,
+      customMetrics,
+      usedDeployment: ref.usedDeployment ?? template.usedDeployment,
     } satisfies EKSServiceNodeDefinition;
   }
-  if (customMetrics !== undefined) {
-    return { ...template, customMetrics };
-  }
-  // EKS without usedDeployment, or EC2/Database/External — template IS a valid NodeDefinition
-  return template;
+
+  return {
+    ...template,
+    label,
+    dataSource,
+    metrics,
+    customMetrics,
+  };
 }
 
 // ─── Edge resolution ─────────────────────────────────────────────────────────
 
 function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): EdgeDefinition {
-  const customMetrics = ref.customMetrics;
+  if (ref.kind !== template.kind) {
+    throw new Error(
+      `Edge ref kind "${ref.kind}" does not match template kind "${template.kind}" for edge "${ref.edgeId}"`
+    );
+  }
 
-  if (template.kind === 'http-json') {
+  const dataSource = ref.dataSource ?? template.dataSource;
+  const customMetrics = ref.customMetrics ?? template.customMetrics;
+
+  if (template.kind === 'http-json' && ref.kind === 'http-json') {
     const resolved: HttpJsonEdgeDefinition = {
       ...template,
+      dataSource,
+      metrics: mergeMetrics(template.metrics, ref.metrics),
       method: ref.method ?? undefined,
       endpointPath: ref.endpointPath ?? undefined,
-      ...(ref.endpointPaths !== undefined ? { endpointPaths: ref.endpointPaths } : {}),
-      ...(customMetrics !== undefined ? { customMetrics } : {}),
+      endpointPaths: ref.endpointPaths ?? template.endpointPaths,
+      customMetrics,
     };
     return resolved;
   }
 
-  if (template.kind === 'http-xml') {
+  if (template.kind === 'http-xml' && ref.kind === 'http-xml') {
     const resolved: HttpXmlEdgeDefinition = {
       ...template,
+      dataSource,
+      metrics: mergeMetrics(template.metrics, ref.metrics),
       method: ref.method ?? undefined,
       endpointPath: ref.endpointPath ?? undefined,
       soapAction: ref.soapAction ?? undefined,
-      ...(ref.endpointPaths !== undefined ? { endpointPaths: ref.endpointPaths } : {}),
-      ...(customMetrics !== undefined ? { customMetrics } : {}),
+      endpointPaths: template.endpointPaths,
+      customMetrics,
     };
     return resolved;
   }
 
-  // Amqp — override routingKeyFilter from ref (single dropdown controls both sides)
-  if (template.kind === 'amqp' && (ref.routingKeyFilter !== undefined || customMetrics !== undefined)) {
+  if (template.kind === 'tcp-db' && ref.kind === 'tcp-db') {
+    const resolved: TcpDbEdgeDefinition = {
+      ...template,
+      dataSource,
+      metrics: mergeMetrics(template.metrics, ref.metrics),
+      customMetrics,
+    };
+    return resolved;
+  }
+
+  if (template.kind === 'amqp' && ref.kind === 'amqp') {
+    const routingKeyFilter = ref.routingKeyFilter;
+    const publish: AmqpPublishSection = {
+      ...template.publish,
+      ...(routingKeyFilter !== undefined ? { routingKeyFilter } : {}),
+      metrics: mergeMetrics(template.publish.metrics, ref.publish?.metrics),
+    };
+    const queue: AmqpQueueSection | undefined = template.queue != null
+      ? { ...template.queue, metrics: mergeMetrics(template.queue.metrics, ref.queue?.metrics) }
+      : undefined;
+    const consumer: AmqpConsumerSection | undefined = template.consumer != null
+      ? {
+          ...template.consumer,
+          ...(routingKeyFilter !== undefined ? { routingKeyFilter } : {}),
+          metrics: mergeMetrics(template.consumer.metrics, ref.consumer?.metrics),
+        }
+      : undefined;
     const resolved: AmqpEdgeDefinition = {
       ...template,
-      ...(ref.routingKeyFilter !== undefined ? {
-        publish: { ...template.publish, routingKeyFilter: ref.routingKeyFilter },
-        consumer: template.consumer != null
-          ? { ...template.consumer, routingKeyFilter: ref.routingKeyFilter }
-          : template.consumer,
-      } : {}),
-      ...(customMetrics !== undefined ? { customMetrics } : {}),
+      dataSource,
+      publish,
+      queue,
+      consumer,
+      customMetrics,
     };
     return resolved;
   }
 
-  // Kafka — pass through with optional customMetrics override
-  if (template.kind === 'kafka' && customMetrics !== undefined) {
-    return { ...template, customMetrics };
+  if (template.kind === 'kafka' && ref.kind === 'kafka') {
+    const consumerGroup = ref.consumerGroup ?? template.consumerGroup;
+    const publish: KafkaPublishSection = {
+      ...template.publish,
+      metrics: mergeMetrics(template.publish.metrics, ref.publish?.metrics),
+    };
+    const topicMetrics: KafkaTopicSection | undefined = template.topicMetrics != null
+      ? { ...template.topicMetrics, metrics: mergeMetrics(template.topicMetrics.metrics, ref.topicMetrics?.metrics) }
+      : undefined;
+    const consumer: KafkaConsumerSection | undefined = template.consumer != null
+      ? { ...template.consumer, metrics: mergeMetrics(template.consumer.metrics, ref.consumer?.metrics) }
+      : undefined;
+    const resolved: KafkaEdgeDefinition = {
+      ...template,
+      dataSource,
+      consumerGroup,
+      publish,
+      topicMetrics,
+      consumer,
+      customMetrics,
+    };
+    return resolved;
   }
 
-  // gRPC — pass through with optional customMetrics override
-  if (template.kind === 'grpc' && customMetrics !== undefined) {
-    return { ...template, customMetrics };
+  if (template.kind === 'grpc' && ref.kind === 'grpc') {
+    const resolved: GrpcEdgeDefinition = {
+      ...template,
+      dataSource,
+      metrics: mergeMetrics(template.metrics, ref.metrics),
+      customMetrics,
+    };
+    return resolved;
   }
 
-  // TcpDb / Amqp / Kafka / gRPC (no override) — template IS already a valid EdgeDefinition
-  if (customMetrics !== undefined) {
-    return { ...template, customMetrics };
-  }
-  return template;
+  // All edge kinds are handled above — reaching here indicates a missing case
+  throw new Error(`Unhandled edge kind "${template.kind}" in resolveEdgeRef`);
 }
 
 // ─── Full topology resolution ────────────────────────────────────────────────
@@ -109,20 +230,34 @@ export function resolveTopology(
     edgeMap.set(t.id, t);
   }
 
-  const nodes: NodeDefinition[] = refs.nodes.map((ref: TopologyNodeRef): NodeDefinition => {
-    const template = nodeMap.get(ref.nodeId);
-    if (template === undefined) {
-      throw new Error('Node template not found: ' + ref.nodeId);
+  const nodes: NodeDefinition[] = refs.nodes.map((entry: TopologyNodeEntry): NodeDefinition => {
+    if (isNodeRef(entry)) {
+      if ('kind' in entry) {
+        throw new Error(`Node entry has both "nodeId" ("${entry.nodeId}") and "kind" — must be either a ref or an inline definition, not both`);
+      }
+      const template = nodeMap.get(entry.nodeId);
+      if (template === undefined) {
+        throw new Error('Node template not found: ' + entry.nodeId);
+      }
+      return resolveNodeRef(template, entry);
     }
-    return resolveNodeRef(template, ref);
+    // Inline definition — use as-is (it's already a NodeTemplate which is a valid NodeDefinition)
+    return entry;
   });
 
-  const edges: EdgeDefinition[] = refs.edges.map((ref: TopologyEdgeRef): EdgeDefinition => {
-    const template = edgeMap.get(ref.edgeId);
-    if (template === undefined) {
-      throw new Error('Edge template not found: ' + ref.edgeId);
+  const edges: EdgeDefinition[] = refs.edges.map((entry: TopologyEdgeEntry): EdgeDefinition => {
+    if (isEdgeRef(entry)) {
+      if ('id' in entry) {
+        throw new Error(`Edge entry has both "edgeId" ("${entry.edgeId}") and "id" — must be either a ref or an inline definition, not both`);
+      }
+      const template = edgeMap.get(entry.edgeId);
+      if (template === undefined) {
+        throw new Error('Edge template not found: ' + entry.edgeId);
+      }
+      return resolveEdgeRef(template, entry);
     }
-    return resolveEdgeRef(template, ref);
+    // Inline definition — convert template shape to full definition shape
+    return edgeTemplateToDefinition(entry);
   });
 
   if (refs.flowSummary !== undefined) {
@@ -139,6 +274,6 @@ export function resolveTopology(
   return {
     nodes,
     edges,
-    ...(refs.flowSteps !== undefined ? { flowSteps: refs.flowSteps } : {}),
+    flowSteps: refs.flowSteps ?? undefined,
   };
 }

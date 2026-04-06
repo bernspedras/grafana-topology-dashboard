@@ -64,8 +64,8 @@ export interface PrometheusQuerierResolver {
 
 export function deriveNodeStatus(cpu: number | undefined, memory: number | undefined, sla?: SlaThresholdMap): NodeStatus {
   if (cpu === undefined || memory === undefined) return 'unknown';
-  const cpuSla = sla?.cpuPercent;
-  const memSla = sla?.memoryPercent;
+  const cpuSla = sla?.cpu;
+  const memSla = sla?.memory;
   // No SLA thresholds defined → unknown (no opinion on health)
   if (cpuSla === undefined && memSla === undefined) return 'unknown';
   if (cpuSla !== undefined && cpu >= cpuSla.critical) return 'critical';
@@ -82,8 +82,8 @@ export function deriveBaselineNodeStatus(
   memoryWeekAgo: number | undefined,
 ): NodeStatus {
   return worstOfStatuses([
-    baselineMetricStatus(cpu, cpuWeekAgo, 'cpuPercent'),
-    baselineMetricStatus(memory, memoryWeekAgo, 'memoryPercent'),
+    baselineMetricStatus(cpu, cpuWeekAgo, 'cpu', 'lower-is-better'),
+    baselineMetricStatus(memory, memoryWeekAgo, 'memory', 'lower-is-better'),
   ]);
 }
 
@@ -171,7 +171,7 @@ function constructNode(
       label: def.label,
       status: 'healthy',
       baselineStatus: 'unknown',
-      metrics: new NodeMetrics({ cpuPercent: 0, memoryPercent: 0, lastUpdatedAt: now }),
+      metrics: new NodeMetrics({ cpu: 0, memory: 0, lastUpdatedAt: now }),
       ...(customMetrics.length > 0 ? { customMetrics } : {}),
     });
   }
@@ -184,10 +184,10 @@ function constructNode(
   const status = deriveNodeStatus(cpu, memory, sla);
   const baselineStatus = deriveBaselineNodeStatus(cpu, memory, cpuWeekAgo, memoryWeekAgo);
   const metrics = new NodeMetrics({
-    cpuPercent: cpu,
-    memoryPercent: memory,
-    cpuPercentWeekAgo: cpuWeekAgo,
-    memoryPercentWeekAgo: memoryWeekAgo,
+    cpu,
+    memory,
+    cpuWeekAgo,
+    memoryWeekAgo,
     lastUpdatedAt: now,
   });
 
@@ -220,12 +220,12 @@ function constructEKSNode(def: EKSServiceNodeDefinition, base: NodeBaseParams, r
       const depCustomMetrics = buildCustomMetricValues(def.customMetrics, def.id, (id, metric) => deploymentQueryKey(id, name, metric), results, weekAgoResults);
       return new DeploymentMetrics({
         name,
-        cpuPercent: results.get(deploymentQueryKey(def.id, name, 'cpu')) ?? 0,
-        memoryPercent: results.get(deploymentQueryKey(def.id, name, 'memory')) ?? 0,
+        cpu: results.get(deploymentQueryKey(def.id, name, 'cpu')) ?? 0,
+        memory: results.get(deploymentQueryKey(def.id, name, 'memory')) ?? 0,
         readyReplicas: optionalRound(results.get(deploymentQueryKey(def.id, name, 'readyReplicas'))),
         desiredReplicas: optionalRound(results.get(deploymentQueryKey(def.id, name, 'desiredReplicas'))),
-        cpuPercentWeekAgo: weekAgoResults.get(deploymentQueryKey(def.id, name, 'cpu')),
-        memoryPercentWeekAgo: weekAgoResults.get(deploymentQueryKey(def.id, name, 'memory')),
+        cpuWeekAgo: weekAgoResults.get(deploymentQueryKey(def.id, name, 'cpu')),
+        memoryWeekAgo: weekAgoResults.get(deploymentQueryKey(def.id, name, 'memory')),
         ...(depCustomMetrics.length > 0 ? { customMetrics: depCustomMetrics } : {}),
       });
     },
@@ -304,28 +304,28 @@ function buildHttpEdgeData(
   hasEndpointPaths: boolean;
 } {
   const metrics = new HttpEdgeMetrics({
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'latencyAvg')),
+    latencyP95: results.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'latencyAvg')),
     rps: results.get(edgeQueryKey(def.id, 'rps')) ?? 0,
-    errorRatePercent: results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0,
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
+    errorRate: results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0,
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'rps')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
     lastUpdatedAt: now,
   });
 
   const hasEndpoint = def.method !== undefined || def.endpointPath !== undefined;
   const hasEndpointPaths = def.endpointPaths !== undefined && def.endpointPaths.length > 0;
   const aggregateMetrics = (hasEndpoint || hasEndpointPaths) ? new HttpEdgeMetrics({
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'agg:latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
+    latencyP95: results.get(edgeQueryKey(def.id, 'agg:latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
     rps: results.get(edgeQueryKey(def.id, 'agg:rps')) ?? 0,
-    errorRatePercent: results.get(edgeQueryKey(def.id, 'agg:errorRate')) ?? 0,
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
+    errorRate: results.get(edgeQueryKey(def.id, 'agg:errorRate')) ?? 0,
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:rps')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:errorRate')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:errorRate')),
     lastUpdatedAt: now,
   }) : undefined;
 
@@ -333,14 +333,14 @@ function buildHttpEdgeData(
   if (hasEndpointPaths) {
     for (const ep of def.endpointPaths) {
       endpointMetrics.set(ep, new HttpEdgeMetrics({
-        latencyP95Ms: results.get(epQueryKey(def.id, ep, 'latencyP95')),
-        latencyAvgMs: results.get(epQueryKey(def.id, ep, 'latencyAvg')),
+        latencyP95: results.get(epQueryKey(def.id, ep, 'latencyP95')),
+        latencyAvg: results.get(epQueryKey(def.id, ep, 'latencyAvg')),
         rps: results.get(epQueryKey(def.id, ep, 'rps')) ?? 0,
-        errorRatePercent: results.get(epQueryKey(def.id, ep, 'errorRate')) ?? 0,
-        latencyP95MsWeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'latencyP95')),
-        latencyAvgMsWeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'latencyAvg')),
+        errorRate: results.get(epQueryKey(def.id, ep, 'errorRate')) ?? 0,
+        latencyP95WeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'latencyP95')),
+        latencyAvgWeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'latencyAvg')),
         rpsWeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'rps')),
-        errorRatePercentWeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'errorRate')),
+        errorRateWeekAgo: weekAgoResults.get(epQueryKey(def.id, ep, 'errorRate')),
         lastUpdatedAt: now,
       }));
     }
@@ -402,14 +402,14 @@ function constructTcpDbEdge(
   now: Date,
 ): TcpDbConnectionEdge {
   const metrics = new DbConnectionMetrics({
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'latencyAvg')),
+    latencyP95: results.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'latencyAvg')),
     rps: results.get(edgeQueryKey(def.id, 'rps')) ?? 0,
-    errorRatePercent: results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0,
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
+    errorRate: results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0,
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'rps')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
     lastUpdatedAt: now,
     activeConnections: results.get(edgeQueryKey(def.id, 'activeConnections')),
     idleConnections: results.get(edgeQueryKey(def.id, 'idleConnections')),
@@ -446,68 +446,68 @@ function constructAmqpEdge(
 ): AmqpEdge {
   // Default to 0 when the query was defined but Prometheus returned nothing.
   // When the definition itself is null, leave as undefined so the UI shows N/A.
-  const pubHasRps = def.publish.prometheus.rps != null;
-  const pubHasError = def.publish.prometheus.errorRate != null;
+  const pubHasRps = def.publish.metrics.rps != null;
+  const pubHasError = def.publish.metrics.errorRate != null;
   const metrics = new AmqpEdgeMetrics({
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'latencyAvg')),
+    latencyP95: results.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'latencyAvg')),
     rps: pubHasRps ? (results.get(edgeQueryKey(def.id, 'rps')) ?? 0) : undefined,
-    errorRatePercent: pubHasError ? (results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0) : undefined,
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
+    errorRate: pubHasError ? (results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0) : undefined,
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'rps')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
     lastUpdatedAt: now,
-    queueResidenceTimeP95Ms: results.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
-    queueResidenceTimeAvgMs: results.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
-    queueResidenceTimeP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
-    queueResidenceTimeAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
-    consumerProcessingTimeP95Ms: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
-    consumerProcessingTimeAvgMs: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
-    consumerProcessingTimeP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
-    consumerProcessingTimeAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
-    e2eLatencyP95Ms: results.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
-    e2eLatencyAvgMs: results.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
-    e2eLatencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
-    e2eLatencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
+    queueResidenceTimeP95: results.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
+    queueResidenceTimeAvg: results.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
+    queueResidenceTimeP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
+    queueResidenceTimeAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
+    consumerProcessingTimeP95: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
+    consumerProcessingTimeAvg: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
+    consumerProcessingTimeP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
+    consumerProcessingTimeAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
+    e2eLatencyP95: results.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
+    e2eLatencyAvg: results.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
+    e2eLatencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
+    e2eLatencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
     queueDepth: results.get(edgeQueryKey(def.id, 'queueDepth')),
     queueDepthWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueDepth')),
     consumerRps: results.get(edgeQueryKey(def.id, 'consumerRps')),
     consumerRpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerRps')),
-    consumerErrorRatePercent: results.get(edgeQueryKey(def.id, 'consumerErrorRate')),
-    consumerErrorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerErrorRate')),
+    consumerErrorRate: results.get(edgeQueryKey(def.id, 'consumerErrorRate')),
+    consumerErrorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerErrorRate')),
   });
 
   const hasRoutingKeys = def.routingKeyFilters !== undefined && def.routingKeyFilters.length > 0;
   const hasSpecificFilter = def.publish.routingKeyFilter != null;
   const aggregateMetrics = (hasRoutingKeys && hasSpecificFilter) ? new AmqpEdgeMetrics({
     rps: results.get(edgeQueryKey(def.id, 'agg:rps')) ?? 0,
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'agg:latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
-    errorRatePercent: results.get(edgeQueryKey(def.id, 'agg:errorRate')) ?? 0,
+    latencyP95: results.get(edgeQueryKey(def.id, 'agg:latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
+    errorRate: results.get(edgeQueryKey(def.id, 'agg:errorRate')) ?? 0,
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:rps')),
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:errorRate')),
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:latencyAvg')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:errorRate')),
     lastUpdatedAt: now,
-    queueResidenceTimeP95Ms: results.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeP95')),
-    queueResidenceTimeAvgMs: results.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeAvg')),
-    queueResidenceTimeP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeP95')),
-    queueResidenceTimeAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeAvg')),
-    consumerProcessingTimeP95Ms: results.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeP95')),
-    consumerProcessingTimeAvgMs: results.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeAvg')),
-    consumerProcessingTimeP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeP95')),
-    consumerProcessingTimeAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeAvg')),
-    e2eLatencyP95Ms: results.get(edgeQueryKey(def.id, 'agg:e2eLatencyP95')),
-    e2eLatencyAvgMs: results.get(edgeQueryKey(def.id, 'agg:e2eLatencyAvg')),
-    e2eLatencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:e2eLatencyP95')),
-    e2eLatencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:e2eLatencyAvg')),
+    queueResidenceTimeP95: results.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeP95')),
+    queueResidenceTimeAvg: results.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeAvg')),
+    queueResidenceTimeP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeP95')),
+    queueResidenceTimeAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:queueResidenceTimeAvg')),
+    consumerProcessingTimeP95: results.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeP95')),
+    consumerProcessingTimeAvg: results.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeAvg')),
+    consumerProcessingTimeP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeP95')),
+    consumerProcessingTimeAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerProcessingTimeAvg')),
+    e2eLatencyP95: results.get(edgeQueryKey(def.id, 'agg:e2eLatencyP95')),
+    e2eLatencyAvg: results.get(edgeQueryKey(def.id, 'agg:e2eLatencyAvg')),
+    e2eLatencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:e2eLatencyP95')),
+    e2eLatencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:e2eLatencyAvg')),
     queueDepth: results.get(edgeQueryKey(def.id, 'agg:queueDepth')),
     queueDepthWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:queueDepth')),
     consumerRps: results.get(edgeQueryKey(def.id, 'agg:consumerRps')),
     consumerRpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerRps')),
-    consumerErrorRatePercent: results.get(edgeQueryKey(def.id, 'agg:consumerErrorRate')),
-    consumerErrorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerErrorRate')),
+    consumerErrorRate: results.get(edgeQueryKey(def.id, 'agg:consumerErrorRate')),
+    consumerErrorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'agg:consumerErrorRate')),
   }) : undefined;
 
   // Per-routing-key metrics (like per-deployment metrics for nodes)
@@ -516,32 +516,32 @@ function constructAmqpEdge(
     for (const rk of def.routingKeyFilters) {
       routingKeyMetrics.set(rk, new AmqpEdgeMetrics({
         rps: results.get(rkQueryKey(def.id, rk, 'rps')) ?? 0,
-        latencyP95Ms: results.get(rkQueryKey(def.id, rk, 'latencyP95')),
-        latencyAvgMs: results.get(rkQueryKey(def.id, rk, 'latencyAvg')),
-        errorRatePercent: results.get(rkQueryKey(def.id, rk, 'errorRate')) ?? 0,
+        latencyP95: results.get(rkQueryKey(def.id, rk, 'latencyP95')),
+        latencyAvg: results.get(rkQueryKey(def.id, rk, 'latencyAvg')),
+        errorRate: results.get(rkQueryKey(def.id, rk, 'errorRate')) ?? 0,
         rpsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'rps')),
-        latencyP95MsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'latencyP95')),
-        latencyAvgMsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'latencyAvg')),
-        errorRatePercentWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'errorRate')),
+        latencyP95WeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'latencyP95')),
+        latencyAvgWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'latencyAvg')),
+        errorRateWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'errorRate')),
         lastUpdatedAt: now,
-        queueResidenceTimeP95Ms: results.get(rkQueryKey(def.id, rk, 'queueResidenceTimeP95')),
-        queueResidenceTimeAvgMs: results.get(rkQueryKey(def.id, rk, 'queueResidenceTimeAvg')),
-        queueResidenceTimeP95MsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'queueResidenceTimeP95')),
-        queueResidenceTimeAvgMsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'queueResidenceTimeAvg')),
-        consumerProcessingTimeP95Ms: results.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeP95')),
-        consumerProcessingTimeAvgMs: results.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeAvg')),
-        consumerProcessingTimeP95MsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeP95')),
-        consumerProcessingTimeAvgMsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeAvg')),
-        e2eLatencyP95Ms: results.get(rkQueryKey(def.id, rk, 'e2eLatencyP95')),
-        e2eLatencyAvgMs: results.get(rkQueryKey(def.id, rk, 'e2eLatencyAvg')),
-        e2eLatencyP95MsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'e2eLatencyP95')),
-        e2eLatencyAvgMsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'e2eLatencyAvg')),
+        queueResidenceTimeP95: results.get(rkQueryKey(def.id, rk, 'queueResidenceTimeP95')),
+        queueResidenceTimeAvg: results.get(rkQueryKey(def.id, rk, 'queueResidenceTimeAvg')),
+        queueResidenceTimeP95WeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'queueResidenceTimeP95')),
+        queueResidenceTimeAvgWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'queueResidenceTimeAvg')),
+        consumerProcessingTimeP95: results.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeP95')),
+        consumerProcessingTimeAvg: results.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeAvg')),
+        consumerProcessingTimeP95WeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeP95')),
+        consumerProcessingTimeAvgWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerProcessingTimeAvg')),
+        e2eLatencyP95: results.get(rkQueryKey(def.id, rk, 'e2eLatencyP95')),
+        e2eLatencyAvg: results.get(rkQueryKey(def.id, rk, 'e2eLatencyAvg')),
+        e2eLatencyP95WeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'e2eLatencyP95')),
+        e2eLatencyAvgWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'e2eLatencyAvg')),
         queueDepth: results.get(rkQueryKey(def.id, rk, 'queueDepth')),
         queueDepthWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'queueDepth')),
         consumerRps: results.get(rkQueryKey(def.id, rk, 'consumerRps')),
         consumerRpsWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerRps')),
-        consumerErrorRatePercent: results.get(rkQueryKey(def.id, rk, 'consumerErrorRate')),
-        consumerErrorRatePercentWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerErrorRate')),
+        consumerErrorRate: results.get(rkQueryKey(def.id, rk, 'consumerErrorRate')),
+        consumerErrorRateWeekAgo: weekAgoResults.get(rkQueryKey(def.id, rk, 'consumerErrorRate')),
       }));
     }
   }
@@ -568,36 +568,36 @@ function constructKafkaEdge(
   weekAgoResults: ReadonlyMap<string, number | undefined>,
   now: Date,
 ): KafkaEdge {
-  const pubHasRps = def.publish.prometheus.rps != null;
-  const pubHasError = def.publish.prometheus.errorRate != null;
+  const pubHasRps = def.publish.metrics.rps != null;
+  const pubHasError = def.publish.metrics.errorRate != null;
   const metrics = new KafkaEdgeMetrics({
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'latencyAvg')),
+    latencyP95: results.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'latencyAvg')),
     rps: pubHasRps ? (results.get(edgeQueryKey(def.id, 'rps')) ?? 0) : undefined,
-    errorRatePercent: pubHasError ? (results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0) : undefined,
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
+    errorRate: pubHasError ? (results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0) : undefined,
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'rps')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
     lastUpdatedAt: now,
-    queueResidenceTimeP95Ms: results.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
-    queueResidenceTimeAvgMs: results.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
-    queueResidenceTimeP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
-    queueResidenceTimeAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
-    consumerProcessingTimeP95Ms: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
-    consumerProcessingTimeAvgMs: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
-    consumerProcessingTimeP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
-    consumerProcessingTimeAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
-    e2eLatencyP95Ms: results.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
-    e2eLatencyAvgMs: results.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
-    e2eLatencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
-    e2eLatencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
+    queueResidenceTimeP95: results.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
+    queueResidenceTimeAvg: results.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
+    queueResidenceTimeP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeP95')),
+    queueResidenceTimeAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'queueResidenceTimeAvg')),
+    consumerProcessingTimeP95: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
+    consumerProcessingTimeAvg: results.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
+    consumerProcessingTimeP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeP95')),
+    consumerProcessingTimeAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerProcessingTimeAvg')),
+    e2eLatencyP95: results.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
+    e2eLatencyAvg: results.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
+    e2eLatencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyP95')),
+    e2eLatencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'e2eLatencyAvg')),
     consumerLag: results.get(edgeQueryKey(def.id, 'consumerLag')),
     consumerLagWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerLag')),
     consumerRps: results.get(edgeQueryKey(def.id, 'consumerRps')),
     consumerRpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerRps')),
-    consumerErrorRatePercent: results.get(edgeQueryKey(def.id, 'consumerErrorRate')),
-    consumerErrorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerErrorRate')),
+    consumerErrorRate: results.get(edgeQueryKey(def.id, 'consumerErrorRate')),
+    consumerErrorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'consumerErrorRate')),
   });
 
   const customMetrics = buildCustomMetricValues(def.customMetrics, def.id, edgeQueryKey, results, weekAgoResults);
@@ -620,14 +620,14 @@ function constructGrpcEdge(
   now: Date,
 ): GrpcEdge {
   const metrics = new HttpEdgeMetrics({
-    latencyP95Ms: results.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMs: results.get(edgeQueryKey(def.id, 'latencyAvg')),
+    latencyP95: results.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvg: results.get(edgeQueryKey(def.id, 'latencyAvg')),
     rps: results.get(edgeQueryKey(def.id, 'rps')) ?? 0,
-    errorRatePercent: results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0,
-    latencyP95MsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
-    latencyAvgMsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
+    errorRate: results.get(edgeQueryKey(def.id, 'errorRate')) ?? 0,
+    latencyP95WeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyP95')),
+    latencyAvgWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'latencyAvg')),
     rpsWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'rps')),
-    errorRatePercentWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
+    errorRateWeekAgo: weekAgoResults.get(edgeQueryKey(def.id, 'errorRate')),
     lastUpdatedAt: now,
   });
 

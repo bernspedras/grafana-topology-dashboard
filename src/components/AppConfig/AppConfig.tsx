@@ -142,12 +142,12 @@ function JsonItemList({ items, label, labelFn, onSaveItem, onDeleteItem }: JsonI
 
 const SLA_DEFAULTS_TEMPLATE = `{
   "node": {
-    "cpuPercent": { "warning": 70, "critical": 90 },
-    "memoryPercent": { "warning": 80, "critical": 95 }
+    "cpu": { "warning": 70, "critical": 90 },
+    "memory": { "warning": 80, "critical": 95 }
   },
   "http-json": {
-    "errorRatePercent": { "warning": 1, "critical": 5 },
-    "latencyP95Ms": { "warning": 500, "critical": 2000 }
+    "errorRate": { "warning": 1, "critical": 5 },
+    "latencyP95": { "warning": 500, "critical": 2000 }
   }
 }`;
 

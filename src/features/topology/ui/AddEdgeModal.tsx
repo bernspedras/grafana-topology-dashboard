@@ -29,8 +29,8 @@ interface AddEdgeModalProps {
 
 // Payload shapes per kind — match the JSON template format the Go backend expects.
 
-const EMPTY_HTTP_PROMETHEUS = { rps: '', latencyP95: '', latencyAvg: '', errorRate: '' } as const;
-const EMPTY_PUBLISH_PROMETHEUS = { rps: null, latencyP95: null, latencyAvg: null, errorRate: null } as const;
+const EMPTY_HTTP_METRICS = { rps: null, latencyP95: null, latencyAvg: null, errorRate: null } as const;
+const EMPTY_PUBLISH_METRICS = { rps: null, latencyP95: null, latencyAvg: null, errorRate: null } as const;
 
 interface HttpJsonEdgePayload {
   readonly kind: 'http-json';
@@ -38,7 +38,7 @@ interface HttpJsonEdgePayload {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: typeof EMPTY_HTTP_PROMETHEUS;
+  readonly metrics: typeof EMPTY_HTTP_METRICS;
 }
 
 interface HttpXmlEdgePayload {
@@ -47,7 +47,7 @@ interface HttpXmlEdgePayload {
   readonly source: string;
   readonly target: string;
   readonly dataSource: string;
-  readonly prometheus: typeof EMPTY_HTTP_PROMETHEUS;
+  readonly metrics: typeof EMPTY_HTTP_METRICS;
 }
 
 interface AmqpEdgePayload {
@@ -57,7 +57,7 @@ interface AmqpEdgePayload {
   readonly target: string;
   readonly dataSource: string;
   readonly exchange: string;
-  readonly publish: { readonly prometheus: typeof EMPTY_PUBLISH_PROMETHEUS };
+  readonly publish: { readonly metrics: typeof EMPTY_PUBLISH_METRICS };
   readonly consumer: null;
 }
 
@@ -69,7 +69,7 @@ interface KafkaEdgePayload {
   readonly dataSource: string;
   readonly topic: string;
   readonly consumerGroup: string | undefined;
-  readonly publish: { readonly prometheus: typeof EMPTY_PUBLISH_PROMETHEUS };
+  readonly publish: { readonly metrics: typeof EMPTY_PUBLISH_METRICS };
   readonly consumer: null;
 }
 
@@ -81,7 +81,7 @@ interface GrpcEdgePayload {
   readonly dataSource: string;
   readonly grpcService: string;
   readonly grpcMethod: string;
-  readonly prometheus: typeof EMPTY_HTTP_PROMETHEUS;
+  readonly metrics: typeof EMPTY_HTTP_METRICS;
 }
 
 export type EdgeTemplatePayload =
@@ -228,13 +228,13 @@ export function AddEdgeModal({
     switch (selectedKind) {
       case 'http-json':
         onCreateEdge(
-          { kind: 'http-json', id, source: sourceNodeId, target: targetNodeId, dataSource, prometheus: EMPTY_HTTP_PROMETHEUS },
+          { kind: 'http-json', id, source: sourceNodeId, target: targetNodeId, dataSource, metrics: EMPTY_HTTP_METRICS },
           saveAsTemplate,
         );
         break;
       case 'http-xml':
         onCreateEdge(
-          { kind: 'http-xml', id, source: sourceNodeId, target: targetNodeId, dataSource, prometheus: EMPTY_HTTP_PROMETHEUS },
+          { kind: 'http-xml', id, source: sourceNodeId, target: targetNodeId, dataSource, metrics: EMPTY_HTTP_METRICS },
           saveAsTemplate,
         );
         break;
@@ -247,7 +247,7 @@ export function AddEdgeModal({
             target: targetNodeId,
             dataSource,
             exchange: exchange.trim(),
-            publish: { prometheus: EMPTY_PUBLISH_PROMETHEUS },
+            publish: { metrics: EMPTY_PUBLISH_METRICS },
             consumer: null,
           },
           saveAsTemplate,
@@ -263,7 +263,7 @@ export function AddEdgeModal({
             dataSource,
             topic: topic.trim(),
             consumerGroup: consumerGroup.trim() || undefined,
-            publish: { prometheus: EMPTY_PUBLISH_PROMETHEUS },
+            publish: { metrics: EMPTY_PUBLISH_METRICS },
             consumer: null,
           },
           saveAsTemplate,
@@ -279,7 +279,7 @@ export function AddEdgeModal({
             dataSource,
             grpcService: grpcService.trim(),
             grpcMethod: grpcMethod.trim(),
-            prometheus: EMPTY_HTTP_PROMETHEUS,
+            metrics: EMPTY_HTTP_METRICS,
           },
           saveAsTemplate,
         );

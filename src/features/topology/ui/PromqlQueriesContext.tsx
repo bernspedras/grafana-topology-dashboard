@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
-import type { PromqlQueriesMap } from '../domain/dto';
+import type { MetricQueriesMap } from '../domain/dto';
 
-const PromqlQueriesContext = createContext<PromqlQueriesMap>({});
+const PromqlQueriesContext = createContext<MetricQueriesMap>({});
 
 export const PromqlQueriesProvider = PromqlQueriesContext.Provider;
 

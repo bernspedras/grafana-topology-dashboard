@@ -15,6 +15,7 @@ import { useRawPromqlQueries } from './RawPromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
+import { useDirections } from './DirectionContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricChartModal } from './MetricChartModal';
 import { PodsChartModal } from './PodsChartModal';
@@ -149,7 +150,8 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(node.id);
-  const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla);
+  const directions = useDirections(node.id);
+  const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla, directions);
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
   const activeStatus = healthFromMetricRows(allMetrics);
   const borderColor = statusColor(activeStatus);

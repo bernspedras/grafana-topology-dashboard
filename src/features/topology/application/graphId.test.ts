@@ -15,15 +15,15 @@ import {
 const NOW = new Date('2025-01-15T12:00:00.000Z');
 
 const nodeMetrics = new NodeMetrics({
-  cpuPercent: 45,
-  memoryPercent: 62,
+  cpu: 45,
+  memory: 62,
   lastUpdatedAt: NOW,
 });
 
 const httpMetrics = new HttpEdgeMetrics({
-  latencyP95Ms: 32,
+  latencyP95: 32,
   rps: 1200,
-  errorRatePercent: 0.1,
+  errorRate: 0.1,
   lastUpdatedAt: NOW,
 });
 
@@ -36,7 +36,7 @@ function makeNode(id: string): EKSServiceNode {
     metrics: nodeMetrics,
     namespace: 'ns',
     deployments: [
-      new DeploymentMetrics({ name: 'deploy', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 40, memoryPercent: 55 }),
+      new DeploymentMetrics({ name: 'deploy', readyReplicas: 1, desiredReplicas: 1, cpu: 40, memory: 55 }),
     ],
   });
 }
