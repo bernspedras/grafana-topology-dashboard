@@ -17,6 +17,7 @@ func newTestApp() *App {
 		httpClient:    http.DefaultClient,
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
+		promSem:       make(chan struct{}, 15),
 	}
 }
 

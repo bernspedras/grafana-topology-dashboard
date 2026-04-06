@@ -28,6 +28,11 @@ type App struct {
 	baselineCache *BaselineCache
 	topologyStore *TopologyStore
 	logger        log.Logger
+	// promSem is a process-wide semaphore that limits how many concurrent
+	// queries can be in-flight to Prometheus at any time. This protects
+	// Prometheus from burst load when multiple users open the dashboard
+	// simultaneously. Sized to stay below Prometheus --query.max-concurrency.
+	promSem chan struct{}
 }
 
 // resolveDataDir determines where topology JSON files are stored on disk.
@@ -54,7 +59,8 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 50,
+			MaxConnsPerHost:     20,
+			MaxIdleConnsPerHost: 20,
 			IdleConnTimeout:     90 * time.Second,
 			DialContext: (&net.Dialer{
 				Timeout:   5 * time.Second,
@@ -77,6 +83,7 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		topologyStore: store,
 		logger:        logger,
+		promSem:       make(chan struct{}, 15),
 	}
 
 	mux := http.NewServeMux()
@@ -88,6 +95,7 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 
 func (a *App) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/metrics", a.handleMetrics)
+	mux.HandleFunc("/metric-range", a.handleMetricRange)
 	a.registerTopologyRoutes(mux)
 }
 

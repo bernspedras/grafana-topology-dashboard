@@ -9,14 +9,6 @@ import type { ParsedSlaDefaults } from './slaThresholds';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface PrometheusInstantResult {
-  readonly status: string;
-  readonly data: {
-    readonly resultType: string;
-    readonly result: readonly { readonly value: [number, string] }[];
-  };
-}
-
 interface UseGrafanaMetricsResult {
   readonly graph: TopologyGraph | undefined;
   readonly loading: boolean;
@@ -71,53 +63,6 @@ function groupedMapsToRecord(
   return result;
 }
 
-// ─── Legacy direct-proxy query (fallback when Go backend is unavailable) ────
-
-async function legacyQueryPrometheus(
-  dsUid: string,
-  promql: string,
-  time?: number,
-): Promise<number | undefined> {
-  const params: Record<string, string> = { query: promql };
-  if (time !== undefined) {
-    params.time = String(time);
-  }
-
-  const response = await firstValueFrom(getBackendSrv()
-    .fetch<PrometheusInstantResult>({
-      url: `/api/datasources/proxy/uid/${dsUid}/api/v1/query`,
-      params,
-      method: 'GET',
-      showErrorAlert: false,
-    }));
-
-  const results = response.data.data.result;
-  if (results.length === 0) return undefined;
-  const val = parseFloat(results[0].value[1]);
-  return isNaN(val) ? undefined : val;
-}
-
-async function legacyBatchQuery(
-  dsUid: string,
-  queries: ReadonlyMap<string, string>,
-  time?: number,
-): Promise<Map<string, number | undefined>> {
-  const results = new Map<string, number | undefined>();
-  const entries = Array.from(queries.entries());
-
-  const promises = entries.map(async ([key, promql]): Promise<void> => {
-    try {
-      const val = await legacyQueryPrometheus(dsUid, promql, time);
-      results.set(key, val);
-    } catch {
-      results.set(key, undefined);
-    }
-  });
-  await Promise.all(promises);
-
-  return results;
-}
-
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
 export function useGrafanaMetrics(
@@ -131,7 +76,6 @@ export function useGrafanaMetrics(
   const [error, setError] = useState<string | undefined>(undefined);
   const [lastRefreshAt, setLastRefreshAt] = useState<number | undefined>(undefined);
   const pollRef = useRef(0);
-  const backendAvailableRef = useRef<boolean | undefined>(undefined);
   const baselineCacheRef = useRef<Map<string, number | undefined> | undefined>(undefined);
   const baselineFetchedAtRef = useRef(0);
 
@@ -156,101 +100,36 @@ export function useGrafanaMetrics(
   const poll = useCallback(async (id: number): Promise<void> => {
     if (definition === undefined || groupedMaps === undefined) return;
 
-    // Try backend path first (or use it if already confirmed available).
-    if (backendAvailableRef.current !== false) {
-      try {
-        const baselineExpired = Date.now() - baselineFetchedAtRef.current > 5 * 60 * 1000;
-        const includeBaseline = baselineCacheRef.current === undefined || baselineExpired;
-        const response = await fetchMetricsFromBackend({
-          queries: groupedMapsToRecord(groupedMaps),
-          includeBaseline,
-        });
-
-        backendAvailableRef.current = true;
-
-        if (pollRef.current !== id) return;
-
-        const mergedResults = recordToMap(response.results);
-
-        let weekAgoResults: Map<string, number | undefined>;
-        if (response.baselineResults !== undefined) {
-          weekAgoResults = recordToMap(response.baselineResults);
-          baselineCacheRef.current = weekAgoResults;
-          baselineFetchedAtRef.current = Date.now();
-        } else {
-          weekAgoResults = baselineCacheRef.current ?? new Map<string, number | undefined>();
-        }
-
-        const assembled = assembleTopologyGraph(definition, mergedResults, weekAgoResults, slaDefaults);
-        setGraph(assembled);
-        setError(undefined);
-        setLastRefreshAt(Date.now());
-        return;
-      } catch {
-        // Backend not available — fall back to legacy mode.
-        backendAvailableRef.current ??= false;
-      }
-    }
-
-    // Legacy fallback: individual Prometheus proxy requests.
-    const mergedResults = new Map<string, number | undefined>();
-    const legacyBaselineExpired = Date.now() - baselineFetchedAtRef.current > 5 * 60 * 1000;
-    const fetchLegacyBaseline = baselineCacheRef.current === undefined || legacyBaselineExpired;
-    const weekAgoResults = fetchLegacyBaseline ? new Map<string, number | undefined>() : undefined;
-    const weekAgoTime = Math.floor(Date.now() / 1000) - 7 * 86400;
-
-    const batchPromises: Promise<void>[] = [];
-
-    for (const [dataSourceName, queries] of groupedMaps) {
-      const dsUid = dataSourceMap[dataSourceName];
-      if (dsUid === '') {
-        for (const key of queries.keys()) {
-          mergedResults.set(key, undefined);
-        }
-        continue;
-      }
-
-      batchPromises.push(
-        legacyBatchQuery(dsUid, queries).then((results): void => {
-          for (const [key, value] of results) {
-            mergedResults.set(key, value);
-          }
-        }),
-      );
-
-      if (weekAgoResults !== undefined) {
-        batchPromises.push(
-          legacyBatchQuery(dsUid, queries, weekAgoTime).then((results): void => {
-            for (const [key, value] of results) {
-              weekAgoResults.set(key, value);
-            }
-          }),
-        );
-      }
-    }
-
     try {
-      await Promise.all(batchPromises);
-      if (pollRef.current === id) {
-        let effectiveBaseline: Map<string, number | undefined>;
-        if (weekAgoResults !== undefined) {
-          baselineCacheRef.current = weekAgoResults;
-          baselineFetchedAtRef.current = Date.now();
-          effectiveBaseline = weekAgoResults;
-        } else {
-          effectiveBaseline = baselineCacheRef.current ?? new Map<string, number | undefined>();
-        }
-        const assembled = assembleTopologyGraph(definition, mergedResults, effectiveBaseline, slaDefaults);
-        setGraph(assembled);
-        setError(undefined);
-        setLastRefreshAt(Date.now());
+      const baselineExpired = Date.now() - baselineFetchedAtRef.current > 5 * 60 * 1000;
+      const includeBaseline = baselineCacheRef.current === undefined || baselineExpired;
+      const response = await fetchMetricsFromBackend({
+        queries: groupedMapsToRecord(groupedMaps),
+        includeBaseline,
+      });
+
+      if (pollRef.current !== id) return;
+
+      const mergedResults = recordToMap(response.results);
+
+      let weekAgoResults: Map<string, number | undefined>;
+      if (response.baselineResults !== undefined) {
+        weekAgoResults = recordToMap(response.baselineResults);
+        baselineCacheRef.current = weekAgoResults;
+        baselineFetchedAtRef.current = Date.now();
+      } else {
+        weekAgoResults = baselineCacheRef.current ?? new Map<string, number | undefined>();
       }
+
+      const assembled = assembleTopologyGraph(definition, mergedResults, weekAgoResults, slaDefaults);
+      setGraph(assembled);
+      setError(undefined);
+      setLastRefreshAt(Date.now());
     } catch (err) {
-      if (pollRef.current === id) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
-      }
+      if (pollRef.current !== id) return;
+      setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
     }
-  }, [definition, groupedMaps, dataSourceMap]);
+  }, [definition, groupedMaps, dataSourceMap, slaDefaults]);
 
   // Metric polling (runs in background, doesn't block graph rendering)
   useEffect(() => {

@@ -19,6 +19,7 @@ import { useDatasourceDefs } from './DatasourceDefsContext';
 import { useMetricDatasource } from './MetricDatasourceContext';
 import { useSaveMetricQuery } from './SaveMetricQueryContext';
 import { metricDescription } from '../application/metricDescriptions';
+import { PLUGIN_ID } from '../application/pluginConstants';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -133,46 +134,16 @@ function PodsTimeSeriesChart({ ready, desired }: { readonly ready: SeriesData | 
 
 // ─── Fetch helper ───────────────────────────────────────────────────────────
 
-interface RangeResult {
-  readonly status: string;
-  readonly data: {
-    readonly resultType: string;
-    readonly result: readonly {
-      readonly values: readonly [number, string][];
-    }[];
-  };
+interface BackendRangeResponse {
+  readonly results: Record<string, { readonly timestamps: number[]; readonly values: number[] } | null>;
 }
 
-async function fetchSeries(
-  dsUid: string,
+function toSeriesData(
+  result: { readonly timestamps: number[]; readonly values: number[] } | null | undefined,
   promql: string,
-  start: number,
-  end: number,
-  step: number,
-  requestId: string,
-  signal: AbortSignal,
-): Promise<SeriesData | undefined> {
-  const response = await firstValueFrom(getBackendSrv()
-    .fetch<RangeResult>({
-      url: `/api/datasources/proxy/uid/${dsUid}/api/v1/query_range`,
-      params: { query: promql, start: String(start), end: String(end), step: String(step) },
-      method: 'GET',
-      requestId,
-      showErrorAlert: false,
-    }));
-
-  if (signal.aborted) return undefined;
-
-  const series = response.data.data.result;
-  if (series.length === 0) return undefined;
-
-  const timestamps: number[] = [];
-  const values: number[] = [];
-  for (const [ts, val] of series[0].values) {
-    timestamps.push(ts);
-    values.push(parseFloat(val));
-  }
-  return { timestamps, values, promql };
+): SeriesData | undefined {
+  if (result === null || result === undefined || result.timestamps.length === 0) return undefined;
+  return { timestamps: result.timestamps, values: result.values, promql };
 }
 
 // ─── Modal component ────────────────────────────────────────────────────────
@@ -221,13 +192,6 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
     }));
   }, [datasourceDefs]);
 
-  const resolveDsUid = useCallback((dsName: string): string | undefined => {
-    const dsMapRecord: Readonly<Record<string, string | undefined>> = dsMap;
-    const uid = dsMapRecord[dsName];
-    if (uid !== undefined && uid !== '') return uid;
-    return Object.values(dsMap).find((v): boolean => v !== '');
-  }, [dsMap]);
-
   useEffect((): (() => void) => {
     const handleEsc = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose();
@@ -256,25 +220,37 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
       return;
     }
 
-    const dsUid = resolveDsUid(metricDsName ?? '');
-    if (dsUid === undefined || dsUid === '') {
+    const dsName = metricDsName ?? '';
+    if (dsName === '') {
       setState({ status: 'error', message: 'No Prometheus datasource configured in plugin settings' });
       return;
     }
 
     const { start, end, step } = resolveRange(timeRange);
 
+    // Build query map — only include non-undefined queries
+    const queries: Record<string, string> = {};
+    if (readyPromql !== undefined) queries[readyKey] = readyPromql;
+    if (desiredPromql !== undefined) queries[desiredKey] = desiredPromql;
+
     try {
-      const [readyData, desiredData] = await Promise.all([
-        readyPromql !== undefined
-          ? fetchSeries(dsUid, readyPromql, start, end, step, `pods-ready-${entityId}`, signal)
-          : Promise.resolve(undefined),
-        desiredPromql !== undefined
-          ? fetchSeries(dsUid, desiredPromql, start, end, step, `pods-desired-${entityId}`, signal)
-          : Promise.resolve(undefined),
-      ]);
+      const response = await firstValueFrom(getBackendSrv()
+        .fetch<BackendRangeResponse>({
+          url: `/api/plugins/${PLUGIN_ID}/resources/metric-range`,
+          method: 'POST',
+          data: { datasource: dsName, queries, start, end, step },
+          requestId: `pods-chart-${entityId}`,
+          showErrorAlert: false,
+        }));
 
       if (signal.aborted) return;
+
+      const readyData = readyPromql !== undefined
+        ? toSeriesData(response.data.results[readyKey], readyPromql)
+        : undefined;
+      const desiredData = desiredPromql !== undefined
+        ? toSeriesData(response.data.results[desiredKey], desiredPromql)
+        : undefined;
 
       if (readyData === undefined && desiredData === undefined) {
         setState({ status: 'error', message: 'No data returned for replica metrics' });
@@ -286,7 +262,7 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
       if (signal.aborted) return;
       setState({ status: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
     }
-  }, [entityId, deployment, timeRange, topologyId, dsMap, metricDsName, resolveDsUid, promqlQueries, isEditing]);
+  }, [entityId, deployment, timeRange, topologyId, dsMap, metricDsName, promqlQueries, isEditing]);
 
   useEffect((): (() => void) => {
     const controller = new AbortController();
