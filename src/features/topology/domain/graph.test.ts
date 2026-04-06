@@ -8,8 +8,8 @@ const NOW = new Date('2026-03-19T12:00:00Z');
 
 function makeNodeMetrics(): NodeMetrics {
   return new NodeMetrics({
-    cpuPercent: 40,
-    memoryPercent: 55,
+    cpu: 40,
+    memory: 55,
     lastUpdatedAt: NOW,
   });
 }
@@ -40,9 +40,9 @@ function makeGraph(): TopologyGraph {
     source: 'svc-1',
     target: 'svc-2',
     metrics: new HttpEdgeMetrics({
-      latencyP95Ms: 100,
+      latencyP95: 100,
       rps: 2000,
-      errorRatePercent: 0.1,
+      errorRate: 0.1,
       lastUpdatedAt: NOW,
     }),
   });
@@ -52,9 +52,9 @@ function makeGraph(): TopologyGraph {
     source: 'svc-1',
     target: 'db-1',
     metrics: new DbConnectionMetrics({
-      latencyP95Ms: 4,
+      latencyP95: 4,
       rps: 600,
-      errorRatePercent: 0,
+      errorRate: 0,
       lastUpdatedAt: NOW,
       activeConnections: 15,
       idleConnections: 5,

@@ -9,10 +9,11 @@ import {
   DbConnectionMetrics,
 } from '../domain/index';
 import type { SlaThresholdMap } from './slaThresholds';
+import type { MetricDirectionMap } from './directionMap';
 
 const TEST_HTTP_SLA: SlaThresholdMap = {
-  errorRatePercent: { warning: 1, critical: 5 },
-  latencyP95Ms: { warning: 500, critical: 2000 },
+  errorRate: { warning: 1, critical: 5 },
+  latencyP95: { warning: 500, critical: 2000 },
 };
 
 const TEST_DB_SLA: SlaThresholdMap = {
@@ -22,23 +23,40 @@ const TEST_DB_SLA: SlaThresholdMap = {
   avgQueryTimeMs: { warning: 100, critical: 500 },
 };
 
+const TEST_HTTP_DIR: MetricDirectionMap = {
+  rps: 'higher-is-better',
+  latencyP95: 'lower-is-better',
+  latencyAvg: 'lower-is-better',
+  errorRate: 'lower-is-better',
+};
+
+const TEST_DB_DIR: MetricDirectionMap = {
+  ...TEST_HTTP_DIR,
+  activeConnections: 'lower-is-better',
+  idleConnections: 'higher-is-better',
+  avgQueryTimeMs: 'lower-is-better',
+  poolHitRatePercent: 'higher-is-better',
+  poolTimeoutsPerMin: 'lower-is-better',
+  staleConnectionsPerMin: 'lower-is-better',
+};
+
 // ─── Factories ──────────────────────────────────────────────────────────────
 
-function makeHttpMetrics(overrides?: { errorRatePercent?: number }): HttpEdgeMetrics {
+function makeHttpMetrics(overrides?: { errorRate?: number }): HttpEdgeMetrics {
   return new HttpEdgeMetrics({
-    latencyP95Ms: 20, rps: 100, errorRatePercent: overrides?.errorRatePercent ?? 0,
+    latencyP95: 20, rps: 100, errorRate: overrides?.errorRate ?? 0,
     lastUpdatedAt: new Date(),
   });
 }
 
 function makeDbMetrics(overrides?: {
-  errorRatePercent?: number;
+  errorRate?: number;
   poolTimeoutsPerMin?: number;
   staleConnectionsPerMin?: number;
   avgQueryTimeMs?: number;
 }): DbConnectionMetrics {
   return new DbConnectionMetrics({
-    latencyP95Ms: 10, rps: 200, errorRatePercent: overrides?.errorRatePercent ?? 0,
+    latencyP95: 10, rps: 200, errorRate: overrides?.errorRate ?? 0,
     lastUpdatedAt: new Date(),
     activeConnections: 5, idleConnections: 5,
     avgQueryTimeMs: overrides?.avgQueryTimeMs ?? 10,
@@ -48,22 +66,22 @@ function makeDbMetrics(overrides?: {
   });
 }
 
-function makeJsonEdge(errorRatePercent?: number): HttpJsonEdge {
+function makeJsonEdge(errorRate?: number): HttpJsonEdge {
   return new HttpJsonEdge({
     id: 'e1', source: 'a', target: 'b',
-    metrics: makeHttpMetrics({ errorRatePercent: errorRatePercent ?? 0 }),
+    metrics: makeHttpMetrics({ errorRate: errorRate ?? 0 }),
   });
 }
 
-function makeXmlEdge(errorRatePercent?: number): HttpXmlEdge {
+function makeXmlEdge(errorRate?: number): HttpXmlEdge {
   return new HttpXmlEdge({
     id: 'e2', source: 'a', target: 'b',
-    metrics: makeHttpMetrics({ errorRatePercent: errorRatePercent ?? 0 }),
+    metrics: makeHttpMetrics({ errorRate: errorRate ?? 0 }),
   });
 }
 
 function makeDbEdge(overrides?: {
-  errorRatePercent?: number;
+  errorRate?: number;
   poolTimeoutsPerMin?: number;
   staleConnectionsPerMin?: number;
   avgQueryTimeMs?: number;
@@ -78,21 +96,21 @@ function makeDbEdge(overrides?: {
 
 describe('edgeHealth', (): void => {
   it('returns healthy when error rate is 0', (): void => {
-    expect(edgeHealth(makeJsonEdge(0), 'sla', TEST_HTTP_SLA)).toBe('healthy');
+    expect(edgeHealth(makeJsonEdge(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('healthy');
   });
 
   it('returns healthy when error rate is below 1', (): void => {
-    expect(edgeHealth(makeJsonEdge(0.5), 'sla', TEST_HTTP_SLA)).toBe('healthy');
+    expect(edgeHealth(makeJsonEdge(0.5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('healthy');
   });
 
   it('returns warning when error rate is >= 1 and < 5', (): void => {
-    expect(edgeHealth(makeJsonEdge(1), 'sla', TEST_HTTP_SLA)).toBe('warning');
-    expect(edgeHealth(makeJsonEdge(4.9), 'sla', TEST_HTTP_SLA)).toBe('warning');
+    expect(edgeHealth(makeJsonEdge(1), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('warning');
+    expect(edgeHealth(makeJsonEdge(4.9), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('warning');
   });
 
   it('returns critical when error rate is >= 5', (): void => {
-    expect(edgeHealth(makeJsonEdge(5), 'sla', TEST_HTTP_SLA)).toBe('critical');
-    expect(edgeHealth(makeJsonEdge(10), 'sla', TEST_HTTP_SLA)).toBe('critical');
+    expect(edgeHealth(makeJsonEdge(5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('critical');
+    expect(edgeHealth(makeJsonEdge(10), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('critical');
   });
 
   it('returns unknown when no SLA is defined', (): void => {
@@ -102,35 +120,35 @@ describe('edgeHealth', (): void => {
 
   describe('TcpDbConnectionEdge pool health escalation', (): void => {
     it('returns warning when poolTimeoutsPerMin > 5 and error rate < 1', (): void => {
-      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 6, errorRatePercent: 0 }), 'sla', TEST_DB_SLA)).toBe('warning');
+      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 6, errorRate: 0 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('warning');
     });
 
     it('returns warning when staleConnectionsPerMin > 10 and error rate < 1', (): void => {
-      expect(edgeHealth(makeDbEdge({ staleConnectionsPerMin: 11, errorRatePercent: 0 }), 'sla', TEST_DB_SLA)).toBe('warning');
+      expect(edgeHealth(makeDbEdge({ staleConnectionsPerMin: 11, errorRate: 0 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('warning');
     });
 
     it('returns warning when avgQueryTimeMs > 100 and error rate < 1', (): void => {
-      expect(edgeHealth(makeDbEdge({ avgQueryTimeMs: 101, errorRatePercent: 0 }), 'sla', TEST_DB_SLA)).toBe('warning');
+      expect(edgeHealth(makeDbEdge({ avgQueryTimeMs: 101, errorRate: 0 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('warning');
     });
 
     it('returns warning when poolTimeoutsPerMin > 5 and error rate >= 1 (worst-of)', (): void => {
-      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 6, errorRatePercent: 1 }), 'sla', TEST_DB_SLA)).toBe('warning');
+      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 6, errorRate: 1 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('warning');
     });
 
     it('returns critical when poolTimeoutsPerMin > critical and error rate >= critical', (): void => {
-      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 21, errorRatePercent: 5 }), 'sla', TEST_DB_SLA)).toBe('critical');
+      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 21, errorRate: 5 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('critical');
     });
 
     it('returns warning when avgQueryTimeMs > 100 and error rate >= 1 (worst-of)', (): void => {
-      expect(edgeHealth(makeDbEdge({ avgQueryTimeMs: 101, errorRatePercent: 2 }), 'sla', TEST_DB_SLA)).toBe('warning');
+      expect(edgeHealth(makeDbEdge({ avgQueryTimeMs: 101, errorRate: 2 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('warning');
     });
 
     it('returns warning when pool metrics are at warning threshold', (): void => {
-      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 5, staleConnectionsPerMin: 10, avgQueryTimeMs: 100, errorRatePercent: 0 }), 'sla', TEST_DB_SLA)).toBe('warning');
+      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 5, staleConnectionsPerMin: 10, avgQueryTimeMs: 100, errorRate: 0 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('warning');
     });
 
     it('returns healthy when pool metrics are below warning thresholds', (): void => {
-      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 4, staleConnectionsPerMin: 9, avgQueryTimeMs: 99, errorRatePercent: 0 }), 'sla', TEST_DB_SLA)).toBe('healthy');
+      expect(edgeHealth(makeDbEdge({ poolTimeoutsPerMin: 4, staleConnectionsPerMin: 9, avgQueryTimeMs: 99, errorRate: 0 }), 'sla', TEST_DB_SLA, TEST_DB_DIR)).toBe('healthy');
     });
   });
 });
@@ -139,15 +157,15 @@ describe('edgeHealth', (): void => {
 
 describe('edgeHealthColor', (): void => {
   it('returns green for healthy edge', (): void => {
-    expect(edgeHealthColor(makeJsonEdge(0), 'sla', TEST_HTTP_SLA)).toBe('#22c55e');
+    expect(edgeHealthColor(makeJsonEdge(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('#22c55e');
   });
 
   it('returns yellow for warning edge', (): void => {
-    expect(edgeHealthColor(makeJsonEdge(1), 'sla', TEST_HTTP_SLA)).toBe('#eab308');
+    expect(edgeHealthColor(makeJsonEdge(1), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('#eab308');
   });
 
   it('returns red for critical edge', (): void => {
-    expect(edgeHealthColor(makeJsonEdge(5), 'sla', TEST_HTTP_SLA)).toBe('#ef4444');
+    expect(edgeHealthColor(makeJsonEdge(5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR)).toBe('#ef4444');
   });
 });
 
@@ -155,23 +173,23 @@ describe('edgeHealthColor', (): void => {
 
 describe('edgeStrokeStyle', (): void => {
   it('returns solid stroke width 2 for HttpJsonEdge', (): void => {
-    const style = edgeStrokeStyle(makeJsonEdge(0), 'sla', TEST_HTTP_SLA);
+    const style = edgeStrokeStyle(makeJsonEdge(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
     expect(style).toEqual({ stroke: '#22c55e', strokeWidth: 2 });
     expect(style).not.toHaveProperty('strokeDasharray');
   });
 
   it('returns dashed stroke 4 2 width 2 for HttpXmlEdge', (): void => {
-    const style = edgeStrokeStyle(makeXmlEdge(0), 'sla', TEST_HTTP_SLA);
+    const style = edgeStrokeStyle(makeXmlEdge(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
     expect(style).toEqual({ stroke: '#22c55e', strokeWidth: 2, strokeDasharray: '4 2' });
   });
 
   it('returns dashed stroke 8 4 width 3 for TcpDbConnectionEdge', (): void => {
-    const style = edgeStrokeStyle(makeDbEdge(), 'sla', TEST_DB_SLA);
+    const style = edgeStrokeStyle(makeDbEdge(), 'sla', TEST_DB_SLA, TEST_DB_DIR);
     expect(style).toEqual({ stroke: '#22c55e', strokeWidth: 3, strokeDasharray: '8 4' });
   });
 
   it('uses health color in stroke', (): void => {
-    const style = edgeStrokeStyle(makeJsonEdge(5), 'sla', TEST_HTTP_SLA);
+    const style = edgeStrokeStyle(makeJsonEdge(5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
     expect(style.stroke).toBe('#ef4444');
   });
 });
@@ -180,7 +198,7 @@ describe('edgeStrokeStyle', (): void => {
 
 describe('edgeMarkerEnd', (): void => {
   it('returns ArrowClosed marker with correct dimensions', (): void => {
-    const marker = edgeMarkerEnd(makeJsonEdge(0), 'sla', TEST_HTTP_SLA);
+    const marker = edgeMarkerEnd(makeJsonEdge(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
     expect(marker).toEqual({
       type: MarkerType.ArrowClosed,
       color: '#22c55e',
@@ -190,7 +208,7 @@ describe('edgeMarkerEnd', (): void => {
   });
 
   it('uses health color for marker', (): void => {
-    const marker = edgeMarkerEnd(makeJsonEdge(5), 'sla', TEST_HTTP_SLA);
+    const marker = edgeMarkerEnd(makeJsonEdge(5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
     expect(marker.color).toBe('#ef4444');
   });
 });

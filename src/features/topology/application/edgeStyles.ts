@@ -4,6 +4,7 @@ import type { TopologyEdge } from '../domain';
 import type { CSSProperties } from 'react';
 import type { ColoringMode } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
+import type { MetricDirectionMap } from './directionMap';
 import { edgeMetricRows } from './edgeDisplayData';
 import { healthFromMetricRows } from './healthFromMetricRows';
 
@@ -18,19 +19,19 @@ const HEALTH_COLORS: Record<EdgeHealth, string> = {
   unknown: '#9ca3af',
 };
 
-export function edgeHealth(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): EdgeHealth {
-  const rows = edgeMetricRows(edge, undefined, mode, sla);
+export function edgeHealth(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): EdgeHealth {
+  const rows = edgeMetricRows(edge, undefined, mode, sla, directions);
   return healthFromMetricRows(rows);
 }
 
-export function edgeHealthColor(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): string {
-  return HEALTH_COLORS[edgeHealth(edge, mode, sla)];
+export function edgeHealthColor(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): string {
+  return HEALTH_COLORS[edgeHealth(edge, mode, sla, directions)];
 }
 
 // ─── Stroke style (color + pattern per type) ─────────────────────────────────
 
-export function edgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): CSSProperties {
-  const color = edgeHealthColor(edge, mode, sla);
+export function edgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): CSSProperties {
+  const color = edgeHealthColor(edge, mode, sla, directions);
 
   if (edge instanceof TcpDbConnectionEdge) {
     return { stroke: color, strokeWidth: 3, strokeDasharray: '8 4' };
@@ -65,10 +66,10 @@ interface EdgeMarkerConfig {
   readonly height: number;
 }
 
-export function edgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): EdgeMarkerConfig {
+export function edgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): EdgeMarkerConfig {
   return {
     type: MarkerType.ArrowClosed,
-    color: edgeHealthColor(edge, mode, sla),
+    color: edgeHealthColor(edge, mode, sla, directions),
     width: 20,
     height: 20,
   };
@@ -76,10 +77,10 @@ export function edgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: Sla
 
 // ─── Label style ─────────────────────────────────────────────────────────────
 
-export function edgeLabelStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): CSSProperties {
+export function edgeLabelStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): CSSProperties {
   return {
     fontSize: 11,
-    fill: edgeHealthColor(edge, mode, sla),
+    fill: edgeHealthColor(edge, mode, sla, directions),
     fontWeight: 600,
   };
 }
@@ -102,20 +103,20 @@ function throughputStrokeWidth(rps: number | undefined): number {
   return 20;
 }
 
-export function lowPolyEdgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): CSSProperties {
-  const color = edgeHealthColor(edge, mode, sla);
+export function lowPolyEdgeStrokeStyle(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): CSSProperties {
+  const color = edgeHealthColor(edge, mode, sla, directions);
   const width = throughputStrokeWidth(edge.metrics.rps);
   return { stroke: color, strokeWidth: width };
 }
 
-export function lowPolyEdgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap): EdgeMarkerConfig {
+export function lowPolyEdgeMarkerEnd(edge: TopologyEdge, mode?: ColoringMode, sla?: SlaThresholdMap, directions?: MetricDirectionMap): EdgeMarkerConfig {
   // Scale marker inversely with stroke so the arrowhead stays a consistent visual size.
   // SVG markers use markerUnits="strokeWidth" by default, so visual size = markerSize * strokeWidth.
   const strokeW = throughputStrokeWidth(edge.metrics.rps);
   const markerSize = Math.max(3, Math.round(48 / strokeW));
   return {
     type: MarkerType.ArrowClosed,
-    color: edgeHealthColor(edge, mode, sla),
+    color: edgeHealthColor(edge, mode, sla, directions),
     width: markerSize,
     height: markerSize,
   };

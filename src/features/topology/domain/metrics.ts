@@ -6,53 +6,26 @@ export type NodeStatus = 'healthy' | 'warning' | 'critical' | 'unknown';
 
 export type MetricDirection = 'lower-is-better' | 'higher-is-better';
 
-export const METRIC_DIRECTIONS: Readonly<Record<string, MetricDirection>> = {
-  cpuPercent: 'lower-is-better',
-  memoryPercent: 'lower-is-better',
-  latencyP95Ms: 'lower-is-better',
-  latencyAvgMs: 'lower-is-better',
-  rps: 'higher-is-better',
-  errorRatePercent: 'lower-is-better',
-  activeConnections: 'lower-is-better',
-  idleConnections: 'higher-is-better',
-  avgQueryTimeMs: 'lower-is-better',
-  poolHitRatePercent: 'higher-is-better',
-  poolTimeoutsPerMin: 'lower-is-better',
-  staleConnectionsPerMin: 'lower-is-better',
-  readyReplicas: 'higher-is-better',
-  desiredReplicas: 'higher-is-better',
-  queueResidenceTimeP95Ms: 'lower-is-better',
-  queueResidenceTimeAvgMs: 'lower-is-better',
-  consumerProcessingTimeP95Ms: 'lower-is-better',
-  consumerProcessingTimeAvgMs: 'lower-is-better',
-  e2eLatencyP95Ms: 'lower-is-better',
-  e2eLatencyAvgMs: 'lower-is-better',
-  queueDepth: 'lower-is-better',
-  consumerLag: 'lower-is-better',
-  consumerRps: 'higher-is-better',
-  consumerErrorRatePercent: 'lower-is-better',
-} as const;
-
 // ─── Node Metrics ────────────────────────────────────────────────────────────
 
 export class NodeMetrics {
-  public readonly cpuPercent: number | undefined;
-  public readonly memoryPercent: number | undefined;
-  public readonly cpuPercentWeekAgo: number | undefined;
-  public readonly memoryPercentWeekAgo: number | undefined;
+  public readonly cpu: number | undefined;
+  public readonly memory: number | undefined;
+  public readonly cpuWeekAgo: number | undefined;
+  public readonly memoryWeekAgo: number | undefined;
   public readonly lastUpdatedAt: Date;
 
   public constructor(params: {
-    cpuPercent?: number | undefined;
-    memoryPercent?: number | undefined;
-    cpuPercentWeekAgo?: number | undefined;
-    memoryPercentWeekAgo?: number | undefined;
+    cpu?: number | undefined;
+    memory?: number | undefined;
+    cpuWeekAgo?: number | undefined;
+    memoryWeekAgo?: number | undefined;
     lastUpdatedAt: Date;
   }) {
-    this.cpuPercent = params.cpuPercent;
-    this.memoryPercent = params.memoryPercent;
-    this.cpuPercentWeekAgo = params.cpuPercentWeekAgo;
-    this.memoryPercentWeekAgo = params.memoryPercentWeekAgo;
+    this.cpu = params.cpu;
+    this.memory = params.memory;
+    this.cpuWeekAgo = params.cpuWeekAgo;
+    this.memoryWeekAgo = params.memoryWeekAgo;
     this.lastUpdatedAt = params.lastUpdatedAt;
   }
 }
@@ -63,29 +36,29 @@ export class DeploymentMetrics {
   public readonly name: string;
   public readonly readyReplicas: number | undefined;
   public readonly desiredReplicas: number | undefined;
-  public readonly cpuPercent: number;
-  public readonly memoryPercent: number;
-  public readonly cpuPercentWeekAgo: number | undefined;
-  public readonly memoryPercentWeekAgo: number | undefined;
+  public readonly cpu: number;
+  public readonly memory: number;
+  public readonly cpuWeekAgo: number | undefined;
+  public readonly memoryWeekAgo: number | undefined;
   public readonly customMetrics: readonly CustomMetricValue[];
 
   public constructor(params: {
     name: string;
     readyReplicas?: number | undefined;
     desiredReplicas?: number | undefined;
-    cpuPercent: number;
-    memoryPercent: number;
-    cpuPercentWeekAgo?: number | undefined;
-    memoryPercentWeekAgo?: number | undefined;
+    cpu: number;
+    memory: number;
+    cpuWeekAgo?: number | undefined;
+    memoryWeekAgo?: number | undefined;
     customMetrics?: readonly CustomMetricValue[] | undefined;
   }) {
     this.name = params.name;
     this.readyReplicas = params.readyReplicas;
     this.desiredReplicas = params.desiredReplicas;
-    this.cpuPercent = params.cpuPercent;
-    this.memoryPercent = params.memoryPercent;
-    this.cpuPercentWeekAgo = params.cpuPercentWeekAgo;
-    this.memoryPercentWeekAgo = params.memoryPercentWeekAgo;
+    this.cpu = params.cpu;
+    this.memory = params.memory;
+    this.cpuWeekAgo = params.cpuWeekAgo;
+    this.memoryWeekAgo = params.memoryWeekAgo;
     this.customMetrics = params.customMetrics ?? [];
   }
 }
@@ -93,35 +66,35 @@ export class DeploymentMetrics {
 // ─── Edge Metrics (base) ─────────────────────────────────────────────────────
 
 export abstract class BaseEdgeMetrics {
-  public readonly latencyP95Ms: number | undefined;
-  public readonly latencyAvgMs: number | undefined;
+  public readonly latencyP95: number | undefined;
+  public readonly latencyAvg: number | undefined;
   public readonly rps: number | undefined;
-  public readonly errorRatePercent: number | undefined;
-  public readonly latencyP95MsWeekAgo: number | undefined;
-  public readonly latencyAvgMsWeekAgo: number | undefined;
+  public readonly errorRate: number | undefined;
+  public readonly latencyP95WeekAgo: number | undefined;
+  public readonly latencyAvgWeekAgo: number | undefined;
   public readonly rpsWeekAgo: number | undefined;
-  public readonly errorRatePercentWeekAgo: number | undefined;
+  public readonly errorRateWeekAgo: number | undefined;
   public readonly lastUpdatedAt: Date;
 
   protected constructor(params: {
-    latencyP95Ms?: number | undefined;
-    latencyAvgMs?: number | undefined;
+    latencyP95?: number | undefined;
+    latencyAvg?: number | undefined;
     rps?: number | undefined;
-    errorRatePercent?: number | undefined;
-    latencyP95MsWeekAgo?: number | undefined;
-    latencyAvgMsWeekAgo?: number | undefined;
+    errorRate?: number | undefined;
+    latencyP95WeekAgo?: number | undefined;
+    latencyAvgWeekAgo?: number | undefined;
     rpsWeekAgo?: number | undefined;
-    errorRatePercentWeekAgo?: number | undefined;
+    errorRateWeekAgo?: number | undefined;
     lastUpdatedAt: Date;
   }) {
-    this.latencyP95Ms = params.latencyP95Ms;
-    this.latencyAvgMs = params.latencyAvgMs;
+    this.latencyP95 = params.latencyP95;
+    this.latencyAvg = params.latencyAvg;
     this.rps = params.rps;
-    this.errorRatePercent = params.errorRatePercent;
-    this.latencyP95MsWeekAgo = params.latencyP95MsWeekAgo;
-    this.latencyAvgMsWeekAgo = params.latencyAvgMsWeekAgo;
+    this.errorRate = params.errorRate;
+    this.latencyP95WeekAgo = params.latencyP95WeekAgo;
+    this.latencyAvgWeekAgo = params.latencyAvgWeekAgo;
     this.rpsWeekAgo = params.rpsWeekAgo;
-    this.errorRatePercentWeekAgo = params.errorRatePercentWeekAgo;
+    this.errorRateWeekAgo = params.errorRateWeekAgo;
     this.lastUpdatedAt = params.lastUpdatedAt;
   }
 }
@@ -130,14 +103,14 @@ export abstract class BaseEdgeMetrics {
 
 export class HttpEdgeMetrics extends BaseEdgeMetrics {
   public constructor(params: {
-    latencyP95Ms?: number | undefined;
-    latencyAvgMs?: number | undefined;
+    latencyP95?: number | undefined;
+    latencyAvg?: number | undefined;
     rps?: number | undefined;
-    errorRatePercent?: number | undefined;
-    latencyP95MsWeekAgo?: number | undefined;
-    latencyAvgMsWeekAgo?: number | undefined;
+    errorRate?: number | undefined;
+    latencyP95WeekAgo?: number | undefined;
+    latencyAvgWeekAgo?: number | undefined;
     rpsWeekAgo?: number | undefined;
-    errorRatePercentWeekAgo?: number | undefined;
+    errorRateWeekAgo?: number | undefined;
     lastUpdatedAt: Date;
   }) {
     super(params);
@@ -161,14 +134,14 @@ export class DbConnectionMetrics extends BaseEdgeMetrics {
   public readonly staleConnectionsPerMinWeekAgo: number | undefined;
 
   public constructor(params: {
-    latencyP95Ms?: number | undefined;
-    latencyAvgMs?: number | undefined;
+    latencyP95?: number | undefined;
+    latencyAvg?: number | undefined;
     rps?: number | undefined;
-    errorRatePercent?: number | undefined;
-    latencyP95MsWeekAgo?: number | undefined;
-    latencyAvgMsWeekAgo?: number | undefined;
+    errorRate?: number | undefined;
+    latencyP95WeekAgo?: number | undefined;
+    latencyAvgWeekAgo?: number | undefined;
     rpsWeekAgo?: number | undefined;
-    errorRatePercentWeekAgo?: number | undefined;
+    errorRateWeekAgo?: number | undefined;
     lastUpdatedAt: Date;
     activeConnections?: number | undefined;
     idleConnections?: number | undefined;
@@ -202,146 +175,146 @@ export class DbConnectionMetrics extends BaseEdgeMetrics {
 // ─── AmqpEdgeMetrics ─────────────────────────────────────────────────────────
 
 export class AmqpEdgeMetrics extends BaseEdgeMetrics {
-  public readonly queueResidenceTimeP95Ms: number | undefined;
-  public readonly queueResidenceTimeAvgMs: number | undefined;
-  public readonly queueResidenceTimeP95MsWeekAgo: number | undefined;
-  public readonly queueResidenceTimeAvgMsWeekAgo: number | undefined;
-  public readonly consumerProcessingTimeP95Ms: number | undefined;
-  public readonly consumerProcessingTimeAvgMs: number | undefined;
-  public readonly consumerProcessingTimeP95MsWeekAgo: number | undefined;
-  public readonly consumerProcessingTimeAvgMsWeekAgo: number | undefined;
-  public readonly e2eLatencyP95Ms: number | undefined;
-  public readonly e2eLatencyAvgMs: number | undefined;
-  public readonly e2eLatencyP95MsWeekAgo: number | undefined;
-  public readonly e2eLatencyAvgMsWeekAgo: number | undefined;
+  public readonly queueResidenceTimeP95: number | undefined;
+  public readonly queueResidenceTimeAvg: number | undefined;
+  public readonly queueResidenceTimeP95WeekAgo: number | undefined;
+  public readonly queueResidenceTimeAvgWeekAgo: number | undefined;
+  public readonly consumerProcessingTimeP95: number | undefined;
+  public readonly consumerProcessingTimeAvg: number | undefined;
+  public readonly consumerProcessingTimeP95WeekAgo: number | undefined;
+  public readonly consumerProcessingTimeAvgWeekAgo: number | undefined;
+  public readonly e2eLatencyP95: number | undefined;
+  public readonly e2eLatencyAvg: number | undefined;
+  public readonly e2eLatencyP95WeekAgo: number | undefined;
+  public readonly e2eLatencyAvgWeekAgo: number | undefined;
   public readonly queueDepth: number | undefined;
   public readonly queueDepthWeekAgo: number | undefined;
   public readonly consumerRps: number | undefined;
   public readonly consumerRpsWeekAgo: number | undefined;
-  public readonly consumerErrorRatePercent: number | undefined;
-  public readonly consumerErrorRatePercentWeekAgo: number | undefined;
+  public readonly consumerErrorRate: number | undefined;
+  public readonly consumerErrorRateWeekAgo: number | undefined;
 
   public constructor(params: {
-    latencyP95Ms?: number | undefined;
-    latencyAvgMs?: number | undefined;
+    latencyP95?: number | undefined;
+    latencyAvg?: number | undefined;
     rps?: number | undefined;
-    errorRatePercent?: number | undefined;
-    latencyP95MsWeekAgo?: number | undefined;
-    latencyAvgMsWeekAgo?: number | undefined;
+    errorRate?: number | undefined;
+    latencyP95WeekAgo?: number | undefined;
+    latencyAvgWeekAgo?: number | undefined;
     rpsWeekAgo?: number | undefined;
-    errorRatePercentWeekAgo?: number | undefined;
+    errorRateWeekAgo?: number | undefined;
     lastUpdatedAt: Date;
-    queueResidenceTimeP95Ms?: number | undefined;
-    queueResidenceTimeAvgMs?: number | undefined;
-    queueResidenceTimeP95MsWeekAgo?: number | undefined;
-    queueResidenceTimeAvgMsWeekAgo?: number | undefined;
-    consumerProcessingTimeP95Ms?: number | undefined;
-    consumerProcessingTimeAvgMs?: number | undefined;
-    consumerProcessingTimeP95MsWeekAgo?: number | undefined;
-    consumerProcessingTimeAvgMsWeekAgo?: number | undefined;
-    e2eLatencyP95Ms?: number | undefined;
-    e2eLatencyAvgMs?: number | undefined;
-    e2eLatencyP95MsWeekAgo?: number | undefined;
-    e2eLatencyAvgMsWeekAgo?: number | undefined;
+    queueResidenceTimeP95?: number | undefined;
+    queueResidenceTimeAvg?: number | undefined;
+    queueResidenceTimeP95WeekAgo?: number | undefined;
+    queueResidenceTimeAvgWeekAgo?: number | undefined;
+    consumerProcessingTimeP95?: number | undefined;
+    consumerProcessingTimeAvg?: number | undefined;
+    consumerProcessingTimeP95WeekAgo?: number | undefined;
+    consumerProcessingTimeAvgWeekAgo?: number | undefined;
+    e2eLatencyP95?: number | undefined;
+    e2eLatencyAvg?: number | undefined;
+    e2eLatencyP95WeekAgo?: number | undefined;
+    e2eLatencyAvgWeekAgo?: number | undefined;
     queueDepth?: number | undefined;
     queueDepthWeekAgo?: number | undefined;
     consumerRps?: number | undefined;
     consumerRpsWeekAgo?: number | undefined;
-    consumerErrorRatePercent?: number | undefined;
-    consumerErrorRatePercentWeekAgo?: number | undefined;
+    consumerErrorRate?: number | undefined;
+    consumerErrorRateWeekAgo?: number | undefined;
   }) {
     super(params);
-    this.queueResidenceTimeP95Ms = params.queueResidenceTimeP95Ms;
-    this.queueResidenceTimeAvgMs = params.queueResidenceTimeAvgMs;
-    this.queueResidenceTimeP95MsWeekAgo = params.queueResidenceTimeP95MsWeekAgo;
-    this.queueResidenceTimeAvgMsWeekAgo = params.queueResidenceTimeAvgMsWeekAgo;
-    this.consumerProcessingTimeP95Ms = params.consumerProcessingTimeP95Ms;
-    this.consumerProcessingTimeAvgMs = params.consumerProcessingTimeAvgMs;
-    this.consumerProcessingTimeP95MsWeekAgo = params.consumerProcessingTimeP95MsWeekAgo;
-    this.consumerProcessingTimeAvgMsWeekAgo = params.consumerProcessingTimeAvgMsWeekAgo;
-    this.e2eLatencyP95Ms = params.e2eLatencyP95Ms;
-    this.e2eLatencyAvgMs = params.e2eLatencyAvgMs;
-    this.e2eLatencyP95MsWeekAgo = params.e2eLatencyP95MsWeekAgo;
-    this.e2eLatencyAvgMsWeekAgo = params.e2eLatencyAvgMsWeekAgo;
+    this.queueResidenceTimeP95 = params.queueResidenceTimeP95;
+    this.queueResidenceTimeAvg = params.queueResidenceTimeAvg;
+    this.queueResidenceTimeP95WeekAgo = params.queueResidenceTimeP95WeekAgo;
+    this.queueResidenceTimeAvgWeekAgo = params.queueResidenceTimeAvgWeekAgo;
+    this.consumerProcessingTimeP95 = params.consumerProcessingTimeP95;
+    this.consumerProcessingTimeAvg = params.consumerProcessingTimeAvg;
+    this.consumerProcessingTimeP95WeekAgo = params.consumerProcessingTimeP95WeekAgo;
+    this.consumerProcessingTimeAvgWeekAgo = params.consumerProcessingTimeAvgWeekAgo;
+    this.e2eLatencyP95 = params.e2eLatencyP95;
+    this.e2eLatencyAvg = params.e2eLatencyAvg;
+    this.e2eLatencyP95WeekAgo = params.e2eLatencyP95WeekAgo;
+    this.e2eLatencyAvgWeekAgo = params.e2eLatencyAvgWeekAgo;
     this.queueDepth = params.queueDepth;
     this.queueDepthWeekAgo = params.queueDepthWeekAgo;
     this.consumerRps = params.consumerRps;
     this.consumerRpsWeekAgo = params.consumerRpsWeekAgo;
-    this.consumerErrorRatePercent = params.consumerErrorRatePercent;
-    this.consumerErrorRatePercentWeekAgo = params.consumerErrorRatePercentWeekAgo;
+    this.consumerErrorRate = params.consumerErrorRate;
+    this.consumerErrorRateWeekAgo = params.consumerErrorRateWeekAgo;
   }
 }
 
 // ─── KafkaEdgeMetrics ────────────────────────────────────────────────────────
 
 export class KafkaEdgeMetrics extends BaseEdgeMetrics {
-  public readonly queueResidenceTimeP95Ms: number | undefined;
-  public readonly queueResidenceTimeAvgMs: number | undefined;
-  public readonly queueResidenceTimeP95MsWeekAgo: number | undefined;
-  public readonly queueResidenceTimeAvgMsWeekAgo: number | undefined;
-  public readonly consumerProcessingTimeP95Ms: number | undefined;
-  public readonly consumerProcessingTimeAvgMs: number | undefined;
-  public readonly consumerProcessingTimeP95MsWeekAgo: number | undefined;
-  public readonly consumerProcessingTimeAvgMsWeekAgo: number | undefined;
-  public readonly e2eLatencyP95Ms: number | undefined;
-  public readonly e2eLatencyAvgMs: number | undefined;
-  public readonly e2eLatencyP95MsWeekAgo: number | undefined;
-  public readonly e2eLatencyAvgMsWeekAgo: number | undefined;
+  public readonly queueResidenceTimeP95: number | undefined;
+  public readonly queueResidenceTimeAvg: number | undefined;
+  public readonly queueResidenceTimeP95WeekAgo: number | undefined;
+  public readonly queueResidenceTimeAvgWeekAgo: number | undefined;
+  public readonly consumerProcessingTimeP95: number | undefined;
+  public readonly consumerProcessingTimeAvg: number | undefined;
+  public readonly consumerProcessingTimeP95WeekAgo: number | undefined;
+  public readonly consumerProcessingTimeAvgWeekAgo: number | undefined;
+  public readonly e2eLatencyP95: number | undefined;
+  public readonly e2eLatencyAvg: number | undefined;
+  public readonly e2eLatencyP95WeekAgo: number | undefined;
+  public readonly e2eLatencyAvgWeekAgo: number | undefined;
   public readonly consumerLag: number | undefined;
   public readonly consumerLagWeekAgo: number | undefined;
   public readonly consumerRps: number | undefined;
   public readonly consumerRpsWeekAgo: number | undefined;
-  public readonly consumerErrorRatePercent: number | undefined;
-  public readonly consumerErrorRatePercentWeekAgo: number | undefined;
+  public readonly consumerErrorRate: number | undefined;
+  public readonly consumerErrorRateWeekAgo: number | undefined;
 
   public constructor(params: {
-    latencyP95Ms?: number | undefined;
-    latencyAvgMs?: number | undefined;
+    latencyP95?: number | undefined;
+    latencyAvg?: number | undefined;
     rps?: number | undefined;
-    errorRatePercent?: number | undefined;
-    latencyP95MsWeekAgo?: number | undefined;
-    latencyAvgMsWeekAgo?: number | undefined;
+    errorRate?: number | undefined;
+    latencyP95WeekAgo?: number | undefined;
+    latencyAvgWeekAgo?: number | undefined;
     rpsWeekAgo?: number | undefined;
-    errorRatePercentWeekAgo?: number | undefined;
+    errorRateWeekAgo?: number | undefined;
     lastUpdatedAt: Date;
-    queueResidenceTimeP95Ms?: number | undefined;
-    queueResidenceTimeAvgMs?: number | undefined;
-    queueResidenceTimeP95MsWeekAgo?: number | undefined;
-    queueResidenceTimeAvgMsWeekAgo?: number | undefined;
-    consumerProcessingTimeP95Ms?: number | undefined;
-    consumerProcessingTimeAvgMs?: number | undefined;
-    consumerProcessingTimeP95MsWeekAgo?: number | undefined;
-    consumerProcessingTimeAvgMsWeekAgo?: number | undefined;
-    e2eLatencyP95Ms?: number | undefined;
-    e2eLatencyAvgMs?: number | undefined;
-    e2eLatencyP95MsWeekAgo?: number | undefined;
-    e2eLatencyAvgMsWeekAgo?: number | undefined;
+    queueResidenceTimeP95?: number | undefined;
+    queueResidenceTimeAvg?: number | undefined;
+    queueResidenceTimeP95WeekAgo?: number | undefined;
+    queueResidenceTimeAvgWeekAgo?: number | undefined;
+    consumerProcessingTimeP95?: number | undefined;
+    consumerProcessingTimeAvg?: number | undefined;
+    consumerProcessingTimeP95WeekAgo?: number | undefined;
+    consumerProcessingTimeAvgWeekAgo?: number | undefined;
+    e2eLatencyP95?: number | undefined;
+    e2eLatencyAvg?: number | undefined;
+    e2eLatencyP95WeekAgo?: number | undefined;
+    e2eLatencyAvgWeekAgo?: number | undefined;
     consumerLag?: number | undefined;
     consumerLagWeekAgo?: number | undefined;
     consumerRps?: number | undefined;
     consumerRpsWeekAgo?: number | undefined;
-    consumerErrorRatePercent?: number | undefined;
-    consumerErrorRatePercentWeekAgo?: number | undefined;
+    consumerErrorRate?: number | undefined;
+    consumerErrorRateWeekAgo?: number | undefined;
   }) {
     super(params);
-    this.queueResidenceTimeP95Ms = params.queueResidenceTimeP95Ms;
-    this.queueResidenceTimeAvgMs = params.queueResidenceTimeAvgMs;
-    this.queueResidenceTimeP95MsWeekAgo = params.queueResidenceTimeP95MsWeekAgo;
-    this.queueResidenceTimeAvgMsWeekAgo = params.queueResidenceTimeAvgMsWeekAgo;
-    this.consumerProcessingTimeP95Ms = params.consumerProcessingTimeP95Ms;
-    this.consumerProcessingTimeAvgMs = params.consumerProcessingTimeAvgMs;
-    this.consumerProcessingTimeP95MsWeekAgo = params.consumerProcessingTimeP95MsWeekAgo;
-    this.consumerProcessingTimeAvgMsWeekAgo = params.consumerProcessingTimeAvgMsWeekAgo;
-    this.e2eLatencyP95Ms = params.e2eLatencyP95Ms;
-    this.e2eLatencyAvgMs = params.e2eLatencyAvgMs;
-    this.e2eLatencyP95MsWeekAgo = params.e2eLatencyP95MsWeekAgo;
-    this.e2eLatencyAvgMsWeekAgo = params.e2eLatencyAvgMsWeekAgo;
+    this.queueResidenceTimeP95 = params.queueResidenceTimeP95;
+    this.queueResidenceTimeAvg = params.queueResidenceTimeAvg;
+    this.queueResidenceTimeP95WeekAgo = params.queueResidenceTimeP95WeekAgo;
+    this.queueResidenceTimeAvgWeekAgo = params.queueResidenceTimeAvgWeekAgo;
+    this.consumerProcessingTimeP95 = params.consumerProcessingTimeP95;
+    this.consumerProcessingTimeAvg = params.consumerProcessingTimeAvg;
+    this.consumerProcessingTimeP95WeekAgo = params.consumerProcessingTimeP95WeekAgo;
+    this.consumerProcessingTimeAvgWeekAgo = params.consumerProcessingTimeAvgWeekAgo;
+    this.e2eLatencyP95 = params.e2eLatencyP95;
+    this.e2eLatencyAvg = params.e2eLatencyAvg;
+    this.e2eLatencyP95WeekAgo = params.e2eLatencyP95WeekAgo;
+    this.e2eLatencyAvgWeekAgo = params.e2eLatencyAvgWeekAgo;
     this.consumerLag = params.consumerLag;
     this.consumerLagWeekAgo = params.consumerLagWeekAgo;
     this.consumerRps = params.consumerRps;
     this.consumerRpsWeekAgo = params.consumerRpsWeekAgo;
-    this.consumerErrorRatePercent = params.consumerErrorRatePercent;
-    this.consumerErrorRatePercentWeekAgo = params.consumerErrorRatePercentWeekAgo;
+    this.consumerErrorRate = params.consumerErrorRate;
+    this.consumerErrorRateWeekAgo = params.consumerErrorRateWeekAgo;
   }
 }
 

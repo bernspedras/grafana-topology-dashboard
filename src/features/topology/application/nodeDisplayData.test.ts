@@ -1,5 +1,6 @@
 
 import { nodeTypeTag, nodeMetricRows } from './nodeDisplayData';
+import type { MetricDirectionMap } from './directionMap';
 import {
   EKSServiceNode,
   EC2ServiceNode,
@@ -12,25 +13,25 @@ import {
 // ─── Factories ──────────────────────────────────────────────────────────────
 
 function makeMetrics(overrides?: {
-  cpuPercent?: number;
-  memoryPercent?: number;
-  cpuPercentWeekAgo?: number | undefined;
-  memoryPercentWeekAgo?: number | undefined;
+  cpu?: number;
+  memory?: number;
+  cpuWeekAgo?: number | undefined;
+  memoryWeekAgo?: number | undefined;
 }): NodeMetrics {
   return new NodeMetrics({
-    cpuPercent: overrides?.cpuPercent ?? 50,
-    memoryPercent: overrides?.memoryPercent ?? 50,
-    cpuPercentWeekAgo: overrides?.cpuPercentWeekAgo,
-    memoryPercentWeekAgo: overrides?.memoryPercentWeekAgo,
+    cpu: overrides?.cpu ?? 50,
+    memory: overrides?.memory ?? 50,
+    cpuWeekAgo: overrides?.cpuWeekAgo,
+    memoryWeekAgo: overrides?.memoryWeekAgo,
     lastUpdatedAt: new Date(),
   });
 }
 
 function makeEksNode(overrides?: {
-  cpuPercent?: number;
-  memoryPercent?: number;
-  cpuPercentWeekAgo?: number | undefined;
-  memoryPercentWeekAgo?: number | undefined;
+  cpu?: number;
+  memory?: number;
+  cpuWeekAgo?: number | undefined;
+  memoryWeekAgo?: number | undefined;
   deployments?: readonly DeploymentMetrics[];
 }): EKSServiceNode {
   return new EKSServiceNode({
@@ -38,17 +39,17 @@ function makeEksNode(overrides?: {
     metrics: makeMetrics(overrides),
     namespace: 'ns',
     deployments: overrides?.deployments ?? [
-      new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 2, cpuPercent: 40, memoryPercent: 50 }),
-      new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 20, memoryPercent: 30 }),
+      new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 2, cpu: 40, memory: 50 }),
+      new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30 }),
     ],
   });
 }
 
 function makeEc2Node(overrides?: {
-  cpuPercent?: number;
-  memoryPercent?: number;
-  cpuPercentWeekAgo?: number | undefined;
-  memoryPercentWeekAgo?: number | undefined;
+  cpu?: number;
+  memory?: number;
+  cpuWeekAgo?: number | undefined;
+  memoryWeekAgo?: number | undefined;
 }): EC2ServiceNode {
   return new EC2ServiceNode({
     id: 'ec2-1', label: 'ec2', status: 'healthy', baselineStatus: 'healthy',
@@ -58,10 +59,10 @@ function makeEc2Node(overrides?: {
 }
 
 function makeDbNode(overrides?: {
-  cpuPercent?: number;
-  memoryPercent?: number;
-  cpuPercentWeekAgo?: number | undefined;
-  memoryPercentWeekAgo?: number | undefined;
+  cpu?: number;
+  memory?: number;
+  cpuWeekAgo?: number | undefined;
+  memoryWeekAgo?: number | undefined;
   storageGb?: number;
 }): DatabaseNode {
   return new DatabaseNode({
@@ -73,10 +74,10 @@ function makeDbNode(overrides?: {
 }
 
 function makeExternalNode(overrides?: {
-  cpuPercent?: number;
-  memoryPercent?: number;
-  cpuPercentWeekAgo?: number | undefined;
-  memoryPercentWeekAgo?: number | undefined;
+  cpu?: number;
+  memory?: number;
+  cpuWeekAgo?: number | undefined;
+  memoryWeekAgo?: number | undefined;
   slaPercent?: number;
 }): ExternalNode {
   return new ExternalNode({
@@ -111,12 +112,12 @@ describe('nodeTypeTag', (): void => {
 
 describe('nodeMetricRows', (): void => {
   describe('EKSServiceNode', (): void => {
-    it('returns aggregate Pods, CPU medio, Memory rows when no deployment selected', (): void => {
+    it('returns aggregate Pods, CPU, Memory rows when no deployment selected', (): void => {
       const deployments = [
-        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 3, cpuPercent: 40, memoryPercent: 50 }),
-        new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 20, memoryPercent: 30 }),
+        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 3, cpu: 40, memory: 50 }),
+        new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30 }),
       ];
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 40, memoryPercent: 70, deployments }));
+      const rows = nodeMetricRows(makeEksNode({ cpu: 40, memory: 70, deployments }));
       expect(rows).toHaveLength(3);
       expect(rows[0]).toEqual({ label: 'Pods', value: '3 / 4', color: '#eab308', status: 'warning', metricKey: 'pods' });
       expect(rows[1]).toEqual({ label: 'Avg CPU', value: '40%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
@@ -125,8 +126,8 @@ describe('nodeMetricRows', (): void => {
 
     it('returns specific deployment metrics when deployment is selected', (): void => {
       const deployments = [
-        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 3, cpuPercent: 85, memoryPercent: 55 }),
-        new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 20, memoryPercent: 30 }),
+        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 3, cpu: 85, memory: 55 }),
+        new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30 }),
       ];
       const rows = nodeMetricRows(makeEksNode({ deployments }), 'api');
       expect(rows).toHaveLength(3);
@@ -137,24 +138,24 @@ describe('nodeMetricRows', (): void => {
 
     it('falls back to aggregate when selectedDeployment matches no name', (): void => {
       const deployments = [
-        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 2, cpuPercent: 40, memoryPercent: 50 }),
+        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 2, cpu: 40, memory: 50 }),
       ];
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 40, memoryPercent: 50, deployments }), 'nonexistent');
+      const rows = nodeMetricRows(makeEksNode({ cpu: 40, memory: 50, deployments }), 'nonexistent');
       expect(rows).toHaveLength(3);
       expect(rows[0]).toEqual({ label: 'Pods', value: '2 / 2', color: '#22c55e', status: 'healthy', metricKey: 'pods' });
     });
 
     it('shows N/A for Pods when replica metrics are undefined', (): void => {
       const deployments = [
-        new DeploymentMetrics({ name: 'svc', cpuPercent: 50, memoryPercent: 50 }),
+        new DeploymentMetrics({ name: 'svc', cpu: 50, memory: 50 }),
       ];
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 50, memoryPercent: 50, deployments }));
+      const rows = nodeMetricRows(makeEksNode({ cpu: 50, memory: 50, deployments }));
       expect(rows[0]).toEqual({ label: 'Pods', value: 'N/A', color: '#6b7280', status: 'unknown', metricKey: 'pods' });
     });
 
     it('shows N/A for Pods when specific deployment has undefined replicas', (): void => {
       const deployments = [
-        new DeploymentMetrics({ name: 'svc', cpuPercent: 80, memoryPercent: 60 }),
+        new DeploymentMetrics({ name: 'svc', cpu: 80, memory: 60 }),
       ];
       const rows = nodeMetricRows(makeEksNode({ deployments }), 'svc');
       expect(rows[0]).toEqual({ label: 'Pods', value: 'N/A', color: '#6b7280', status: 'unknown', metricKey: 'pods' });
@@ -163,7 +164,7 @@ describe('nodeMetricRows', (): void => {
 
   describe('EC2ServiceNode', (): void => {
     it('returns CPU, Memory, Instance, AZ rows', (): void => {
-      const rows = nodeMetricRows(makeEc2Node({ cpuPercent: 85, memoryPercent: 55 }));
+      const rows = nodeMetricRows(makeEc2Node({ cpu: 85, memory: 55 }));
       expect(rows).toHaveLength(4);
       expect(rows[0]).toEqual({ label: 'CPU', value: '85%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
       expect(rows[1]).toEqual({ label: 'Memory', value: '55%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
@@ -174,7 +175,7 @@ describe('nodeMetricRows', (): void => {
 
   describe('DatabaseNode', (): void => {
     it('returns CPU, Memory, Engine rows without storage when undefined', (): void => {
-      const rows = nodeMetricRows(makeDbNode({ cpuPercent: 60, memoryPercent: 79 }));
+      const rows = nodeMetricRows(makeDbNode({ cpu: 60, memory: 79 }));
       expect(rows).toHaveLength(3);
       expect(rows[0]).toEqual({ label: 'CPU', value: '60%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
       expect(rows[1]).toEqual({ label: 'Memory', value: '79%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
@@ -190,7 +191,7 @@ describe('nodeMetricRows', (): void => {
 
   describe('ExternalNode', (): void => {
     it('returns CPU, Memory, Provider rows without SLA when undefined', (): void => {
-      const rows = nodeMetricRows(makeExternalNode({ cpuPercent: 80, memoryPercent: 30 }));
+      const rows = nodeMetricRows(makeExternalNode({ cpu: 80, memory: 30 }));
       expect(rows).toHaveLength(3);
       expect(rows[0]).toEqual({ label: 'CPU', value: '80%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
       expect(rows[1]).toEqual({ label: 'Memory', value: '30%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
@@ -205,23 +206,25 @@ describe('nodeMetricRows', (): void => {
   });
 
   describe('baseline comparison colors', (): void => {
+    const dirs: MetricDirectionMap = { cpu: 'lower-is-better', memory: 'lower-is-better' };
+
     it('returns no-baseline color when weekAgo is undefined', (): void => {
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 59 }));
+      const rows = nodeMetricRows(makeEksNode({ cpu: 59 }), undefined, undefined, undefined, dirs);
       expect(rows[1]?.color).toBe('#e2e8f0');
     });
 
     it('returns worse color when current is >20% higher than weekAgo (lower-is-better)', (): void => {
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 60, cpuPercentWeekAgo: 40 }));
+      const rows = nodeMetricRows(makeEksNode({ cpu: 60, cpuWeekAgo: 40 }), undefined, undefined, undefined, dirs);
       expect(rows[1]?.color).toBe('#ef4444');
     });
 
     it('returns better color when current is >20% lower than weekAgo (lower-is-better)', (): void => {
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 30, cpuPercentWeekAgo: 50 }));
+      const rows = nodeMetricRows(makeEksNode({ cpu: 30, cpuWeekAgo: 50 }), undefined, undefined, undefined, dirs);
       expect(rows[1]?.color).toBe('#22c55e');
     });
 
     it('returns neutral color when current is within ±20% of weekAgo', (): void => {
-      const rows = nodeMetricRows(makeEksNode({ cpuPercent: 52, cpuPercentWeekAgo: 50 }));
+      const rows = nodeMetricRows(makeEksNode({ cpu: 52, cpuWeekAgo: 50 }), undefined, undefined, undefined, dirs);
       expect(rows[1]?.color).toBe('#e2e8f0');
     });
   });

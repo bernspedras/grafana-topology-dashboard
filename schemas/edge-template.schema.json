@@ -12,17 +12,27 @@
     { "$ref": "#/$defs/grpcEdgeTemplate" }
   ],
   "$defs": {
-    "metricQuery": {
-      "description": "A PromQL query string, a cross-datasource query object, or null if not configured.",
+    "metricDefinition": {
+      "description": "A metric definition with query, unit, direction, and optional datasource/SLA — or null if not configured.",
       "oneOf": [
-        { "type": "string" },
         {
           "type": "object",
-          "required": ["query", "dataSource"],
+          "required": ["query", "unit", "direction"],
           "additionalProperties": false,
           "properties": {
             "query": { "type": "string" },
-            "dataSource": { "type": "string" }
+            "unit": { "type": "string" },
+            "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            "dataSource": { "type": "string" },
+            "sla": {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            }
           }
         },
         { "type": "null" }
@@ -30,115 +40,121 @@
     },
     "customMetricDefinition": {
       "type": "object",
-      "required": ["key", "label", "promql"],
+      "required": ["key", "label", "query", "unit", "direction"],
       "additionalProperties": false,
       "properties": {
         "key": { "type": "string" },
         "label": { "type": "string" },
-        "promql": { "type": "string" },
+        "query": { "type": "string" },
+        "unit": { "type": "string" },
+        "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
         "dataSource": { "type": ["string", "null"] },
-        "unit": { "type": ["string", "null"] },
-        "direction": {
+        "sla": {
           "oneOf": [
-            { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            },
             { "type": "null" }
           ]
         },
         "description": { "type": ["string", "null"] }
       }
     },
-    "httpEdgePrometheusQueries": {
-      "type": "object",
-      "required": ["rps"],
-      "additionalProperties": false,
-      "properties": {
-        "rps": { "$ref": "#/$defs/metricQuery" },
-        "latencyP95": { "$ref": "#/$defs/metricQuery" },
-        "latencyAvg": { "$ref": "#/$defs/metricQuery" },
-        "errorRate": { "$ref": "#/$defs/metricQuery" }
-      }
-    },
-    "dbEdgePrometheusQueries": {
-      "type": "object",
-      "required": ["rps"],
-      "additionalProperties": false,
-      "properties": {
-        "rps": { "$ref": "#/$defs/metricQuery" },
-        "latencyP95": { "$ref": "#/$defs/metricQuery" },
-        "latencyAvg": { "$ref": "#/$defs/metricQuery" },
-        "errorRate": { "$ref": "#/$defs/metricQuery" },
-        "activeConnections": { "$ref": "#/$defs/metricQuery" },
-        "idleConnections": { "$ref": "#/$defs/metricQuery" },
-        "avgQueryTimeMs": { "$ref": "#/$defs/metricQuery" },
-        "poolHitRatePercent": { "$ref": "#/$defs/metricQuery" },
-        "poolTimeoutsPerMin": { "$ref": "#/$defs/metricQuery" },
-        "staleConnectionsPerMin": { "$ref": "#/$defs/metricQuery" }
-      }
-    },
-    "amqpPublishPrometheusQueries": {
+    "httpEdgeMetricQueries": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "rps": { "$ref": "#/$defs/metricQuery" },
-        "latencyP95": { "$ref": "#/$defs/metricQuery" },
-        "latencyAvg": { "$ref": "#/$defs/metricQuery" },
-        "errorRate": { "$ref": "#/$defs/metricQuery" }
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" }
       }
     },
-    "amqpConsumerPrometheusQueries": {
+    "dbEdgeMetricQueries": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "rps": { "$ref": "#/$defs/metricQuery" },
-        "latencyP95": { "$ref": "#/$defs/metricQuery" },
-        "latencyAvg": { "$ref": "#/$defs/metricQuery" },
-        "errorRate": { "$ref": "#/$defs/metricQuery" },
-        "processingTimeP95": { "$ref": "#/$defs/metricQuery" },
-        "processingTimeAvg": { "$ref": "#/$defs/metricQuery" },
-        "queueDepth": { "$ref": "#/$defs/metricQuery" },
-        "queueResidenceTimeP95": { "$ref": "#/$defs/metricQuery" },
-        "queueResidenceTimeAvg": { "$ref": "#/$defs/metricQuery" }
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" },
+        "activeConnections": { "$ref": "#/$defs/metricDefinition" },
+        "idleConnections": { "$ref": "#/$defs/metricDefinition" },
+        "avgQueryTimeMs": { "$ref": "#/$defs/metricDefinition" },
+        "poolHitRatePercent": { "$ref": "#/$defs/metricDefinition" },
+        "poolTimeoutsPerMin": { "$ref": "#/$defs/metricDefinition" },
+        "staleConnectionsPerMin": { "$ref": "#/$defs/metricDefinition" }
       }
     },
-    "kafkaPublishPrometheusQueries": {
+    "amqpPublishMetricQueries": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "rps": { "$ref": "#/$defs/metricQuery" },
-        "latencyP95": { "$ref": "#/$defs/metricQuery" },
-        "latencyAvg": { "$ref": "#/$defs/metricQuery" },
-        "errorRate": { "$ref": "#/$defs/metricQuery" }
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" }
       }
     },
-    "kafkaConsumerPrometheusQueries": {
+    "amqpQueueMetricQueries": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "rps": { "$ref": "#/$defs/metricQuery" },
-        "latencyP95": { "$ref": "#/$defs/metricQuery" },
-        "latencyAvg": { "$ref": "#/$defs/metricQuery" },
-        "errorRate": { "$ref": "#/$defs/metricQuery" },
-        "processingTimeP95": { "$ref": "#/$defs/metricQuery" },
-        "processingTimeAvg": { "$ref": "#/$defs/metricQuery" },
-        "consumerLag": { "$ref": "#/$defs/metricQuery" }
+        "queueDepth": { "$ref": "#/$defs/metricDefinition" },
+        "queueResidenceTimeP95": { "$ref": "#/$defs/metricDefinition" },
+        "queueResidenceTimeAvg": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyAvg": { "$ref": "#/$defs/metricDefinition" }
       }
     },
-    "slaThresholdMap": {
+    "amqpConsumerMetricQueries": {
       "type": "object",
-      "description": "Per-metric SLA thresholds. Keys are metric names, values define warning and critical thresholds.",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["warning", "critical"],
-        "additionalProperties": false,
-        "properties": {
-          "warning": { "type": "number" },
-          "critical": { "type": "number" }
-        }
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeP95": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeAvg": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "kafkaPublishMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "kafkaTopicMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "consumerLag": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyAvg": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "kafkaConsumerMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeP95": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeAvg": { "$ref": "#/$defs/metricDefinition" }
       }
     },
     "httpJsonEdgeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "source", "target", "dataSource", "prometheus"],
+      "required": ["kind", "id", "source", "target", "dataSource", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "http-json" },
@@ -146,17 +162,16 @@
         "source": { "type": "string" },
         "target": { "type": "string" },
         "dataSource": { "type": "string" },
-        "prometheus": { "$ref": "#/$defs/httpEdgePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/httpEdgeMetricQueries" },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "httpXmlEdgeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "source", "target", "dataSource", "prometheus"],
+      "required": ["kind", "id", "source", "target", "dataSource", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "http-xml" },
@@ -164,17 +179,16 @@
         "source": { "type": "string" },
         "target": { "type": "string" },
         "dataSource": { "type": "string" },
-        "prometheus": { "$ref": "#/$defs/httpEdgePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/httpEdgeMetricQueries" },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "tcpDbEdgeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "source", "target", "dataSource", "prometheus"],
+      "required": ["kind", "id", "source", "target", "dataSource", "metrics"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "tcp-db" },
@@ -182,14 +196,13 @@
         "source": { "type": "string" },
         "target": { "type": "string" },
         "dataSource": { "type": "string" },
-        "prometheus": { "$ref": "#/$defs/dbEdgePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/dbEdgeMetricQueries" },
         "poolSize": { "type": ["number", "null"] },
         "port": { "type": ["number", "null"] },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "amqpEdgeTemplate": {
@@ -205,22 +218,35 @@
         "exchange": { "type": "string" },
         "publish": {
           "type": "object",
-          "required": ["prometheus"],
+          "required": ["metrics"],
           "additionalProperties": false,
           "properties": {
             "routingKeyFilter": { "type": ["string", "null"] },
-            "prometheus": { "$ref": "#/$defs/amqpPublishPrometheusQueries" }
+            "metrics": { "$ref": "#/$defs/amqpPublishMetricQueries" }
           }
+        },
+        "queue": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["metrics"],
+              "additionalProperties": false,
+              "properties": {
+                "metrics": { "$ref": "#/$defs/amqpQueueMetricQueries" }
+              }
+            },
+            { "type": "null" }
+          ]
         },
         "consumer": {
           "oneOf": [
             {
               "type": "object",
-              "required": ["prometheus"],
+              "required": ["metrics"],
               "additionalProperties": false,
               "properties": {
                 "routingKeyFilter": { "type": ["string", "null"] },
-                "prometheus": { "$ref": "#/$defs/amqpConsumerPrometheusQueries" }
+                "metrics": { "$ref": "#/$defs/amqpConsumerMetricQueries" }
               }
             },
             { "type": "null" }
@@ -233,8 +259,7 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "kafkaEdgeTemplate": {
@@ -251,20 +276,33 @@
         "consumerGroup": { "type": ["string", "null"] },
         "publish": {
           "type": "object",
-          "required": ["prometheus"],
+          "required": ["metrics"],
           "additionalProperties": false,
           "properties": {
-            "prometheus": { "$ref": "#/$defs/kafkaPublishPrometheusQueries" }
+            "metrics": { "$ref": "#/$defs/kafkaPublishMetricQueries" }
           }
+        },
+        "topicMetrics": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["metrics"],
+              "additionalProperties": false,
+              "properties": {
+                "metrics": { "$ref": "#/$defs/kafkaTopicMetricQueries" }
+              }
+            },
+            { "type": "null" }
+          ]
         },
         "consumer": {
           "oneOf": [
             {
               "type": "object",
-              "required": ["prometheus"],
+              "required": ["metrics"],
               "additionalProperties": false,
               "properties": {
-                "prometheus": { "$ref": "#/$defs/kafkaConsumerPrometheusQueries" }
+                "metrics": { "$ref": "#/$defs/kafkaConsumerMetricQueries" }
               }
             },
             { "type": "null" }
@@ -273,13 +311,12 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     },
     "grpcEdgeTemplate": {
       "type": "object",
-      "required": ["kind", "id", "source", "target", "dataSource", "prometheus", "grpcService", "grpcMethod"],
+      "required": ["kind", "id", "source", "target", "dataSource", "metrics", "grpcService", "grpcMethod"],
       "additionalProperties": false,
       "properties": {
         "kind": { "type": "string", "const": "grpc" },
@@ -287,14 +324,13 @@
         "source": { "type": "string" },
         "target": { "type": "string" },
         "dataSource": { "type": "string" },
-        "prometheus": { "$ref": "#/$defs/httpEdgePrometheusQueries" },
+        "metrics": { "$ref": "#/$defs/httpEdgeMetricQueries" },
         "grpcService": { "type": "string" },
         "grpcMethod": { "type": "string" },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        },
-        "sla": { "$ref": "#/$defs/slaThresholdMap" }
+        }
       }
     }
   }

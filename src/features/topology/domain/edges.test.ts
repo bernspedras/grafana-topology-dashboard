@@ -13,18 +13,18 @@ const NOW = new Date('2026-03-19T12:00:00Z');
 
 function makeHttpMetrics(): HttpEdgeMetrics {
   return new HttpEdgeMetrics({
-    latencyP95Ms: 95,
+    latencyP95: 95,
     rps: 3000,
-    errorRatePercent: 0.5,
+    errorRate: 0.5,
     lastUpdatedAt: NOW,
   });
 }
 
 function makeDbMetrics(): DbConnectionMetrics {
   return new DbConnectionMetrics({
-    latencyP95Ms: 5,
+    latencyP95: 5,
     rps: 800,
-    errorRatePercent: 0.02,
+    errorRate: 0.02,
     lastUpdatedAt: NOW,
     activeConnections: 20,
     idleConnections: 10,

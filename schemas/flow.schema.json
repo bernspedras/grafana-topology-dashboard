@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://bernspedras.dev/topology-dashboard/schemas/flow.schema.json",
   "title": "Topology Flow",
-  "description": "A topology flow definition with node/edge references, optional flow steps, and layout.",
+  "description": "A topology flow definition with node/edge references or inline definitions, optional flow steps, and layout.",
   "type": "object",
   "required": ["id", "name", "definition"],
   "additionalProperties": false,
@@ -19,23 +19,154 @@
     "layout": { "$ref": "#/$defs/layout" }
   },
   "$defs": {
+    "metricDefinition": {
+      "description": "A metric definition with query, unit, direction, and optional datasource/SLA — or null if not configured.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["query", "unit", "direction"],
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string" },
+            "unit": { "type": "string" },
+            "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            "dataSource": { "type": "string" },
+            "sla": {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
     "customMetricDefinition": {
       "type": "object",
-      "required": ["key", "label", "promql"],
+      "required": ["key", "label", "query", "unit", "direction"],
       "additionalProperties": false,
       "properties": {
         "key": { "type": "string" },
         "label": { "type": "string" },
-        "promql": { "type": "string" },
+        "query": { "type": "string" },
+        "unit": { "type": "string" },
+        "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
         "dataSource": { "type": ["string", "null"] },
-        "unit": { "type": ["string", "null"] },
-        "direction": {
+        "sla": {
           "oneOf": [
-            { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            },
             { "type": "null" }
           ]
         },
         "description": { "type": ["string", "null"] }
+      }
+    },
+    "nodeMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "$ref": "#/$defs/metricDefinition" },
+        "memory": { "$ref": "#/$defs/metricDefinition" },
+        "readyReplicas": { "$ref": "#/$defs/metricDefinition" },
+        "desiredReplicas": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "httpEdgeMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "dbEdgeMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" },
+        "activeConnections": { "$ref": "#/$defs/metricDefinition" },
+        "idleConnections": { "$ref": "#/$defs/metricDefinition" },
+        "avgQueryTimeMs": { "$ref": "#/$defs/metricDefinition" },
+        "poolHitRatePercent": { "$ref": "#/$defs/metricDefinition" },
+        "poolTimeoutsPerMin": { "$ref": "#/$defs/metricDefinition" },
+        "staleConnectionsPerMin": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "amqpPublishMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "amqpQueueMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "queueDepth": { "$ref": "#/$defs/metricDefinition" },
+        "queueResidenceTimeP95": { "$ref": "#/$defs/metricDefinition" },
+        "queueResidenceTimeAvg": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyAvg": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "amqpConsumerMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeP95": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeAvg": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "kafkaPublishMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "latencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "latencyAvg": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "kafkaTopicMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "consumerLag": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyP95": { "$ref": "#/$defs/metricDefinition" },
+        "e2eLatencyAvg": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "kafkaConsumerMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rps": { "$ref": "#/$defs/metricDefinition" },
+        "errorRate": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeP95": { "$ref": "#/$defs/metricDefinition" },
+        "processingTimeAvg": { "$ref": "#/$defs/metricDefinition" }
       }
     },
     "topologyNodeRef": {
@@ -47,9 +178,44 @@
           "type": "string",
           "description": "References a node template by ID."
         },
+        "label": {
+          "type": "string",
+          "description": "Override the template label."
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Override the template datasource."
+        },
+        "metrics": {
+          "$ref": "#/$defs/nodeMetricQueries",
+          "description": "Partial metric overrides (two-level merge with template)."
+        },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" },
+          "description": "Replaces template custom metrics entirely."
+        },
         "usedDeployment": {
           "type": "string",
           "description": "For EKS nodes, selects a specific deployment from deploymentNames."
+        }
+      }
+    },
+    "httpJsonEdgeRef": {
+      "type": "object",
+      "required": ["edgeId", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": { "type": "string" },
+        "kind": { "type": "string", "const": "http-json" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "metrics": { "$ref": "#/$defs/httpEdgeMetricQueries" },
+        "method": { "type": "string" },
+        "endpointPath": { "type": "string" },
+        "endpointPaths": {
+          "type": "array",
+          "items": { "type": "string" }
         },
         "customMetrics": {
           "type": "array",
@@ -57,41 +223,149 @@
         }
       }
     },
-    "topologyEdgeRef": {
+    "httpXmlEdgeRef": {
       "type": "object",
-      "required": ["edgeId"],
+      "required": ["edgeId", "kind"],
       "additionalProperties": false,
       "properties": {
-        "edgeId": {
-          "type": "string",
-          "description": "References an edge template by ID."
-        },
-        "method": {
-          "type": "string",
-          "description": "HTTP method filter (resolves {{method}} placeholder in PromQL)."
-        },
-        "endpointPath": {
-          "type": "string",
-          "description": "Endpoint path filter (resolves {{endpointPath}} placeholder in PromQL)."
-        },
-        "endpointPaths": {
+        "edgeId": { "type": "string" },
+        "kind": { "type": "string", "const": "http-xml" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "metrics": { "$ref": "#/$defs/httpEdgeMetricQueries" },
+        "method": { "type": "string" },
+        "endpointPath": { "type": "string" },
+        "soapAction": { "type": "string" },
+        "customMetrics": {
           "type": "array",
-          "items": { "type": "string" },
-          "description": "Multiple endpoint paths (joined as regex alternation for {{endpointPath}})."
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "tcpDbEdgeRef": {
+      "type": "object",
+      "required": ["edgeId", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": { "type": "string" },
+        "kind": { "type": "string", "const": "tcp-db" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "metrics": { "$ref": "#/$defs/dbEdgeMetricQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "amqpEdgeRef": {
+      "type": "object",
+      "required": ["edgeId", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": { "type": "string" },
+        "kind": { "type": "string", "const": "amqp" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "routingKeyFilter": { "type": "string" },
+        "publish": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": { "$ref": "#/$defs/amqpPublishMetricQueries" }
+          }
         },
-        "soapAction": {
-          "type": "string",
-          "description": "SOAP action filter for HTTP XML edges."
+        "queue": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": { "$ref": "#/$defs/amqpQueueMetricQueries" }
+          }
         },
-        "routingKeyFilter": {
-          "type": "string",
-          "description": "Routing key filter for AMQP edges."
+        "consumer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": { "$ref": "#/$defs/amqpConsumerMetricQueries" }
+          }
         },
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
         }
       }
+    },
+    "kafkaEdgeRef": {
+      "type": "object",
+      "required": ["edgeId", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": { "type": "string" },
+        "kind": { "type": "string", "const": "kafka" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "consumerGroup": { "type": "string" },
+        "publish": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": { "$ref": "#/$defs/kafkaPublishMetricQueries" }
+          }
+        },
+        "topicMetrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": { "$ref": "#/$defs/kafkaTopicMetricQueries" }
+          }
+        },
+        "consumer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metrics": { "$ref": "#/$defs/kafkaConsumerMetricQueries" }
+          }
+        },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "grpcEdgeRef": {
+      "type": "object",
+      "required": ["edgeId", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": { "type": "string" },
+        "kind": { "type": "string", "const": "grpc" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "metrics": { "$ref": "#/$defs/httpEdgeMetricQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "topologyNodeEntry": {
+      "description": "Either a node ref (references a template by nodeId) or an inline node template definition.",
+      "oneOf": [
+        { "$ref": "#/$defs/topologyNodeRef" },
+        { "$ref": "node-template.schema.json" }
+      ]
+    },
+    "topologyEdgeEntry": {
+      "description": "Either an edge ref (references a template by edgeId + kind) or an inline edge template definition.",
+      "oneOf": [
+        { "$ref": "#/$defs/httpJsonEdgeRef" },
+        { "$ref": "#/$defs/httpXmlEdgeRef" },
+        { "$ref": "#/$defs/tcpDbEdgeRef" },
+        { "$ref": "#/$defs/amqpEdgeRef" },
+        { "$ref": "#/$defs/kafkaEdgeRef" },
+        { "$ref": "#/$defs/grpcEdgeRef" },
+        { "$ref": "edge-template.schema.json" }
+      ]
     },
     "flowStepDefinition": {
       "type": "object",
@@ -138,11 +412,11 @@
       "properties": {
         "nodes": {
           "type": "array",
-          "items": { "$ref": "#/$defs/topologyNodeRef" }
+          "items": { "$ref": "#/$defs/topologyNodeEntry" }
         },
         "edges": {
           "type": "array",
-          "items": { "$ref": "#/$defs/topologyEdgeRef" }
+          "items": { "$ref": "#/$defs/topologyEdgeEntry" }
         },
         "flowSummary": { "$ref": "#/$defs/flowSummaryRef" },
         "flowSteps": {

@@ -13,8 +13,8 @@ const NOW = new Date('2026-03-19T12:00:00Z');
 
 function makeMetrics(): NodeMetrics {
   return new NodeMetrics({
-    cpuPercent: 50,
-    memoryPercent: 60,
+    cpu: 50,
+    memory: 60,
     lastUpdatedAt: NOW,
   });
 }
@@ -108,8 +108,8 @@ describe('EKSServiceNode', (): void => {
     ...BASE_PARAMS,
     namespace: 'payments',
     deployments: [
-      new DeploymentMetrics({ name: 'api-server', readyReplicas: 2, desiredReplicas: 3, cpuPercent: 40, memoryPercent: 55 }),
-      new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 20, memoryPercent: 30 }),
+      new DeploymentMetrics({ name: 'api-server', readyReplicas: 2, desiredReplicas: 3, cpu: 40, memory: 55 }),
+      new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30 }),
     ] as readonly DeploymentMetrics[],
   };
 

@@ -6,7 +6,7 @@ import type { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { useTopologyData } from '../features/topology/application/useTopologyData';
 import { canEditTopology } from '../features/topology/application/permissions';
 import { useGrafanaMetrics } from '../features/topology/application/useGrafanaMetrics';
-import { buildPromqlQueriesMap, buildRawPromqlQueriesMap } from '../features/topology/application/promqlQueriesMap';
+import { buildMetricQueriesMap, buildRawMetricQueriesMap } from '../features/topology/application/metricQueriesMap';
 import { buildMetricDatasourceMap, buildEntityDefaultDatasourceMap } from '../features/topology/application/metricDatasourceMap';
 import { saveNodeTemplate, saveEdgeTemplate, saveFlow } from '../features/topology/application/topologyApi';
 import type { NodeTemplate } from '../features/topology/application/topologyDefinition';
@@ -24,7 +24,9 @@ import { ViewOptionsProvider } from '../features/topology/ui/ViewOptionsContext'
 import type { ViewOptions, ViewOptionKey, ViewOptionsContextValue } from '../features/topology/ui/ViewOptionsContext';
 import type { ColoringMode } from '../features/topology/application/metricColor';
 import { SlaProvider } from '../features/topology/ui/SlaContext';
+import { DirectionProvider } from '../features/topology/ui/DirectionContext';
 import { buildSlaMap, parseSlaDefaults } from '../features/topology/application/slaThresholds';
+import { buildDirectionMap } from '../features/topology/application/directionMap';
 import type { SlaDefaultsJson } from '../features/topology/application/pluginSettings';
 import { DataSourceMapProvider } from '../features/topology/ui/DataSourceMapContext';
 import { EditModeProvider } from '../features/topology/ui/EditModeContext';
@@ -74,6 +76,33 @@ function RefreshStatus({ lastRefreshAt, pollIntervalMs, loading }: RefreshStatus
       {rightText}
     </span>
   );
+}
+
+/** Merge a query/dataSource edit into an existing MetricDefinition, preserving unit/direction/sla. */
+function patchMetricQuery(
+  metrics: Record<string, unknown>,
+  key: string,
+  query: string,
+  dataSource: string,
+  defaultDataSource: string,
+): void {
+  const existing = metrics[key];
+  if (existing != null && typeof existing === 'object') {
+    metrics[key] = {
+      ...(existing as Record<string, unknown>),
+      query,
+      dataSource: dataSource !== defaultDataSource ? dataSource : undefined,
+    };
+  } else {
+    // Previously unconfigured metric (null/undefined) — create a new MetricDefinition with safe defaults.
+    // Unit and direction should be refined in the template JSON if needed.
+    metrics[key] = {
+      query,
+      unit: 'count',
+      direction: 'lower-is-better',
+      ...(dataSource !== defaultDataSource ? { dataSource } : {}),
+    };
+  }
 }
 
 function TopologyPage(): React.JSX.Element {
@@ -134,6 +163,28 @@ function TopologyPage(): React.JSX.Element {
     await saveFlow(effectiveId, updatedFlow);
   }, [topologies, effectiveId]);
 
+  /** Add an inline definition (not a ref) directly to the flow. */
+  const addInlineEntryToFlow = useCallback(async (
+    arrayKey: 'nodes' | 'edges',
+    entry: NodeTemplatePayload | EdgeTemplatePayload,
+  ): Promise<void> => {
+    const currentEntry = topologies.find((t) => t.id === effectiveId);
+    if (currentEntry === undefined) {
+      return;
+    }
+    const rawFlow = currentEntry.raw as Record<string, unknown>;
+    const definition = rawFlow.definition as Record<string, unknown>;
+    const existing = (definition[arrayKey] ?? []) as readonly unknown[];
+    const updatedFlow = {
+      ...rawFlow,
+      definition: {
+        ...definition,
+        [arrayKey]: [...existing, entry],
+      },
+    };
+    await saveFlow(effectiveId, updatedFlow);
+  }, [topologies, effectiveId]);
+
   /** User picked an existing template from the dropdown. */
   const handleSelectTemplate = useCallback((templateId: string): void => {
     setAddNodeSaving(true);
@@ -161,8 +212,10 @@ function TopologyPage(): React.JSX.Element {
       try {
         if (saveAsTemplateToo) {
           await saveNodeTemplate(template.id, template);
+          await addNodeRefToFlow(template.id);
+        } else {
+          await addInlineEntryToFlow('nodes', template);
         }
-        await addNodeRefToFlow(template.id);
         setAddNodeKind(undefined);
         reload();
       } catch (err) {
@@ -171,7 +224,7 @@ function TopologyPage(): React.JSX.Element {
         setAddNodeSaving(false);
       }
     })();
-  }, [addNodeRefToFlow, reload]);
+  }, [addNodeRefToFlow, addInlineEntryToFlow, reload]);
 
   /** Templates of the currently-selected kind, for the modal dropdown. */
   const filteredTemplates = useMemo((): readonly ExistingTemplate[] => {
@@ -251,8 +304,10 @@ function TopologyPage(): React.JSX.Element {
       try {
         if (saveAsTemplateToo) {
           await saveEdgeTemplate(template.id, template);
+          await addEdgeRefToFlow(template.id);
+        } else {
+          await addInlineEntryToFlow('edges', template);
         }
-        await addEdgeRefToFlow(template.id);
         setPendingConnection(undefined);
         reload();
       } catch (err) {
@@ -261,7 +316,7 @@ function TopologyPage(): React.JSX.Element {
         setAddEdgeSaving(false);
       }
     })();
-  }, [addEdgeRefToFlow, reload]);
+  }, [addEdgeRefToFlow, addInlineEntryToFlow, reload]);
 
   /** All edge templates mapped for the modal. */
   const allEdgeTemplates = useMemo(
@@ -385,13 +440,15 @@ function TopologyPage(): React.JSX.Element {
 
   const slaMap = useMemo(() => buildSlaMap(entry?.definition, slaDefaults), [entry, slaDefaults]);
 
-  const promqlQueries = useMemo(
-    () => (entry !== undefined ? buildPromqlQueriesMap(entry.definition) : {}),
+  const directionMap = useMemo(() => buildDirectionMap(entry?.definition), [entry]);
+
+  const metricQueries = useMemo(
+    () => (entry !== undefined ? buildMetricQueriesMap(entry.definition) : {}),
     [entry],
   );
 
-  const rawPromqlQueries = useMemo(
-    () => (entry !== undefined ? buildRawPromqlQueriesMap(entry.definition) : {}),
+  const rawMetricQueries = useMemo(
+    () => (entry !== undefined ? buildRawMetricQueriesMap(entry.definition) : {}),
     [entry],
   );
 
@@ -419,8 +476,8 @@ function TopologyPage(): React.JSX.Element {
           ...rawFlow,
           definition: {
             ...definition,
-            nodes: existingNodes.filter((n) => n.nodeId !== entityId),
-            edges: existingEdges.filter((e) => e.edgeId !== entityId),
+            nodes: existingNodes.filter((n) => n.nodeId !== entityId && n.id !== entityId),
+            edges: existingEdges.filter((e) => e.edgeId !== entityId && e.id !== entityId),
           },
         };
         await saveFlow(effectiveId, updatedFlow);
@@ -442,8 +499,6 @@ function TopologyPage(): React.JSX.Element {
         if (nodeTemplate !== undefined) {
           const updated = deepClone(nodeTemplate);
           for (const { metricKey, query, dataSource } of changes) {
-            const metricValue: string | { query: string; dataSource: string } =
-              dataSource !== nodeTemplate.dataSource ? { query, dataSource } : query;
             if (metricKey.startsWith('custom:')) {
               const customKey = metricKey.slice('custom:'.length);
               const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
@@ -452,14 +507,14 @@ function TopologyPage(): React.JSX.Element {
                 if (idx >= 0) {
                   customs[idx] = {
                     ...customs[idx],
-                    promql: query,
+                    query,
                     dataSource: dataSource !== nodeTemplate.dataSource ? dataSource : undefined,
                   };
                 }
               }
             } else {
-              const prometheus = updated.prometheus as Record<string, unknown>;
-              prometheus[metricKey] = metricValue;
+              const metrics = updated.metrics as Record<string, unknown>;
+              patchMetricQuery(metrics, metricKey, query, dataSource, nodeTemplate.dataSource);
             }
           }
           await saveNodeTemplate(entityId, updated);
@@ -470,17 +525,14 @@ function TopologyPage(): React.JSX.Element {
         const edgeTemplate = edgeTemplates.find((t) => t.id === entityId);
         if (edgeTemplate !== undefined) {
           const updated = deepClone(edgeTemplate);
-          const consumerKeys = ['consumerRps', 'e2eLatencyP95', 'e2eLatencyAvg', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg', 'queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'consumerLag'];
+          const queueKeys = ['queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'e2eLatencyP95', 'e2eLatencyAvg'];
+          const consumerKeys = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
           const consumerKeyMap: Record<string, string> = {
-            consumerRps: 'rps', e2eLatencyP95: 'latencyP95', e2eLatencyAvg: 'latencyAvg',
-            consumerErrorRate: 'errorRate', consumerProcessingTimeP95: 'processingTimeP95',
-            consumerProcessingTimeAvg: 'processingTimeAvg', queueDepth: 'queueDepth',
-            queueResidenceTimeP95: 'queueResidenceTimeP95', queueResidenceTimeAvg: 'queueResidenceTimeAvg',
-            consumerLag: 'consumerLag',
+            consumerRps: 'rps', consumerErrorRate: 'errorRate',
+            consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
           };
+          const topicKeys = ['consumerLag', 'e2eLatencyP95', 'e2eLatencyAvg'];
           for (const { metricKey, query, dataSource } of changes) {
-            const metricValue: string | { query: string; dataSource: string } =
-              dataSource !== edgeTemplate.dataSource ? { query, dataSource } : query;
             if (metricKey.startsWith('custom:')) {
               const customKey = metricKey.slice('custom:'.length);
               const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
@@ -489,26 +541,48 @@ function TopologyPage(): React.JSX.Element {
                 if (idx >= 0) {
                   customs[idx] = {
                     ...customs[idx],
-                    promql: query,
+                    query,
                     dataSource: dataSource !== edgeTemplate.dataSource ? dataSource : undefined,
                   };
                 }
               }
-            } else if (edgeTemplate.kind === 'amqp' || edgeTemplate.kind === 'kafka') {
-              if (consumerKeys.includes(metricKey)) {
+            } else if (edgeTemplate.kind === 'amqp') {
+              if (queueKeys.includes(metricKey)) {
+                const queue = (updated.queue ?? { metrics: {} }) as Record<string, unknown>;
+                updated.queue = queue;
+                const queueMetrics = queue.metrics as Record<string, unknown>;
+                patchMetricQuery(queueMetrics, metricKey, query, dataSource, edgeTemplate.dataSource);
+              } else if (consumerKeys.includes(metricKey)) {
                 const consumer = updated.consumer as Record<string, unknown> | undefined;
                 if (consumer != null) {
-                  const conPrometheus = consumer.prometheus as Record<string, unknown>;
-                  conPrometheus[consumerKeyMap[metricKey] ?? metricKey] = metricValue;
+                  const conMetrics = consumer.metrics as Record<string, unknown>;
+                  patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, query, dataSource, edgeTemplate.dataSource);
                 }
               } else {
                 const publish = updated.publish as Record<string, unknown>;
-                const publishPrometheus = publish.prometheus as Record<string, unknown>;
-                publishPrometheus[metricKey] = metricValue;
+                const publishMetrics = publish.metrics as Record<string, unknown>;
+                patchMetricQuery(publishMetrics, metricKey, query, dataSource, edgeTemplate.dataSource);
+              }
+            } else if (edgeTemplate.kind === 'kafka') {
+              if (topicKeys.includes(metricKey)) {
+                const topicMetrics = (updated.topicMetrics ?? { metrics: {} }) as Record<string, unknown>;
+                updated.topicMetrics = topicMetrics;
+                const tm = topicMetrics.metrics as Record<string, unknown>;
+                patchMetricQuery(tm, metricKey, query, dataSource, edgeTemplate.dataSource);
+              } else if (consumerKeys.includes(metricKey)) {
+                const consumer = updated.consumer as Record<string, unknown> | undefined;
+                if (consumer != null) {
+                  const conMetrics = consumer.metrics as Record<string, unknown>;
+                  patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, query, dataSource, edgeTemplate.dataSource);
+                }
+              } else {
+                const publish = updated.publish as Record<string, unknown>;
+                const publishMetrics = publish.metrics as Record<string, unknown>;
+                patchMetricQuery(publishMetrics, metricKey, query, dataSource, edgeTemplate.dataSource);
               }
             } else {
-              const prometheus = updated.prometheus as Record<string, unknown>;
-              prometheus[metricKey] = metricValue;
+              const metrics = updated.metrics as Record<string, unknown>;
+              patchMetricQuery(metrics, metricKey, query, dataSource, edgeTemplate.dataSource);
             }
           }
           await saveEdgeTemplate(entityId, updated);
@@ -530,14 +604,10 @@ function TopologyPage(): React.JSX.Element {
       const deepClone = (obj: unknown): Record<string, unknown> =>
         JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
 
-      const buildMetricValue = (defaultDs: string): string | { query: string; dataSource: string } =>
-        newDataSource !== defaultDs ? { query: newQuery, dataSource: newDataSource } : newQuery;
-
       // Determine if entityId matches a node template or edge template
       const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
       if (nodeTemplate !== undefined) {
         const updated = deepClone(nodeTemplate);
-        const metricValue = buildMetricValue(nodeTemplate.dataSource);
 
         if (metricKey.startsWith('custom:')) {
           const customKey = metricKey.slice('custom:'.length);
@@ -545,12 +615,12 @@ function TopologyPage(): React.JSX.Element {
           if (customs !== undefined) {
             const idx = customs.findIndex((cm) => cm.key === customKey);
             if (idx >= 0) {
-              customs[idx] = { ...customs[idx], promql: newQuery, dataSource: newDataSource !== nodeTemplate.dataSource ? newDataSource : undefined };
+              customs[idx] = { ...customs[idx], query: newQuery, dataSource: newDataSource !== nodeTemplate.dataSource ? newDataSource : undefined };
             }
           }
         } else {
-          const prometheus = updated.prometheus as Record<string, unknown>;
-          prometheus[metricKey] = metricValue;
+          const metrics = updated.metrics as Record<string, unknown>;
+          patchMetricQuery(metrics, metricKey, newQuery, newDataSource, nodeTemplate.dataSource);
         }
         await saveNodeTemplate(entityId, updated);
         reload();
@@ -560,7 +630,6 @@ function TopologyPage(): React.JSX.Element {
       const edgeTemplate = edgeTemplates.find((t) => t.id === entityId);
       if (edgeTemplate !== undefined) {
         const updated = deepClone(edgeTemplate);
-        const metricValue = buildMetricValue(edgeTemplate.dataSource);
 
         if (metricKey.startsWith('custom:')) {
           const customKey = metricKey.slice('custom:'.length);
@@ -568,32 +637,58 @@ function TopologyPage(): React.JSX.Element {
           if (customs !== undefined) {
             const idx = customs.findIndex((cm) => cm.key === customKey);
             if (idx >= 0) {
-              customs[idx] = { ...customs[idx], promql: newQuery, dataSource: newDataSource !== edgeTemplate.dataSource ? newDataSource : undefined };
+              customs[idx] = { ...customs[idx], query: newQuery, dataSource: newDataSource !== edgeTemplate.dataSource ? newDataSource : undefined };
             }
           }
-        } else if (edgeTemplate.kind === 'amqp' || edgeTemplate.kind === 'kafka') {
-          const consumerKeys = ['consumerRps', 'e2eLatencyP95', 'e2eLatencyAvg', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg', 'queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'consumerLag'];
-          if (consumerKeys.includes(metricKey)) {
-            const consumerKeyMap: Record<string, string> = {
-              consumerRps: 'rps', e2eLatencyP95: 'latencyP95', e2eLatencyAvg: 'latencyAvg',
-              consumerErrorRate: 'errorRate', consumerProcessingTimeP95: 'processingTimeP95',
-              consumerProcessingTimeAvg: 'processingTimeAvg', queueDepth: 'queueDepth',
-              queueResidenceTimeP95: 'queueResidenceTimeP95', queueResidenceTimeAvg: 'queueResidenceTimeAvg',
-              consumerLag: 'consumerLag',
-            };
-            const consumer: Record<string, unknown> | undefined = updated.consumer as Record<string, unknown> | undefined;
+        } else if (edgeTemplate.kind === 'amqp') {
+          const queueKeys = ['queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'e2eLatencyP95', 'e2eLatencyAvg'];
+          const consumerKeys = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
+          const consumerKeyMap: Record<string, string> = {
+            consumerRps: 'rps', consumerErrorRate: 'errorRate',
+            consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
+          };
+          if (queueKeys.includes(metricKey)) {
+            const queue = (updated.queue ?? { metrics: {} }) as Record<string, unknown>;
+            updated.queue = queue;
+            const queueMetrics = queue.metrics as Record<string, unknown>;
+            patchMetricQuery(queueMetrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
+          } else if (consumerKeys.includes(metricKey)) {
+            const consumer = updated.consumer as Record<string, unknown> | undefined;
             if (consumer != null) {
-              const conPrometheus = consumer.prometheus as Record<string, unknown>;
-              conPrometheus[consumerKeyMap[metricKey] ?? metricKey] = metricValue;
+              const conMetrics = consumer.metrics as Record<string, unknown>;
+              patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
             }
           } else {
             const publish = updated.publish as Record<string, unknown>;
-            const publishPrometheus = publish.prometheus as Record<string, unknown>;
-            publishPrometheus[metricKey] = metricValue;
+            const publishMetrics = publish.metrics as Record<string, unknown>;
+            patchMetricQuery(publishMetrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
+          }
+        } else if (edgeTemplate.kind === 'kafka') {
+          const topicKeys = ['consumerLag', 'e2eLatencyP95', 'e2eLatencyAvg'];
+          const consumerKeys = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
+          const consumerKeyMap: Record<string, string> = {
+            consumerRps: 'rps', consumerErrorRate: 'errorRate',
+            consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
+          };
+          if (topicKeys.includes(metricKey)) {
+            const topicMetrics = (updated.topicMetrics ?? { metrics: {} }) as Record<string, unknown>;
+            updated.topicMetrics = topicMetrics;
+            const tm = topicMetrics.metrics as Record<string, unknown>;
+            patchMetricQuery(tm, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
+          } else if (consumerKeys.includes(metricKey)) {
+            const consumer = updated.consumer as Record<string, unknown> | undefined;
+            if (consumer != null) {
+              const conMetrics = consumer.metrics as Record<string, unknown>;
+              patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
+            }
+          } else {
+            const publish = updated.publish as Record<string, unknown>;
+            const publishMetrics = publish.metrics as Record<string, unknown>;
+            patchMetricQuery(publishMetrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
           }
         } else {
-          const prometheus = updated.prometheus as Record<string, unknown>;
-          prometheus[metricKey] = metricValue;
+          const metrics = updated.metrics as Record<string, unknown>;
+          patchMetricQuery(metrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
         }
         await saveEdgeTemplate(entityId, updated);
         reload();
@@ -639,8 +734,8 @@ function TopologyPage(): React.JSX.Element {
       </div>
       {graph !== undefined && (
         <TopologyIdProvider value={effectiveId}>
-          <PromqlQueriesProvider value={promqlQueries}>
-          <RawPromqlQueriesProvider value={rawPromqlQueries}>
+          <PromqlQueriesProvider value={metricQueries}>
+          <RawPromqlQueriesProvider value={rawMetricQueries}>
             <DataSourceMapProvider value={dataSourceMap}>
               <EditModeProvider value={isEditing}>
                 <DatasourceDefsProvider value={datasourceDefinitions}>
@@ -652,6 +747,7 @@ function TopologyPage(): React.JSX.Element {
                             <SseRefreshProvider value={0}>
                               <ViewOptionsProvider value={viewOptionsCtx}>
                               <SlaProvider value={slaMap}>
+                              <DirectionProvider value={directionMap}>
                                 <div className={styles.graphArea}>
                                   <TopologyView
                                     graph={graph}
@@ -672,6 +768,7 @@ function TopologyPage(): React.JSX.Element {
                                     rawFlowJson={entry?.raw}
                                   />
                                 </div>
+                              </DirectionProvider>
                               </SlaProvider>
                               </ViewOptionsProvider>
                             </SseRefreshProvider>

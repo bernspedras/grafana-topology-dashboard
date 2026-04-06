@@ -1,6 +1,5 @@
 import type { MetricDirection } from '../domain/metrics';
-import { METRIC_DIRECTIONS } from '../domain/metrics';
-import type { NodeDefinition, EdgeDefinition, TopologyDefinition } from './topologyDefinition';
+import type { MetricDefinition, NodeDefinition, EdgeDefinition, TopologyDefinition } from './topologyDefinition';
 import type { SlaDefaultsJson } from './pluginSettings';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -65,15 +64,55 @@ function edgeKindDefaults(kind: string, defaults: ParsedSlaDefaults): SlaThresho
   }
 }
 
+// ─── Per-metric SLA extraction ───────────────────────────────────────────────
+
+/** Extract SLA thresholds from a metrics query object (per-metric sla wins over defaults). */
+function overlayMetricSla(
+  base: Record<string, MetricSlaThreshold>,
+  metrics: object,
+  keyMap?: Readonly<Record<string, string>>,
+): void {
+  for (const [key, metric] of Object.entries(metrics)) {
+    if (metric != null && typeof metric === 'object' && 'sla' in metric) {
+      const def = metric as MetricDefinition;
+      if (def.sla != null) {
+        base[keyMap !== undefined ? (keyMap[key] ?? key) : key] = def.sla;
+      }
+    }
+  }
+}
+
+/** Maps consumer-section-local keys to the prefixed keys used by the display layer. */
+const CONSUMER_SLA_KEY_MAP: Readonly<Record<string, string>> = {
+  rps: 'consumerRps',
+  errorRate: 'consumerErrorRate',
+  processingTimeP95: 'consumerProcessingTimeP95',
+  processingTimeAvg: 'consumerProcessingTimeAvg',
+};
+
 // ─── Resolution ─────────────────────────────────────────────────────────────
 
 export function resolveNodeSla(def: NodeDefinition, defaults: ParsedSlaDefaults): SlaThresholdMap {
   if (def.kind === 'flow-summary') return EMPTY_MAP;
-  return { ...defaults.node, ...def.sla };
+  const result: Record<string, MetricSlaThreshold> = { ...defaults.node };
+  overlayMetricSla(result, def.metrics);
+  return result;
 }
 
 export function resolveEdgeSla(def: EdgeDefinition, defaults: ParsedSlaDefaults): SlaThresholdMap {
-  return { ...edgeKindDefaults(def.kind, defaults), ...def.sla };
+  const result: Record<string, MetricSlaThreshold> = { ...edgeKindDefaults(def.kind, defaults) };
+  if (def.kind === 'amqp') {
+    overlayMetricSla(result, def.publish.metrics);
+    if (def.queue != null) overlayMetricSla(result, def.queue.metrics);
+    if (def.consumer != null) overlayMetricSla(result, def.consumer.metrics, CONSUMER_SLA_KEY_MAP);
+  } else if (def.kind === 'kafka') {
+    overlayMetricSla(result, def.publish.metrics);
+    if (def.topicMetrics != null) overlayMetricSla(result, def.topicMetrics.metrics);
+    if (def.consumer != null) overlayMetricSla(result, def.consumer.metrics, CONSUMER_SLA_KEY_MAP);
+  } else {
+    overlayMetricSla(result, def.metrics);
+  }
+  return result;
 }
 
 export function buildSlaMap(
@@ -102,7 +141,7 @@ export function compareToSla(
   explicitDirection?: MetricDirection,
 ): SlaStatus {
   if (threshold === undefined) return 'no-sla';
-  const direction: MetricDirection | undefined = explicitDirection ?? (METRIC_DIRECTIONS[metricKey] as MetricDirection | undefined);
+  const direction: MetricDirection | undefined = explicitDirection;
   if (direction === undefined) return 'no-sla';
   if (direction === 'lower-is-better') {
     if (value >= threshold.critical) return 'critical';

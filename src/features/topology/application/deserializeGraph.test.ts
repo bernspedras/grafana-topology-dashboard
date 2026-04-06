@@ -8,9 +8,14 @@ import {
   HttpJsonEdge,
   HttpXmlEdge,
   TcpDbConnectionEdge,
+  AmqpEdge,
+  KafkaEdge,
+  GrpcEdge,
   TopologyGraph,
   HttpEdgeMetrics,
   DbConnectionMetrics,
+  AmqpEdgeMetrics,
+  KafkaEdgeMetrics,
   DeploymentMetrics,
   NodeMetrics,
 } from '../domain';
@@ -23,6 +28,11 @@ import type {
   HttpJsonEdgeDto,
   HttpXmlEdgeDto,
   TcpDbConnectionEdgeDto,
+  AmqpEdgeDto,
+  AmqpEdgeMetricsDto,
+  KafkaEdgeDto,
+  KafkaEdgeMetricsDto,
+  GrpcEdgeDto,
   NodeMetricsDto,
   BaseEdgeMetricsDto,
   DbConnectionMetricsDto,
@@ -33,11 +43,11 @@ import type {
 const NOW = '2026-03-19T12:00:00.000Z';
 
 function makeNodeMetricsDto(): NodeMetricsDto {
-  return { cpuPercent: 50, memoryPercent: 60, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined, lastUpdatedAt: NOW };
+  return { cpu: 50, memory: 60, cpuWeekAgo: undefined, memoryWeekAgo: undefined, lastUpdatedAt: NOW };
 }
 
 function makeBaseEdgeMetricsDto(): BaseEdgeMetricsDto {
-  return { latencyP95Ms: 25, latencyAvgMs: undefined, rps: 1000, errorRatePercent: 0.5, latencyP95MsWeekAgo: undefined, latencyAvgMsWeekAgo: undefined, rpsWeekAgo: undefined, errorRatePercentWeekAgo: undefined, lastUpdatedAt: NOW };
+  return { latencyP95: 25, latencyAvg: undefined, rps: 1000, errorRate: 0.5, latencyP95WeekAgo: undefined, latencyAvgWeekAgo: undefined, rpsWeekAgo: undefined, errorRateWeekAgo: undefined, lastUpdatedAt: NOW };
 }
 
 function makeDbConnectionMetricsDto(): DbConnectionMetricsDto {
@@ -72,15 +82,15 @@ describe('deserializeGraph — nodes', (): void => {
           metrics: makeNodeMetricsDto(),
           namespace: 'production',
           deployments: [
-            { name: 'api', readyReplicas: 2, desiredReplicas: 3, cpuPercent: 40, memoryPercent: 55, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined },
-            { name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 20, memoryPercent: 30, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined },
+            { name: 'api', readyReplicas: 2, desiredReplicas: 3, cpu: 40, memory: 55, cpuWeekAgo: undefined, memoryWeekAgo: undefined },
+            { name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30, cpuWeekAgo: undefined, memoryWeekAgo: undefined },
           ],
           usedDeployment: undefined,
         } satisfies EKSServiceNodeDto,
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -92,7 +102,7 @@ describe('deserializeGraph — nodes', (): void => {
     expect(node.label).toBe('my-service');
     expect(node.status).toBe('healthy');
     expect(node.metrics).toBeInstanceOf(NodeMetrics);
-    expect(node.metrics.cpuPercent).toBe(50);
+    expect(node.metrics.cpu).toBe(50);
 
     if (node instanceof EKSServiceNode) {
       expect(node.namespace).toBe('production');
@@ -101,8 +111,8 @@ describe('deserializeGraph — nodes', (): void => {
       expect(node.deployments[0]?.name).toBe('api');
       expect(node.deployments[0]?.readyReplicas).toBe(2);
       expect(node.deployments[0]?.desiredReplicas).toBe(3);
-      expect(node.deployments[0]?.cpuPercent).toBe(40);
-      expect(node.deployments[0]?.memoryPercent).toBe(55);
+      expect(node.deployments[0]?.cpu).toBe(40);
+      expect(node.deployments[0]?.memory).toBe(55);
       expect(node.deployments[1]).toBeInstanceOf(DeploymentMetrics);
       expect(node.deployments[1]?.name).toBe('worker');
     }
@@ -124,7 +134,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -147,15 +157,15 @@ describe('deserializeGraph — nodes', (): void => {
           metrics: makeNodeMetricsDto(),
           namespace: 'ns',
           deployments: [
-            { name: 'api', readyReplicas: 3, desiredReplicas: 3, cpuPercent: 40, memoryPercent: 55, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined },
-            { name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpuPercent: 20, memoryPercent: 30, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined },
+            { name: 'api', readyReplicas: 3, desiredReplicas: 3, cpu: 40, memory: 55, cpuWeekAgo: undefined, memoryWeekAgo: undefined },
+            { name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30, cpuWeekAgo: undefined, memoryWeekAgo: undefined },
           ],
           usedDeployment: 'api',
         } satisfies EKSServiceNodeDto,
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -179,14 +189,14 @@ describe('deserializeGraph — nodes', (): void => {
           metrics: makeNodeMetricsDto(),
           namespace: 'ns',
           deployments: [
-            { name: 'api', readyReplicas: 2, desiredReplicas: 2, cpuPercent: 30, memoryPercent: 40, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined },
+            { name: 'api', readyReplicas: 2, desiredReplicas: 2, cpu: 30, memory: 40, cpuWeekAgo: undefined, memoryWeekAgo: undefined },
           ],
           usedDeployment: undefined,
         } satisfies EKSServiceNodeDto,
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -215,7 +225,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -246,7 +256,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -279,7 +289,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -307,7 +317,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -338,7 +348,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -366,7 +376,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -397,7 +407,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -426,7 +436,7 @@ describe('deserializeGraph — nodes', (): void => {
       ],
       edges: [],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -455,7 +465,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies HttpJsonEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -488,7 +498,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies HttpJsonEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -518,7 +528,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies HttpJsonEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -548,7 +558,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies HttpXmlEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -579,7 +589,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies HttpXmlEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -607,7 +617,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies TcpDbConnectionEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -640,7 +650,7 @@ describe('deserializeGraph — edges', (): void => {
         } satisfies TcpDbConnectionEdgeDto,
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -650,6 +660,155 @@ describe('deserializeGraph — edges', (): void => {
     if (edge instanceof TcpDbConnectionEdge) {
       expect(edge.poolSize).toBeUndefined();
       expect(edge.port).toBeUndefined();
+    }
+  });
+
+  it('deserializes AmqpEdge with all fields', (): void => {
+    const amqpMetrics: AmqpEdgeMetricsDto = {
+      ...makeBaseEdgeMetricsDto(),
+      queueResidenceTimeP95: 12,
+      queueResidenceTimeAvg: 8,
+      queueResidenceTimeP95WeekAgo: undefined,
+      queueResidenceTimeAvgWeekAgo: undefined,
+      consumerProcessingTimeP95: 20,
+      consumerProcessingTimeAvg: 15,
+      consumerProcessingTimeP95WeekAgo: undefined,
+      consumerProcessingTimeAvgWeekAgo: undefined,
+      e2eLatencyP95: 55,
+      e2eLatencyAvg: 40,
+      e2eLatencyP95WeekAgo: undefined,
+      e2eLatencyAvgWeekAgo: undefined,
+      queueDepth: 150,
+      queueDepthWeekAgo: undefined,
+      consumerRps: 750,
+      consumerRpsWeekAgo: undefined,
+      consumerErrorRate: 0.1,
+      consumerErrorRateWeekAgo: undefined,
+    };
+    const dto: TopologyGraphDto = {
+      nodes: [],
+      edges: [
+        {
+          _type: 'AmqpEdge',
+          id: 'e-amqp',
+          source: 'svc-a',
+          target: 'svc-b',
+          animated: true,
+          metrics: amqpMetrics,
+          exchange: 'orders',
+          routingKeyFilter: 'order.created',
+        } satisfies AmqpEdgeDto,
+      ],
+      updatedAt: NOW,
+      metricQueries: {},
+      pollIntervalMs: 15000,
+    };
+
+    const graph = deserializeGraph(dto);
+    const edge = graph.edges[0];
+
+    expect(edge).toBeInstanceOf(AmqpEdge);
+    if (edge instanceof AmqpEdge) {
+      expect(edge.metrics).toBeInstanceOf(AmqpEdgeMetrics);
+      expect(edge.exchange).toBe('orders');
+      expect(edge.routingKeyFilter).toBe('order.created');
+      expect(edge.metrics.queueResidenceTimeP95).toBe(12);
+      expect(edge.metrics.consumerProcessingTimeP95).toBe(20);
+      expect(edge.metrics.e2eLatencyP95).toBe(55);
+      expect(edge.metrics.queueDepth).toBe(150);
+      expect(edge.metrics.consumerRps).toBe(750);
+      expect(edge.metrics.consumerErrorRate).toBe(0.1);
+    }
+  });
+
+  it('deserializes KafkaEdge with all fields', (): void => {
+    const kafkaMetrics: KafkaEdgeMetricsDto = {
+      ...makeBaseEdgeMetricsDto(),
+      queueResidenceTimeP95: undefined,
+      queueResidenceTimeAvg: undefined,
+      queueResidenceTimeP95WeekAgo: undefined,
+      queueResidenceTimeAvgWeekAgo: undefined,
+      consumerProcessingTimeP95: 18,
+      consumerProcessingTimeAvg: 12,
+      consumerProcessingTimeP95WeekAgo: undefined,
+      consumerProcessingTimeAvgWeekAgo: undefined,
+      e2eLatencyP95: 50,
+      e2eLatencyAvg: 35,
+      e2eLatencyP95WeekAgo: undefined,
+      e2eLatencyAvgWeekAgo: undefined,
+      consumerLag: 500,
+      consumerLagWeekAgo: undefined,
+      consumerRps: 950,
+      consumerRpsWeekAgo: undefined,
+      consumerErrorRate: 0.05,
+      consumerErrorRateWeekAgo: undefined,
+    };
+    const dto: TopologyGraphDto = {
+      nodes: [],
+      edges: [
+        {
+          _type: 'KafkaEdge',
+          id: 'e-kafka',
+          source: 'svc-a',
+          target: 'svc-b',
+          animated: true,
+          metrics: kafkaMetrics,
+          topic: 'events',
+          consumerGroup: 'cg-1',
+        } satisfies KafkaEdgeDto,
+      ],
+      updatedAt: NOW,
+      metricQueries: {},
+      pollIntervalMs: 15000,
+    };
+
+    const graph = deserializeGraph(dto);
+    const edge = graph.edges[0];
+
+    expect(edge).toBeInstanceOf(KafkaEdge);
+    if (edge instanceof KafkaEdge) {
+      expect(edge.metrics).toBeInstanceOf(KafkaEdgeMetrics);
+      expect(edge.topic).toBe('events');
+      expect(edge.consumerGroup).toBe('cg-1');
+      expect(edge.metrics.consumerProcessingTimeP95).toBe(18);
+      expect(edge.metrics.e2eLatencyP95).toBe(50);
+      expect(edge.metrics.consumerLag).toBe(500);
+      expect(edge.metrics.consumerRps).toBe(950);
+      expect(edge.metrics.consumerErrorRate).toBe(0.05);
+    }
+  });
+
+  it('deserializes GrpcEdge with all fields', (): void => {
+    const dto: TopologyGraphDto = {
+      nodes: [],
+      edges: [
+        {
+          _type: 'GrpcEdge',
+          id: 'e-grpc',
+          source: 'svc-a',
+          target: 'svc-b',
+          animated: true,
+          metrics: makeBaseEdgeMetricsDto(),
+          aggregateMetrics: undefined,
+          grpcService: 'PaymentService',
+          grpcMethod: 'ProcessPayment',
+        } satisfies GrpcEdgeDto,
+      ],
+      updatedAt: NOW,
+      metricQueries: {},
+      pollIntervalMs: 15000,
+    };
+
+    const graph = deserializeGraph(dto);
+    const edge = graph.edges[0];
+
+    expect(edge).toBeInstanceOf(GrpcEdge);
+    if (edge instanceof GrpcEdge) {
+      expect(edge.metrics).toBeInstanceOf(HttpEdgeMetrics);
+      expect(edge.grpcService).toBe('PaymentService');
+      expect(edge.grpcMethod).toBe('ProcessPayment');
+      expect(edge.metrics.latencyP95).toBe(25);
+      expect(edge.metrics.rps).toBe(1000);
     }
   });
 });
@@ -665,10 +824,10 @@ describe('deserializeGraph — full graph round-trip', (): void => {
           id: 'service-a',
           label: 'service-a',
           status: 'healthy',
-          metrics: { cpuPercent: 45, memoryPercent: 62, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined, lastUpdatedAt: NOW },
+          metrics: { cpu: 45, memory: 62, cpuWeekAgo: undefined, memoryWeekAgo: undefined, lastUpdatedAt: NOW },
           namespace: 'production',
           deployments: [
-            { name: 'service-a-api', readyReplicas: 2, desiredReplicas: 2, cpuPercent: 45, memoryPercent: 62, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined },
+            { name: 'service-a-api', readyReplicas: 2, desiredReplicas: 2, cpu: 45, memory: 62, cpuWeekAgo: undefined, memoryWeekAgo: undefined },
           ],
           usedDeployment: undefined,
         },
@@ -677,7 +836,7 @@ describe('deserializeGraph — full graph round-trip', (): void => {
           id: 'main-db',
           label: 'main-db',
           status: 'healthy',
-          metrics: { cpuPercent: 22, memoryPercent: 40, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined, lastUpdatedAt: NOW },
+          metrics: { cpu: 22, memory: 40, cpuWeekAgo: undefined, memoryWeekAgo: undefined, lastUpdatedAt: NOW },
           engine: 'PostgreSQL 16',
           isReadReplica: false,
           storageGb: 256,
@@ -687,7 +846,7 @@ describe('deserializeGraph — full graph round-trip', (): void => {
           id: 'external-api',
           label: 'External API',
           status: 'warning',
-          metrics: { cpuPercent: 0, memoryPercent: 0, cpuPercentWeekAgo: undefined, memoryPercentWeekAgo: undefined, lastUpdatedAt: NOW },
+          metrics: { cpu: 0, memory: 0, cpuWeekAgo: undefined, memoryWeekAgo: undefined, lastUpdatedAt: NOW },
           provider: 'Acme Corp',
           contactEmail: 'ops@example.com',
           slaPercent: 99.9,
@@ -700,7 +859,7 @@ describe('deserializeGraph — full graph round-trip', (): void => {
           source: 'service-a',
           target: 'external-api',
           animated: true,
-          metrics: { latencyP95Ms: 120, latencyAvgMs: undefined, rps: 500, errorRatePercent: 0.2, latencyP95MsWeekAgo: undefined, latencyAvgMsWeekAgo: undefined, rpsWeekAgo: undefined, errorRatePercentWeekAgo: undefined, lastUpdatedAt: NOW },
+          metrics: { latencyP95: 120, latencyAvg: undefined, rps: 500, errorRate: 0.2, latencyP95WeekAgo: undefined, latencyAvgWeekAgo: undefined, rpsWeekAgo: undefined, errorRateWeekAgo: undefined, lastUpdatedAt: NOW },
           aggregateMetrics: undefined,
           method: 'POST',
           endpointPath: '/api/v1/process',
@@ -712,14 +871,14 @@ describe('deserializeGraph — full graph round-trip', (): void => {
           target: 'main-db',
           animated: true,
           metrics: {
-            latencyP95Ms: 4,
-            latencyAvgMs: undefined,
+            latencyP95: 4,
+            latencyAvg: undefined,
             rps: 980,
-            errorRatePercent: 0,
-            latencyP95MsWeekAgo: undefined,
-            latencyAvgMsWeekAgo: undefined,
+            errorRate: 0,
+            latencyP95WeekAgo: undefined,
+            latencyAvgWeekAgo: undefined,
             rpsWeekAgo: undefined,
-            errorRatePercentWeekAgo: undefined,
+            errorRateWeekAgo: undefined,
             lastUpdatedAt: NOW,
             activeConnections: 18,
             idleConnections: 32,
@@ -739,7 +898,7 @@ describe('deserializeGraph — full graph round-trip', (): void => {
         },
       ],
       updatedAt: NOW,
-      promqlQueries: {},
+      metricQueries: {},
       pollIntervalMs: 15000,
     };
 
@@ -763,7 +922,7 @@ describe('deserializeGraph — full graph round-trip', (): void => {
     const eksNode = graph.nodes[0];
     if (eksNode instanceof EKSServiceNode) {
       expect(eksNode.metrics).toBeInstanceOf(NodeMetrics);
-      expect(eksNode.metrics.cpuPercent).toBe(45);
+      expect(eksNode.metrics.cpu).toBe(45);
       expect(eksNode.deployments).toHaveLength(1);
       expect(eksNode.deployments[0]).toBeInstanceOf(DeploymentMetrics);
       expect(eksNode.deployments[0]?.name).toBe('service-a-api');
@@ -772,7 +931,7 @@ describe('deserializeGraph — full graph round-trip', (): void => {
     const httpEdge = graph.edges[0];
     if (httpEdge instanceof HttpJsonEdge) {
       expect(httpEdge.metrics).toBeInstanceOf(HttpEdgeMetrics);
-      expect(httpEdge.metrics.latencyP95Ms).toBe(120);
+      expect(httpEdge.metrics.latencyP95).toBe(120);
       expect(httpEdge.method).toBe('POST');
     }
 

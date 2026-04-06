@@ -12,7 +12,7 @@ import type { NodeStatus } from '../domain/index';
 // ─── Factories ──────────────────────────────────────────────────────────────
 
 function makeMetrics(): NodeMetrics {
-  return new NodeMetrics({ cpuPercent: 50, memoryPercent: 50, lastUpdatedAt: new Date() });
+  return new NodeMetrics({ cpu: 50, memory: 50, lastUpdatedAt: new Date() });
 }
 
 function makeEksNode(): EKSServiceNode {
