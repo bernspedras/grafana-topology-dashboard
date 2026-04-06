@@ -23,8 +23,8 @@ export { resolveTopologiesFromSettings, getTopologyList, getRawFlowJson, getSeed
 export type { FlowLayout, AppSettings } from './application/pluginSettings';
 export { useTopologyData } from './application/useTopologyData';
 export type { TopologyEntry, TopologyDataResult } from './application/useTopologyData';
-export { assembleTopologyGraph, buildGroupedQueryMaps } from './application/assembleTopologyGraph';
-export { buildMetricQueriesMap, buildRawMetricQueriesMap } from './application/metricQueriesMap';
+export { assembleTopologyGraph } from './application/assembleTopologyGraph';
+export { buildMetricQueriesMap, buildRawMetricQueriesMap, buildAllQueryMaps } from './application/metricQueriesMap';
 export * from './application/topologyApi';
 export { canEditTopology } from './application/permissions';
 export type { ColoringMode } from './application/metricColor';

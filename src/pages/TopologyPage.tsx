@@ -6,7 +6,8 @@ import type { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import { useTopologyData } from '../features/topology/application/useTopologyData';
 import { canEditTopology } from '../features/topology/application/permissions';
 import { useGrafanaMetrics } from '../features/topology/application/useGrafanaMetrics';
-import { buildMetricQueriesMap, buildRawMetricQueriesMap } from '../features/topology/application/metricQueriesMap';
+import { useTopologyPositionStore } from '../features/topology/application/topologyPositionStore';
+import { buildAllQueryMaps } from '../features/topology/application/metricQueriesMap';
 import { buildMetricDatasourceMap, buildEntityDefaultDatasourceMap } from '../features/topology/application/metricDatasourceMap';
 import { saveNodeTemplate, saveEdgeTemplate, saveFlow } from '../features/topology/application/topologyApi';
 import type { NodeTemplate, TopologyDefinitionRefs } from '../features/topology/application/topologyDefinition';
@@ -126,6 +127,13 @@ function TopologyPage(): React.JSX.Element {
     () => topologies.find((t) => t.id === effectiveId),
     [topologies, effectiveId],
   );
+
+  // Prune stale localStorage layout entries for topologies that no longer exist.
+  useEffect(() => {
+    if (topologies.length === 0) return;
+    const knownIds = new Set(topologies.map((t) => t.id));
+    useTopologyPositionStore.getState().pruneStaleEntries(knownIds);
+  }, [topologies]);
 
   const flowRefs = useMemo((): TopologyDefinitionRefs | undefined => {
     if (entry === undefined) {
@@ -455,8 +463,17 @@ function TopologyPage(): React.JSX.Element {
 
   const slaDefaults = useMemo(() => parseSlaDefaults(slaDefaultsRaw as SlaDefaultsJson | undefined), [slaDefaultsRaw]);
 
+  // Single unified query map computation — 2 traversals instead of 3 (PERF-07).
+  const { groupedMaps, metricQueries, rawMetricQueries } = useMemo(
+    () => entry !== undefined
+      ? buildAllQueryMaps(entry.definition)
+      : { groupedMaps: undefined as ReadonlyMap<string, ReadonlyMap<string, string>> | undefined, metricQueries: {}, rawMetricQueries: {} },
+    [entry],
+  );
+
   const { graph, loading: metricsLoading, error, lastRefreshAt } = useGrafanaMetrics(
     entry?.definition,
+    groupedMaps,
     dataSourceMap,
     POLL_INTERVAL_MS,
     slaDefaults,
@@ -465,16 +482,6 @@ function TopologyPage(): React.JSX.Element {
   const slaMap = useMemo(() => buildSlaMap(entry?.definition, slaDefaults), [entry, slaDefaults]);
 
   const directionMap = useMemo(() => buildDirectionMap(entry?.definition), [entry]);
-
-  const metricQueries = useMemo(
-    () => (entry !== undefined ? buildMetricQueriesMap(entry.definition) : {}),
-    [entry],
-  );
-
-  const rawMetricQueries = useMemo(
-    () => (entry !== undefined ? buildRawMetricQueriesMap(entry.definition) : {}),
-    [entry],
-  );
 
   const metricDsMap = useMemo(
     () => (entry !== undefined ? buildMetricDatasourceMap(entry.definition) : {}),

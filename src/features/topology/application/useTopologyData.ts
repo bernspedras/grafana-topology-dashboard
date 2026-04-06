@@ -124,6 +124,24 @@ function resolveBundle(bundle: TopologyBundleResponse): ResolvedBundle {
   return { topologies, nodeTemplates: [...nodeTemplates], edgeTemplates: [...edgeTemplates], datasourceDefinitions: bundle.datasources ?? [] };
 }
 
+/**
+ * Lightweight fingerprint based on entity IDs — avoids full JSON.stringify of
+ * the entire bundle (potentially hundreds of KB) on every fetch cycle.
+ */
+function bundleFingerprint(bundle: TopologyBundleResponse): string {
+  const parts: string[] = [];
+  for (const f of bundle.flows as readonly Record<string, unknown>[]) {
+    parts.push('f:' + (f.id as string));
+  }
+  for (const n of bundle.nodeTemplates as readonly Record<string, unknown>[]) {
+    parts.push('n:' + (n.id as string));
+  }
+  for (const e of bundle.edgeTemplates as readonly Record<string, unknown>[]) {
+    parts.push('e:' + (e.id as string));
+  }
+  return parts.sort().join('|');
+}
+
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
 export function useTopologyData(): TopologyDataResult {
@@ -141,9 +159,10 @@ export function useTopologyData(): TopologyDataResult {
     setTick((t) => t + 1);
   }, []);
 
-  // Track serialized snapshots to skip state updates when data is unchanged.
-  const prevBundleJson = useRef('');
+  // Track lightweight fingerprints to skip state updates when data is unchanged.
+  const prevBundleFingerprint = useRef('');
   const prevSettingsJson = useRef('');
+  const prevTick = useRef(-1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -154,14 +173,19 @@ export function useTopologyData(): TopologyDataResult {
         const [bundle, settings] = await Promise.all([fetchBundle(), readPluginSettings()]);
 
         if (!controller.signal.aborted) {
-          const bundleJson = JSON.stringify(bundle);
+          const fingerprint = bundleFingerprint(bundle);
           const settingsJson = JSON.stringify(settings);
 
           // Only resolve and update state when the fetched data actually changed.
           // This keeps object references stable, preventing cascading re-renders
           // through the nested context providers in TopologyPage.
-          if (bundleJson !== prevBundleJson.current || settingsJson !== prevSettingsJson.current) {
-            prevBundleJson.current = bundleJson;
+          // Always resolve on explicit reloads (tick changed) since content may
+          // have been edited in-place without changing IDs.
+          const isExplicitReload = prevTick.current !== -1 && prevTick.current !== tick;
+          prevTick.current = tick;
+
+          if (isExplicitReload || fingerprint !== prevBundleFingerprint.current || settingsJson !== prevSettingsJson.current) {
+            prevBundleFingerprint.current = fingerprint;
             prevSettingsJson.current = settingsJson;
 
             const resolved = resolveBundle(bundle);

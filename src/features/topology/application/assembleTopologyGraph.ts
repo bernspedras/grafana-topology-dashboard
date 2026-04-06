@@ -18,7 +18,6 @@ import type { SlaThresholdMap } from './slaThresholds';
 import type { ParsedSlaDefaults } from './slaThresholds';
 import { resolveNodeSla, EMPTY_SLA_DEFAULTS } from './slaThresholds';
 import { baselineMetricStatus, worstOfStatuses } from './metricColor';
-import { visitDefinitionQueries } from './queryVisitor';
 import {
   TopologyGraph,
   EKSServiceNode,
@@ -113,25 +112,6 @@ function epQueryKey(edgeId: string, endpointPath: string, metric: string): strin
 
 function rkQueryKey(edgeId: string, rkFilter: string, metric: string): string {
   return edgeQueryKey(edgeId, `rk:${rkFilter}:${metric}`);
-}
-
-// ─── Grouped query map builder ──────────────────────────────────────────────
-
-export function buildGroupedQueryMaps(
-  definition: TopologyDefinition,
-): ReadonlyMap<string, ReadonlyMap<string, string>> {
-  const groups = new Map<string, Map<string, string>>();
-
-  visitDefinitionQueries(definition, (entityType, entityId, metricKey, promql, dataSource) => {
-    let group = groups.get(dataSource);
-    if (group === undefined) {
-      group = new Map<string, string>();
-      groups.set(dataSource, group);
-    }
-    group.set(`${entityType}:${entityId}:${metricKey}`, promql);
-  });
-
-  return groups;
 }
 
 // ─── Custom metric value builder ──────────────────────────────────────────────
