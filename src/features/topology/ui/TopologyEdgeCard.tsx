@@ -19,12 +19,12 @@ import {
   edgeMetricRows,
 } from '../application/edgeDisplayData';
 import { usePromqlQueries } from './PromqlQueriesContext';
-import { useRawPromqlQueries } from './RawPromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { useDirections } from './DirectionContext';
 import { PromQLModal } from './PromQLModal';
+import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
 import { useTopologyId } from '../application/TopologyIdContext';
 import { useTopologyPositionStore } from '../application/topologyPositionStore';
@@ -465,7 +465,6 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
 
   const editMode = useEditMode();
   const resolvedQueries = usePromqlQueries(data?.domainEdge.id ?? '');
-  const rawQueries = useRawPromqlQueries(data?.domainEdge.id ?? '');
 
   if (data === undefined) {
     return <path id={id} className="react-flow__edge-path" d={edgePath} />;
@@ -666,12 +665,20 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
             </div>
           </div>
 
-          {/* PromQL Modal */}
-          {showQueries && (
-            <PromQLModal
-              title={edge.source + ' → ' + edge.target}
+          {/* Metric Edit Modal (layered view) or PromQL Modal (fallback for view-only) */}
+          {showQueries && editMode && (
+            <MetricEditModal
+              title={edge.source + ' \u2192 ' + edge.target}
               entityId={edgeId}
-              queries={editMode ? (rawQueries ?? {}) : filterEdgeQueries(resolvedQueries, selectedEndpoint)}
+              entityType="edge"
+              onClose={(): void => { setShowQueries(false); }}
+            />
+          )}
+          {showQueries && !editMode && (
+            <PromQLModal
+              title={edge.source + ' \u2192 ' + edge.target}
+              entityId={edgeId}
+              queries={filterEdgeQueries(resolvedQueries, selectedEndpoint)}
               onClose={(): void => { setShowQueries(false); }}
             />
           )}
@@ -681,6 +688,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
             <MetricChartModal
               title={edge.source + ' → ' + edge.target + (effectiveEndpoint === 'endpoint' && endpoint !== undefined ? ' (' + endpoint + ')' : '') + ' — ' + chartMetric.label}
               entityId={edge.id}
+              entityType="edge"
               metricKey={chartMetric.key}
               description={chartMetric.description}
               deployment={undefined}

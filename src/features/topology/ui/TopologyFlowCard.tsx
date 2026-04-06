@@ -143,6 +143,7 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
         <MetricChartModal
           title={node.label + ' — ' + chartMetric.label}
           entityId={node.id}
+          entityType="node"
           metricKey={chartMetric.key}
           description={chartMetric.description}
           deployment={undefined}
