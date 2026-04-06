@@ -1,20 +1,11 @@
 import type { TopologyGraph } from '../domain';
 
+/**
+ * Returns the structural identity of a graph.
+ *
+ * Delegates to `TopologyGraph.structuralId` which is computed once at
+ * construction time — no per-call allocation or sorting.
+ */
 export function graphId(graph: TopologyGraph): string {
-  const nodeIds = graph.nodes
-    .map((n) => n.id)
-    .toSorted()
-    .join(',');
-
-  const edgeIds = graph.edges
-    .map((e) => e.source + '>' + e.target)
-    .toSorted()
-    .join(',');
-
-  const stepIds = graph.flowSteps
-    .map((s) => s.id)
-    .toSorted()
-    .join(',');
-
-  return nodeIds + '|' + edgeIds + '|' + stepIds;
+  return graph.structuralId;
 }
