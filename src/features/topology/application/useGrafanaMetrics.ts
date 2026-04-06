@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { getBackendSrv } from '@grafana/runtime';
 import { firstValueFrom } from 'rxjs';
 import type { TopologyGraph } from '../domain';
 import type { TopologyDefinition } from './topologyDefinition';
-import { buildGroupedQueryMaps, assembleTopologyGraph } from './assembleTopologyGraph';
+import { assembleTopologyGraph } from './assembleTopologyGraph';
 import { PLUGIN_ID } from './pluginConstants';
 import type { ParsedSlaDefaults } from './slaThresholds';
 
@@ -67,6 +67,7 @@ function groupedMapsToRecord(
 
 export function useGrafanaMetrics(
   definition: TopologyDefinition | undefined,
+  groupedMaps: ReadonlyMap<string, ReadonlyMap<string, string>> | undefined,
   dataSourceMap: Record<string, string>,
   pollIntervalMs = 30000,
   slaDefaults?: ParsedSlaDefaults,
@@ -76,13 +77,9 @@ export function useGrafanaMetrics(
   const [error, setError] = useState<string | undefined>(undefined);
   const [lastRefreshAt, setLastRefreshAt] = useState<number | undefined>(undefined);
   const pollRef = useRef(0);
+  const inflightRef = useRef(false);
   const baselineCacheRef = useRef<Map<string, number | undefined> | undefined>(undefined);
   const baselineFetchedAtRef = useRef(0);
-
-  const groupedMaps = useMemo(
-    () => definition !== undefined ? buildGroupedQueryMaps(definition) : undefined,
-    [definition],
-  );
 
   // Immediately render graph structure (no metrics) when definition changes
   useEffect(() => {
@@ -131,6 +128,16 @@ export function useGrafanaMetrics(
     }
   }, [definition, groupedMaps, dataSourceMap, slaDefaults]);
 
+  const safePoll = useCallback(async (id: number): Promise<void> => {
+    if (inflightRef.current) return;
+    inflightRef.current = true;
+    try {
+      await poll(id);
+    } finally {
+      inflightRef.current = false;
+    }
+  }, [poll]);
+
   // Metric polling (runs in background, doesn't block graph rendering)
   useEffect(() => {
     if (definition === undefined) {
@@ -142,11 +149,13 @@ export function useGrafanaMetrics(
     let timer: ReturnType<typeof setInterval> | undefined;
 
     setLoading(true);
-    void poll(id).finally(() => {
+    void safePoll(id).finally(() => {
       if (pollRef.current === id) {
         setLoading(false);
         timer = setInterval((): void => {
-          void poll(id);
+          if (document.visibilityState === 'visible') {
+            void safePoll(id);
+          }
         }, pollIntervalMs);
       }
     });
@@ -155,7 +164,18 @@ export function useGrafanaMetrics(
       pollRef.current++;
       if (timer !== undefined) clearInterval(timer);
     };
-  }, [definition, poll, pollIntervalMs]);
+  }, [definition, safePoll, pollIntervalMs]);
+
+  // Immediate refresh when tab becomes visible again
+  useEffect(() => {
+    const handleVisibility = (): void => {
+      if (document.visibilityState === 'visible') {
+        void safePoll(pollRef.current);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return (): void => { document.removeEventListener('visibilitychange', handleVisibility); };
+  }, [safePoll]);
 
   return { graph, loading, error, lastRefreshAt };
 }

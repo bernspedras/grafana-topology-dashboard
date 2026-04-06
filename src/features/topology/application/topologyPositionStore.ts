@@ -64,6 +64,7 @@ interface TopologyPositionState {
   getEdgeLabelOffset: (edgeId: string) => TopologyLayoutPosition | undefined;
   updateFlowSteps: (updates: readonly { readonly id: string; readonly step: number; readonly text: string }[]) => void;
   resetLayout: (graph: TopologyGraph) => void;
+  pruneStaleEntries: (knownIds: ReadonlySet<string>) => void;
 }
 
 export const useTopologyPositionStore = create<TopologyPositionState>()(
@@ -331,6 +332,19 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
           lastGraphId: graphId(graph),
           isLayoutDirty: false,
         });
+      },
+
+      pruneStaleEntries: (knownIds: ReadonlySet<string>): void => {
+        const { perTopology } = get();
+        const staleKeys = Object.keys(perTopology).filter((id) => !knownIds.has(id));
+        if (staleKeys.length === 0) return;
+        const pruned: TopologyLayoutMap = {};
+        for (const [id, layout] of Object.entries(perTopology)) {
+          if (knownIds.has(id)) {
+            pruned[id] = layout;
+          }
+        }
+        set({ perTopology: pruned });
       },
     }),
     {

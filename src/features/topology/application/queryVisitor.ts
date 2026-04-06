@@ -1,8 +1,8 @@
 /**
  * Shared visitor that iterates all PromQL queries in a TopologyDefinition.
  *
- * Both `buildGroupedQueryMaps` (backend batch queries) and `buildMetricQueriesMap`
- * (UI display) use this to avoid duplicating the node/edge iteration logic.
+ * `buildAllQueryMaps` (unified), `buildMetricQueriesMap` and `buildRawMetricQueriesMap`
+ * use this to avoid duplicating the node/edge iteration logic.
  */
 import type {
   TopologyDefinition,

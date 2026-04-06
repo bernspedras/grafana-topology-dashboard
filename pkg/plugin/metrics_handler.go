@@ -225,7 +225,8 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string)
 		sort.Strings(keys)
 		for _, k := range keys {
 			h.Write([]byte(k))
-			h.Write([]byte(req.Queries[dsName][k]))
+			// PromQL content omitted: it is deterministically derived from the
+			// query key for a given topology, so it adds no discriminating value.
 		}
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
