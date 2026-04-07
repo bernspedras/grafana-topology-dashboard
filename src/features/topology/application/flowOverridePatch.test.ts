@@ -111,7 +111,7 @@ describe('applyFlowOverridePatch — nodes', () => {
     expect((resultEntry.metrics!.cpu!).query).toBe('changed');
   });
 
-  it('throws for inline node definitions', () => {
+  it('patches metrics directly on inline node definitions', () => {
     const refs = makeRefs({
       nodes: [{
         kind: 'eks-service' as const,
@@ -128,12 +128,14 @@ describe('applyFlowOverridePatch — nodes', () => {
     const patch: FlowOverridePatch = {
       metricKey: 'cpu',
       section: undefined,
-      value: { query: 'q' },
-      action: 'set',
+      value: { query: 'inline_cpu', unit: 'percent', direction: 'lower-is-better' },
+      action: 'replace',
     };
 
-    expect(() => applyFlowOverridePatch(refs, 'svc-inline', 'node', patch))
-      .toThrow('Cannot apply flow override to inline node definition');
+    const result = applyFlowOverridePatch(refs, 'svc-inline', 'node', patch);
+
+    const entry = result.nodes[0] as { metrics: Record<string, MetricDefinition | undefined> };
+    expect(entry.metrics.cpu).toEqual({ query: 'inline_cpu', unit: 'percent', direction: 'lower-is-better' });
   });
 
   it('throws when node not found', () => {
