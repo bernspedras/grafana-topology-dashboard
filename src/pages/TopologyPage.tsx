@@ -19,6 +19,7 @@ import { AddNodeModal } from '../features/topology/ui/AddNodeModal';
 import type { ExistingTemplate, NodeTemplatePayload } from '../features/topology/ui/AddNodeModal';
 import { AddEdgeModal } from '../features/topology/ui/AddEdgeModal';
 import type { ExistingEdgeTemplate, EdgeTemplatePayload } from '../features/topology/ui/AddEdgeModal';
+import { TemplatesManagerModal } from '../features/topology/ui/TemplatesManagerModal';
 import { TopologyIdProvider } from '../features/topology/application/TopologyIdContext';
 import { PromqlQueriesProvider } from '../features/topology/ui/PromqlQueriesContext';
 import { RawPromqlQueriesProvider } from '../features/topology/ui/RawPromqlQueriesContext';
@@ -160,6 +161,15 @@ function TopologyPage(): React.JSX.Element {
     () => Object.keys(dataSourceMap),
     [dataSourceMap],
   );
+
+  // ── Templates manager modal state ──
+  const [templatesManagerOpen, setTemplatesManagerOpen] = useState(false);
+  const handleOpenTemplatesManager = useCallback((): void => {
+    setTemplatesManagerOpen(true);
+  }, []);
+  const handleCloseTemplatesManager = useCallback((): void => {
+    setTemplatesManagerOpen(false);
+  }, []);
 
   // ── Add node modal state ──
   const [addNodeKind, setAddNodeKind] = useState<AddableNodeKind | undefined>(undefined);
@@ -798,6 +808,7 @@ function TopologyPage(): React.JSX.Element {
                                     onAddFlowStep={handleAddFlowStep}
                                     onSaveLayout={saveTopologyLayout}
                                     rawFlowJson={entry?.raw}
+                                    onOpenTemplatesManager={handleOpenTemplatesManager}
                                   />
                                 </div>
                               </DirectionProvider>
@@ -840,6 +851,16 @@ function TopologyPage(): React.JSX.Element {
           onCreateEdge={handleCreateEdge}
           saving={addEdgeSaving}
           error={addEdgeError}
+        />
+      )}
+      {templatesManagerOpen && (
+        <TemplatesManagerModal
+          nodeTemplates={nodeTemplates}
+          edgeTemplates={edgeTemplates}
+          flows={topologies}
+          dataSourceNames={dataSourceNames}
+          onClose={handleCloseTemplatesManager}
+          onReload={reload}
         />
       )}
     </div>

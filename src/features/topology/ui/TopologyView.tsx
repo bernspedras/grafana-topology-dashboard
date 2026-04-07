@@ -42,6 +42,7 @@ interface TopologyViewProps {
   onAddFlowStep?: () => void;
   onSaveLayout?: (topologyId: string, layout: FlowLayout) => Promise<boolean>;
   rawFlowJson?: unknown;
+  onOpenTemplatesManager?: () => void;
 }
 
 function useToast(): { visible: boolean; message: string; show: (msg: string) => void } {
@@ -172,6 +173,163 @@ function AddMenu({ onSelectNode, onAddFlowStep }: AddMenuProps): React.JSX.Eleme
   );
 }
 
+// ─── Layout Menu (save / copy to clipboard) ─────────────────────────────────
+
+interface LayoutMenuProps {
+  readonly canSave: boolean;
+  readonly canCopy: boolean;
+  readonly onSaveLayout: () => void;
+  readonly onCopyLayout: () => void;
+}
+
+function LayoutMenu({ canSave, canCopy, onSaveLayout, onCopyLayout }: LayoutMenuProps): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handler = (e: MouseEvent): void => {
+      if (ref.current !== null && !ref.current.contains(e.target as HTMLElement)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return (): void => {
+      document.removeEventListener('mousedown', handler);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className={layoutMenuStyles.wrapper}>
+      <button
+        type="button"
+        onClick={(): void => { setOpen((prev) => !prev); }}
+        className={layoutMenuStyles.button}
+        title="Layout actions"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="9" />
+          <rect x="14" y="3" width="7" height="5" />
+          <rect x="14" y="12" width="7" height="9" />
+          <rect x="3" y="16" width="7" height="5" />
+        </svg>
+        Layout
+      </button>
+      {open && (
+        <div className={layoutMenuStyles.menu}>
+          {canSave && (
+            <button
+              type="button"
+              className={layoutMenuStyles.menuItem}
+              onClick={(): void => {
+                onSaveLayout();
+                setOpen(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              <span className={layoutMenuStyles.menuItemContent}>
+                <span className={layoutMenuStyles.menuItemLabel}>Save layout</span>
+                <span className={layoutMenuStyles.menuItemDesc}>Persist layout to Grafana</span>
+              </span>
+            </button>
+          )}
+          {canCopy && (
+            <button
+              type="button"
+              className={layoutMenuStyles.menuItem}
+              onClick={(): void => {
+                onCopyLayout();
+                setOpen(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              <span className={layoutMenuStyles.menuItemContent}>
+                <span className={layoutMenuStyles.menuItemLabel}>Copy layout to clipboard</span>
+                <span className={layoutMenuStyles.menuItemDesc}>Flow JSON with layout</span>
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Manage Menu (templates / future admin actions) ─────────────────────────
+
+interface ManageMenuProps {
+  readonly onOpenTemplatesManager: () => void;
+}
+
+function ManageMenu({ onOpenTemplatesManager }: ManageMenuProps): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handler = (e: MouseEvent): void => {
+      if (ref.current !== null && !ref.current.contains(e.target as HTMLElement)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return (): void => {
+      document.removeEventListener('mousedown', handler);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className={manageMenuStyles.wrapper}>
+      <button
+        type="button"
+        onClick={(): void => { setOpen((prev) => !prev); }}
+        className={manageMenuStyles.button}
+        title="Manage topology data"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+        Manage
+      </button>
+      {open && (
+        <div className={manageMenuStyles.menu}>
+          <button
+            type="button"
+            className={manageMenuStyles.menuItem}
+            onClick={(): void => {
+              onOpenTemplatesManager();
+              setOpen(false);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+            </svg>
+            <span className={manageMenuStyles.menuItemContent}>
+              <span className={manageMenuStyles.menuItemLabel}>Templates</span>
+              <span className={manageMenuStyles.menuItemDesc}>Browse, edit, and delete reusable templates</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Settings Menu ───────────────────────────────────────────────────────────
 
 const COLORING_MODE_OPTIONS: readonly { readonly value: ColoringMode; readonly label: string }[] = [
@@ -245,7 +403,7 @@ function SettingsMenu(): React.JSX.Element {
   );
 }
 
-export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson }: TopologyViewProps): React.JSX.Element {
+export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson, onOpenTemplatesManager }: TopologyViewProps): React.JSX.Element {
   const { options: viewOpts } = useViewOptions();
   const slaMap = useSlaMap();
   const dirMap = useDirectionMap();
@@ -368,34 +526,16 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
             {isEditing === true && onAddNode !== undefined && onAddFlowStep !== undefined && (
               <AddMenu onSelectNode={onAddNode} onAddFlowStep={onAddFlowStep} />
             )}
-            {isEditing === true && onSaveLayout !== undefined && (
-              <button
-                type="button"
-                onClick={handleSaveLayout}
-                className={styles.saveButton}
-                title="Save layout to Grafana (persists across restarts)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-                  <polyline points="17 21 17 13 7 13 7 21" />
-                  <polyline points="7 3 7 8 15 8" />
-                </svg>
-                Save
-              </button>
+            {isEditing === true && onOpenTemplatesManager !== undefined && (
+              <ManageMenu onOpenTemplatesManager={onOpenTemplatesManager} />
             )}
             {isEditing === true && (
-              <button
-                type="button"
-                onClick={handleCopyLayout}
-                className={styles.copyButton}
-                title="Copy flow JSON with layout to clipboard (for updating seed files)"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                </svg>
-                Copy JSON
-              </button>
+              <LayoutMenu
+                canSave={onSaveLayout !== undefined}
+                canCopy={rawFlowJson !== undefined}
+                onSaveLayout={handleSaveLayout}
+                onCopyLayout={handleCopyLayout}
+              />
             )}
           </div>
         </Panel>
@@ -428,22 +568,6 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
 const styles = {
   container: css({ position: 'relative', height: '100%', width: '100%' }),
   buttonGroup: css({ display: 'flex', gap: '8px' }),
-  saveButton: css({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    borderRadius: '8px',
-    backgroundColor: '#2563eb',
-    padding: '8px 14px',
-    fontSize: '13px',
-    fontWeight: 500,
-    color: '#fff',
-    boxShadow: '0 4px 6px -1px rgba(0,0,0,.1)',
-    transition: 'background-color 150ms',
-    border: 'none',
-    cursor: 'pointer',
-    '&:hover': { backgroundColor: '#3b82f6' },
-  }),
   editModeButton: css({
     display: 'inline-flex',
     alignItems: 'center',
@@ -475,22 +599,6 @@ const styles = {
     border: 'none',
     cursor: 'pointer',
     '&:hover': { backgroundColor: '#f59e0b' },
-  }),
-  copyButton: css({
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    borderRadius: '8px',
-    backgroundColor: '#334155',
-    padding: '8px 14px',
-    fontSize: '13px',
-    fontWeight: 500,
-    color: '#e2e8f0',
-    boxShadow: '0 4px 6px -1px rgba(0,0,0,.1)',
-    transition: 'background-color 150ms',
-    border: 'none',
-    cursor: 'pointer',
-    '&:hover': { backgroundColor: '#475569' },
   }),
   toast: css({
     borderRadius: '8px',
@@ -647,5 +755,133 @@ const addNodeStyles = {
   menuDivider: css({
     margin: '4px 0',
     borderTop: '1px solid #334155',
+  }),
+};
+
+const layoutMenuStyles = {
+  wrapper: css({
+    position: 'relative',
+  }),
+  button: css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    borderRadius: '8px',
+    backgroundColor: '#2563eb',
+    padding: '8px 14px',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#fff',
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,.1)',
+    transition: 'background-color 150ms',
+    border: 'none',
+    cursor: 'pointer',
+    '&:hover': { backgroundColor: '#3b82f6' },
+  }),
+  menu: css({
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: '6px',
+    minWidth: '240px',
+    borderRadius: '8px',
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,.2)',
+    padding: '4px 0',
+    zIndex: 50,
+  }),
+  menuItem: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '13px',
+    color: '#e2e8f0',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'background-color 100ms',
+    '&:hover': { backgroundColor: '#334155' },
+  }),
+  menuItemContent: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  }),
+  menuItemLabel: css({
+    fontWeight: 500,
+    lineHeight: 1.2,
+  }),
+  menuItemDesc: css({
+    fontSize: '11px',
+    color: '#94a3b8',
+    lineHeight: 1.2,
+  }),
+};
+
+const manageMenuStyles = {
+  wrapper: css({
+    position: 'relative',
+  }),
+  button: css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    borderRadius: '8px',
+    backgroundColor: '#475569',
+    padding: '8px 14px',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#fff',
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,.1)',
+    transition: 'background-color 150ms',
+    border: 'none',
+    cursor: 'pointer',
+    '&:hover': { backgroundColor: '#64748b' },
+  }),
+  menu: css({
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: '6px',
+    minWidth: '260px',
+    borderRadius: '8px',
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    boxShadow: '0 10px 15px -3px rgba(0,0,0,.2)',
+    padding: '4px 0',
+    zIndex: 50,
+  }),
+  menuItem: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '13px',
+    color: '#e2e8f0',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'background-color 100ms',
+    '&:hover': { backgroundColor: '#334155' },
+  }),
+  menuItemContent: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  }),
+  menuItemLabel: css({
+    fontWeight: 500,
+    lineHeight: 1.2,
+  }),
+  menuItemDesc: css({
+    fontSize: '11px',
+    color: '#94a3b8',
+    lineHeight: 1.2,
   }),
 };
