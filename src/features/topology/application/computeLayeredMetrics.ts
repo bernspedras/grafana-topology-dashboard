@@ -44,6 +44,13 @@ function mergeOneMetric(
 /**
  * Build LayeredMetricRows for a flat metrics object (node or non-sectioned edge).
  * `templateMetrics` is the template's metrics record, `refMetrics` is the flow ref's partial overrides.
+ *
+ * Note on `null` vs `undefined`: empty metric slots persisted to JSON use `null`
+ * (since `undefined` is stripped by JSON.stringify). At runtime the templates we
+ * read back can therefore contain `null` values even though the TypeScript type
+ * says `MetricDefinition | undefined`. We normalize `null` → `undefined` here so
+ * that downstream consumers (rendering, SLA checks, "is this row set?" logic)
+ * can rely on a single sentinel value.
  */
 function buildFlatRows(
   templateMetrics: Readonly<Record<string, MetricDefinition | undefined>>,
@@ -54,12 +61,12 @@ function buildFlatRows(
   const rows: LayeredMetricRow[] = [];
 
   for (const key of Object.keys(templateMetrics)) {
-    const templateValue = templateMetrics[key];
+    const templateValue = templateMetrics[key] ?? undefined;
     const displayKey = displayKeyMap !== undefined ? (displayKeyMap[key] ?? key) : key;
 
     if (refMetrics !== undefined && Object.hasOwn(refMetrics, key)) {
       // Flow override exists for this key
-      const overrideValue = refMetrics[key];
+      const overrideValue = refMetrics[key] ?? undefined;
       const effectiveValue = overrideValue === undefined
         ? undefined
         : mergeOneMetric(templateValue, overrideValue);

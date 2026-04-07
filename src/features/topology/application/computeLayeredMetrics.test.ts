@@ -218,6 +218,62 @@ describe('computeLayeredMetrics — nodes', () => {
     }
   });
 
+  it('normalizes null metric slots to undefined for inline nodes (regression: empty inline node crash)', () => {
+    // When a user creates an inline EKS node from the AddNodeModal, the
+    // metric slots are persisted as JSON `null` so the keys survive
+    // serialization. After read-back, downstream code sees `null` even though
+    // the type signature says `MetricDefinition | undefined`. The MetricEditModal
+    // then crashed with `Cannot read properties of null (reading 'query')`
+    // because `null !== undefined` passed its guard.
+    //
+    // buildFlatRows must normalize null → undefined so that consumers can rely
+    // on a single sentinel value for "metric slot is empty".
+    const inlineEntry = {
+      kind: 'eks-service' as const,
+      id: 'svc-inline',
+      label: 'Inline Service',
+      dataSource: 'prom',
+      namespace: 'prod',
+      deploymentNames: undefined,
+      usedDeployment: undefined,
+      customMetrics: undefined,
+      // Cast: at runtime these come back as null after JSON round-trip, even
+      // though the TS type only allows MetricDefinition | undefined.
+      metrics: { cpu: null, memory: null, readyReplicas: null, desiredReplicas: null } as unknown as typeof NODE_METRICS,
+    };
+
+    const result = computeLayeredMetrics('node', inlineEntry, inlineEntry, 0);
+
+    expect(result.isInline).toBe(true);
+    expect(result.rows.length).toBe(4);
+    for (const row of result.rows) {
+      expect(row.templateValue).toBeUndefined();
+      expect(row.flowValue).toBeUndefined();
+      expect(row.effectiveValue).toBeUndefined();
+      // Crucially: not null. The strict !== undefined checks downstream
+      // would crash if these were null.
+      expect(row.templateValue).not.toBeNull();
+      expect(row.effectiveValue).not.toBeNull();
+    }
+  });
+
+  it('normalizes null overrides on a flow ref to undefined', () => {
+    const template = makeEksTemplate();
+    const ref = {
+      nodeId: 'svc-a',
+      // Same null serialization issue can happen on the override side.
+      metrics: { cpu: null } as unknown as { cpu: MetricDefinition | undefined },
+    } as TopologyNodeRef;
+
+    const result = computeLayeredMetrics('node', template, ref, 1);
+
+    const cpuRow = result.rows.find((r) => r.metricKey === 'cpu')!;
+    expect(cpuRow.flowValue).toBeUndefined();
+    expect(cpuRow.flowValue).not.toBeNull();
+    // Override of null means "disabled / not set" → effectiveValue undefined
+    expect(cpuRow.effectiveValue).toBeUndefined();
+  });
+
   it('shows SLA values in layered rows', () => {
     const template = makeEksTemplate({
       metrics: {

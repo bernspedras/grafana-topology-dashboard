@@ -42,6 +42,7 @@ interface FieldToggles {
 }
 
 const ALL_TOGGLES_OFF: FieldToggles = { query: false, unit: false, direction: false, dataSource: false, sla: false };
+const ALL_TOGGLES_ON: FieldToggles = { query: true, unit: true, direction: true, dataSource: true, sla: true };
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -151,35 +152,41 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
   const [saving, setSaving] = useState(false);
 
   // ── Compute layered data ──
+  // Resolve the flow entry first so inline definitions (which only live in
+  // flowRefs, not the templates arrays) work the same as template references.
+  // For ref entries we look up the template by ID; for inline entries the
+  // entry itself plays the role of the template.
   const layeredData = useMemo((): LayeredMetricData | undefined => {
     if (flowData === undefined) {
       return undefined;
     }
     const { flowRefs, nodeTemplates, edgeTemplates } = flowData;
 
-    // Find template and flow entry
     if (entityType === 'node') {
-      const template = nodeTemplates.find((t) => t.id === entityId);
-      if (template === undefined) {
-        return undefined;
-      }
       const flowEntry = flowRefs.nodes.find((e) =>
         isNodeRef(e) ? e.nodeId === entityId : e.id === entityId,
       );
       if (flowEntry === undefined) {
         return undefined;
       }
-      // Count how many flows use this template
+      const template = isNodeRef(flowEntry)
+        ? nodeTemplates.find((t) => t.id === flowEntry.nodeId)
+        : flowEntry;
+      if (template === undefined) {
+        return undefined;
+      }
       return computeLayeredMetrics('node', template, flowEntry, 0);
-    }
-    const template = edgeTemplates.find((t) => t.id === entityId);
-    if (template === undefined) {
-      return undefined;
     }
     const flowEntry = flowRefs.edges.find((e) =>
       isEdgeRef(e) ? e.edgeId === entityId : e.id === entityId,
     );
     if (flowEntry === undefined) {
+      return undefined;
+    }
+    const template = isEdgeRef(flowEntry)
+      ? edgeTemplates.find((t) => t.id === flowEntry.edgeId)
+      : flowEntry;
+    if (template === undefined) {
       return undefined;
     }
     return computeLayeredMetrics('edge', template, flowEntry, 0);
@@ -227,12 +234,19 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
     const defaultDs = layeredData?.entityDefaultDataSource ?? '';
     // Always init draft from effective value so all fields show current state
     setDraft(draftFromMetric(row.effectiveValue ?? row.templateValue, defaultDs));
-    // For existing overrides, detect which fields are overridden; for new overrides, all off
-    setFieldToggles(
-      row.source === 'flow' || row.source === 'flow-only'
-        ? togglesFromFlowValue(row.flowValue)
-        : ALL_TOGGLES_OFF,
-    );
+    // Inline definitions have no template to inherit from — force all toggles ON
+    // so the user always edits the full metric definition. For ref entries with
+    // existing overrides, detect which fields are already overridden; for new
+    // overrides, start with all toggles off.
+    if (layeredData?.isInline === true) {
+      setFieldToggles(ALL_TOGGLES_ON);
+    } else {
+      setFieldToggles(
+        row.source === 'flow' || row.source === 'flow-only'
+          ? togglesFromFlowValue(row.flowValue)
+          : ALL_TOGGLES_OFF,
+      );
+    }
     setEditingKey(row.metricKey);
     setEditingSection(row.section);
   }, [layeredData]);
@@ -332,6 +346,15 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
               Values from the template are shown in gray.
               Click <strong>Override</strong> to set a flow-specific value.
               Overrides only affect this flow.
+            </span>
+          </div>
+        )}
+        {editMode && layeredData.isInline && (
+          <div className={s.infoBanner}>
+            <span className={s.infoIcon}>&#9432;</span>
+            <span>
+              This entity is defined inline in the flow (no template).
+              Click <strong>Edit</strong> on a metric to set its query, unit, direction, and SLA thresholds.
             </span>
           </div>
         )}
@@ -456,6 +479,11 @@ function MetricRow({
       ? s.rowFlowOnly
       : s.rowInherited;
 
+  // Inline definitions have no template/flow split — every row is "set on
+  // the inline entry directly", and the only meaningful action is "Edit" /
+  // "Remove". We treat a row as set when its effective value is defined.
+  const inlineHasValue = isInline && row.effectiveValue !== undefined;
+
   return (
     <div className={rowClass}>
       {/* Row header */}
@@ -490,6 +518,24 @@ function MetricRow({
                   &times;
                 </button>
               </>
+            )}
+          </div>
+        )}
+
+        {editMode && isInline && (
+          <div className={s.rowActions}>
+            <button type="button" className={s.editBtn} onClick={(): void => { onStartOverride(row); }}>
+              {inlineHasValue ? 'Edit' : 'Set'}
+            </button>
+            {inlineHasValue && (
+              <button
+                type="button"
+                className={s.revertBtn}
+                title="Remove this metric from the inline definition"
+                onClick={(): void => { void onRemoveOverride(row); }}
+              >
+                &times;
+              </button>
             )}
           </div>
         )}

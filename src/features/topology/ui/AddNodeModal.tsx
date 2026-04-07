@@ -26,6 +26,16 @@ interface AddNodeModalProps {
 
 // Payload shapes per kind — match the JSON template format the Go backend expects.
 
+// Standard node metric slots, initialized to null so the keys persist through
+// JSON serialization. This ensures MetricEditModal can show the slots as
+// editable rows even before any queries have been added.
+const EMPTY_NODE_METRICS = {
+  cpu: null,
+  memory: null,
+  readyReplicas: null,
+  desiredReplicas: null,
+} as const;
+
 interface EKSPayload {
   readonly kind: 'eks-service';
   readonly id: string;
@@ -33,7 +43,7 @@ interface EKSPayload {
   readonly dataSource: string;
   readonly namespace: string;
   readonly deploymentNames: readonly string[];
-  readonly metrics: Record<string, never>;
+  readonly metrics: typeof EMPTY_NODE_METRICS;
 }
 
 interface EC2Payload {
@@ -45,7 +55,7 @@ interface EC2Payload {
   readonly instanceType: string;
   readonly availabilityZone: string;
   readonly amiId: string | undefined;
-  readonly metrics: Record<string, never>;
+  readonly metrics: typeof EMPTY_NODE_METRICS;
 }
 
 interface DatabasePayload {
@@ -55,7 +65,7 @@ interface DatabasePayload {
   readonly dataSource: string;
   readonly engine: string;
   readonly isReadReplica: boolean;
-  readonly metrics: Record<string, never>;
+  readonly metrics: typeof EMPTY_NODE_METRICS;
 }
 
 interface ExternalPayload {
@@ -64,7 +74,7 @@ interface ExternalPayload {
   readonly label: string;
   readonly dataSource: string;
   readonly provider: string;
-  readonly metrics: Record<string, never>;
+  readonly metrics: typeof EMPTY_NODE_METRICS;
 }
 
 export type NodeTemplatePayload = EKSPayload | EC2Payload | DatabasePayload | ExternalPayload;
@@ -175,7 +185,7 @@ export function AddNodeModal({ kind, templates, dataSourceNames, onClose, onSele
       return;
     }
 
-    const base = { id, label: label.trim(), dataSource, metrics: {} as Record<string, never> };
+    const base = { id, label: label.trim(), dataSource, metrics: EMPTY_NODE_METRICS };
 
     switch (kind) {
       case 'eks-service': {

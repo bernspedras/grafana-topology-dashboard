@@ -193,9 +193,13 @@ function patchKafkaEntry(
  * Apply a flow override patch to a TopologyDefinitionRefs, returning a new copy.
  *
  * Finds the node/edge entry by entityId, then creates/updates/removes the
- * metric override on the ref. Supports AMQP/Kafka nested section patching.
+ * metric on the entry. Supports AMQP/Kafka nested section patching.
  *
- * Throws if the entity is an inline definition (cannot be overridden).
+ * Works for both ref entries (where the patch represents a flow-level
+ * override of a template) and inline entries (where the patch directly
+ * mutates the inline definition's metrics — there is no template to merge
+ * with). The same patch shape is used for both because `patchMetricsRecord`
+ * operates generically on any object with a `metrics` field.
  */
 export function applyFlowOverridePatch(
   flowRefs: TopologyDefinitionRefs,
@@ -214,9 +218,6 @@ export function applyFlowOverridePatch(
       throw new Error(`Node entry not found: ${entityId}`);
     }
     const entry = mutableNodes[idx];
-    if (!isNodeRef(entry)) {
-      throw new Error(`Cannot apply flow override to inline node definition: ${entityId}`);
-    }
     patchNodeEntry(entry as unknown as Record<string, unknown>, patch);
   } else {
     const mutableEdges = cloned.edges as TopologyEdgeEntry[];
@@ -227,9 +228,6 @@ export function applyFlowOverridePatch(
       throw new Error(`Edge entry not found: ${entityId}`);
     }
     const entry = mutableEdges[idx];
-    if (!isEdgeRef(entry)) {
-      throw new Error(`Cannot apply flow override to inline edge definition: ${entityId}`);
-    }
     const mutableEntry = entry as unknown as Record<string, unknown>;
 
     if (entry.kind === 'amqp' && patch.section !== undefined) {
