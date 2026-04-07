@@ -61,18 +61,23 @@ function mergeMetrics<T extends object>(
 // ─── Template → Definition conversion ────────────────────────────────────────
 
 function edgeTemplateToDefinition(template: EdgeTemplate): EdgeDefinition {
+  // Inline http-json/http-xml entries come in as the template shape, which
+  // lacks per-flow `method` / `endpointPath` / (xml) `soapAction` fields.
+  // Default those to undefined so the result satisfies the definition type.
+  // `endpointPaths` is preserved from the spread — it exists on both shapes,
+  // so an inlined entry that already carries the list keeps it.
   if (template.kind === 'http-json') {
-    return { ...template, method: undefined, endpointPath: undefined, endpointPaths: undefined };
+    return { ...template, method: undefined, endpointPath: undefined };
   }
   if (template.kind === 'http-xml') {
-    return { ...template, method: undefined, endpointPath: undefined, soapAction: undefined, endpointPaths: undefined };
+    return { ...template, method: undefined, endpointPath: undefined, soapAction: undefined };
   }
   return template;
 }
 
 // ─── Node resolution ─────────────────────────────────────────────────────────
 
-function resolveNodeRef(template: NodeTemplate, ref: TopologyNodeRef): NodeDefinition {
+export function resolveNodeRef(template: NodeTemplate, ref: TopologyNodeRef): NodeDefinition {
   const label = ref.label ?? template.label;
   const dataSource = ref.dataSource ?? template.dataSource;
   const metrics = mergeMetrics(template.metrics, ref.metrics);
@@ -100,7 +105,7 @@ function resolveNodeRef(template: NodeTemplate, ref: TopologyNodeRef): NodeDefin
 
 // ─── Edge resolution ─────────────────────────────────────────────────────────
 
-function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): EdgeDefinition {
+export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): EdgeDefinition {
   if (ref.kind !== template.kind) {
     throw new Error(
       `Edge ref kind "${ref.kind}" does not match template kind "${template.kind}" for edge "${ref.edgeId}"`
