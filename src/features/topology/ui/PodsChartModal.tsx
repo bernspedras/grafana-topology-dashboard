@@ -270,11 +270,18 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
     return (): void => { controller.abort(); };
   }, [fetchData]);
 
+  // Silent re-fetch on SSE updates (no loading spinner).
+  // Guarded by fetchInflightRef to skip ticks while a previous range query is still in flight.
+  const fetchInflightRef = useRef(false);
   const initialTickRef = useRef(refreshTick);
   useEffect((): (() => void) => {
     if (refreshTick === initialTickRef.current) return (): void => { /* noop */ };
+    if (fetchInflightRef.current) return (): void => { /* noop — previous fetch still in flight */ };
+    fetchInflightRef.current = true;
     const controller = new AbortController();
-    void fetchData(controller.signal, false);
+    void fetchData(controller.signal, false).finally((): void => {
+      fetchInflightRef.current = false;
+    });
     return (): void => { controller.abort(); };
   }, [refreshTick, fetchData]);
 

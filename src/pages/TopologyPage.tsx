@@ -484,7 +484,6 @@ function TopologyPage(): React.JSX.Element {
   const { graph, loading: metricsLoading, error, lastRefreshAt } = useGrafanaMetrics(
     entry?.definition,
     groupedMaps,
-    dataSourceMap,
     POLL_INTERVAL_MS,
     slaDefaults,
   );

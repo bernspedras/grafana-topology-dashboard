@@ -29,10 +29,15 @@ type App struct {
 	topologyStore *TopologyStore
 	logger        log.Logger
 	// promSem is a process-wide semaphore that limits how many concurrent
-	// queries can be in-flight to Prometheus at any time. This protects
+	// instant queries can be in-flight to Prometheus at any time. This protects
 	// Prometheus from burst load when multiple users open the dashboard
 	// simultaneously. Sized to stay below Prometheus --query.max-concurrency.
 	promSem chan struct{}
+	// rangeSem is a separate, smaller semaphore for /metric-range queries.
+	// Range queries are ~10–25× slower than instant queries (seconds vs <200ms),
+	// so they get their own pool to prevent chart modals from starving the
+	// dashboard polling path that uses promSem.
+	rangeSem chan struct{}
 }
 
 // resolveDataDir determines where topology JSON files are stored on disk.
@@ -84,6 +89,7 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 		topologyStore: store,
 		logger:        logger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
 	}
 
 	mux := http.NewServeMux()

@@ -205,7 +205,9 @@ type prometheusRangeResponse struct {
 	} `json:"data"`
 }
 
-// executeRangeQueries runs range queries concurrently using the global semaphore.
+// executeRangeQueries runs range queries concurrently using the dedicated
+// rangeSem semaphore so they cannot starve the instant-query path that drives
+// the dashboard polling loop.
 func (a *App) executeRangeQueries(
 	ctx context.Context,
 	tasks []RangeQueryTask,
@@ -222,8 +224,8 @@ func (a *App) executeRangeQueries(
 			defer wg.Done()
 
 			select {
-			case a.promSem <- struct{}{}:
-				defer func() { <-a.promSem }()
+			case a.rangeSem <- struct{}{}:
+				defer func() { <-a.rangeSem }()
 			case <-ctx.Done():
 				return
 			}

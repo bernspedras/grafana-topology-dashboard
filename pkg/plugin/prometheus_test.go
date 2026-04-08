@@ -18,6 +18,32 @@ func newTestApp() *App {
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
+	}
+}
+
+// TestSemaphoresAreDistinct guards against accidentally re-merging the instant
+// and range query semaphores. PERF-01 (07/04/2026 report) split them so that
+// slow range queries from chart modals cannot starve the dashboard polling path.
+func TestSemaphoresAreDistinct(t *testing.T) {
+	app := newTestApp()
+	if app.promSem == nil || app.rangeSem == nil {
+		t.Fatal("both semaphores must be initialised")
+	}
+	// Fill promSem completely. rangeSem must remain unaffected.
+	for i := 0; i < cap(app.promSem); i++ {
+		app.promSem <- struct{}{}
+	}
+	if len(app.rangeSem) != 0 {
+		t.Errorf("rangeSem should not be affected by promSem; got len=%d", len(app.rangeSem))
+	}
+	// rangeSem must still accept its full capacity.
+	for i := 0; i < cap(app.rangeSem); i++ {
+		select {
+		case app.rangeSem <- struct{}{}:
+		default:
+			t.Fatalf("rangeSem unexpectedly full at slot %d/%d", i, cap(app.rangeSem))
+		}
 	}
 }
 
