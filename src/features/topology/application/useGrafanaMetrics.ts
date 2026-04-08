@@ -68,7 +68,6 @@ function groupedMapsToRecord(
 export function useGrafanaMetrics(
   definition: TopologyDefinition | undefined,
   groupedMaps: ReadonlyMap<string, ReadonlyMap<string, string>> | undefined,
-  dataSourceMap: Record<string, string>,
   pollIntervalMs = 30000,
   slaDefaults?: ParsedSlaDefaults,
 ): UseGrafanaMetricsResult {
@@ -126,7 +125,7 @@ export function useGrafanaMetrics(
       if (pollRef.current !== id) return;
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
     }
-  }, [definition, groupedMaps, dataSourceMap, slaDefaults]);
+  }, [definition, groupedMaps, slaDefaults]);
 
   const safePoll = useCallback(async (id: number): Promise<void> => {
     if (inflightRef.current) return;

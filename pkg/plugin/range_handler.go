@@ -2,8 +2,17 @@ package plugin
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+)
+
+// ─── Range query limits ─────────────────────────────────────────────────────
+
+const (
+	maxRangeWindowSeconds  = 15 * 24 * 3600 // max time window: 15 days
+	minRangeStepSeconds    = 15             // min step: 15 seconds
+	maxRangeQueriesPerCall = 20             // max queries per range request
 )
 
 // ─── Request / Response types ────────────────────────────────────────────────
@@ -16,6 +25,29 @@ type MetricRangeRequest struct {
 	Start      int64             `json:"start"`   // Unix timestamp
 	End        int64             `json:"end"`     // Unix timestamp
 	Step       int64             `json:"step"`    // Step in seconds
+}
+
+// validateRangeRequest enforces bounds on time window, step, query count, and
+// PromQL length to prevent DoS amplification against Prometheus.
+func validateRangeRequest(req MetricRangeRequest) error {
+	if req.End <= req.Start {
+		return fmt.Errorf("end must be greater than start")
+	}
+	if req.End-req.Start > maxRangeWindowSeconds {
+		return fmt.Errorf("time range too large (max %d seconds)", maxRangeWindowSeconds)
+	}
+	if req.Step < minRangeStepSeconds {
+		return fmt.Errorf("step too small (min %d seconds)", minRangeStepSeconds)
+	}
+	if len(req.Queries) > maxRangeQueriesPerCall {
+		return fmt.Errorf("too many queries: %d (max %d)", len(req.Queries), maxRangeQueriesPerCall)
+	}
+	for key, promql := range req.Queries {
+		if len(promql) > maxPromQLLen {
+			return fmt.Errorf("PromQL expression too long for key %q: %d chars (max %d)", key, len(promql), maxPromQLLen)
+		}
+	}
+	return nil
 }
 
 // MetricRangeResponse is the JSON response returned to the frontend.
@@ -33,7 +65,8 @@ func (a *App) handleMetricRange(w http.ResponseWriter, r *http.Request) {
 
 	var req MetricRangeRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		a.logger.Warn("Invalid range request body", "error", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -50,8 +83,8 @@ func (a *App) handleMetricRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Start == 0 || req.End == 0 || req.Step == 0 {
-		http.Error(w, "Missing start, end, or step field", http.StatusBadRequest)
+	if err := validateRangeRequest(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -73,7 +106,8 @@ func (a *App) handleMetricRange(w http.ResponseWriter, r *http.Request) {
 
 	dsUID, ok := dsMap[req.Datasource]
 	if !ok || dsUID == "" {
-		http.Error(w, "Unknown datasource: "+req.Datasource, http.StatusBadRequest)
+		a.logger.Warn("Unknown datasource in range request", "datasource", req.Datasource)
+		http.Error(w, "Invalid datasource configuration", http.StatusBadRequest)
 		return
 	}
 

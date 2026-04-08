@@ -179,3 +179,64 @@ func TestDirectoryStructureCreated(t *testing.T) {
 		}
 	}
 }
+
+// TestStaleFileMigration verifies that two files sharing the same JSON `id`
+// but with different filenames are deduped at startup, keeping the canonical
+// one. Replaces the per-write removeStaleByID O(n) scan from PERF-02.
+func TestStaleFileMigration(t *testing.T) {
+	dir := t.TempDir()
+	flowsDir := filepath.Join(dir, "flows")
+	if err := os.MkdirAll(flowsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Stale: filename uses underscores, but id field uses hyphens.
+	// Canonical: matches safeFileName(id) + ".json".
+	stalePath := filepath.Join(flowsDir, "my_flow.json")
+	canonicalPath := filepath.Join(flowsDir, "my-flow.json")
+	if err := os.WriteFile(stalePath, []byte(`{"id":"my-flow","name":"Old"}`), 0o644); err != nil {
+		t.Fatalf("write stale: %v", err)
+	}
+	if err := os.WriteFile(canonicalPath, []byte(`{"id":"my-flow","name":"New"}`), 0o644); err != nil {
+		t.Fatalf("write canonical: %v", err)
+	}
+
+	if _, err := NewTopologyStore(dir, log.DefaultLogger); err != nil {
+		t.Fatalf("NewTopologyStore: %v", err)
+	}
+
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Errorf("expected stale file to be removed, got err=%v", err)
+	}
+	if _, err := os.Stat(canonicalPath); err != nil {
+		t.Errorf("expected canonical file to remain, got err=%v", err)
+	}
+}
+
+// TestStaleFileMigrationKeepsUniqueFiles verifies that files with unique ids
+// are left alone — only true id collisions trigger removal.
+func TestStaleFileMigrationKeepsUniqueFiles(t *testing.T) {
+	dir := t.TempDir()
+	flowsDir := filepath.Join(dir, "flows")
+	if err := os.MkdirAll(flowsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	pathA := filepath.Join(flowsDir, "flow-a.json")
+	pathB := filepath.Join(flowsDir, "flow-b.json")
+	if err := os.WriteFile(pathA, []byte(`{"id":"flow-a","name":"A"}`), 0o644); err != nil {
+		t.Fatalf("write A: %v", err)
+	}
+	if err := os.WriteFile(pathB, []byte(`{"id":"flow-b","name":"B"}`), 0o644); err != nil {
+		t.Fatalf("write B: %v", err)
+	}
+
+	if _, err := NewTopologyStore(dir, log.DefaultLogger); err != nil {
+		t.Fatalf("NewTopologyStore: %v", err)
+	}
+
+	if _, err := os.Stat(pathA); err != nil {
+		t.Errorf("expected flow-a to remain, got err=%v", err)
+	}
+	if _, err := os.Stat(pathB); err != nil {
+		t.Errorf("expected flow-b to remain, got err=%v", err)
+	}
+}

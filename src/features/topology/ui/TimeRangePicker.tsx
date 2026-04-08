@@ -115,7 +115,9 @@ export function resolveRange(range: TimeRange): ResolvedRange {
   }
 
   const duration = Math.max(end - start, 1);
-  const step = Math.max(1, Math.floor(duration / 240));
+  // Floor of 15s matches Prometheus's typical scrape interval and the server-side
+  // minRangeStepSeconds enforced by validateRangeRequest in pkg/plugin/range_handler.go.
+  const step = Math.max(15, Math.floor(duration / 240));
   return { start, end, step };
 }
 

@@ -80,6 +80,7 @@ func TestHandleMetrics_EmptyQueries(t *testing.T) {
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
 	}
 
 	body, _ := json.Marshal(MetricsBatchRequest{
@@ -111,6 +112,7 @@ func TestHandleMetrics_MethodNotAllowed(t *testing.T) {
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
@@ -143,6 +145,7 @@ func TestHandleMetrics_WithPrometheus(t *testing.T) {
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
 	}
 
 	reqBody := MetricsBatchRequest{
@@ -194,6 +197,7 @@ func TestHandleMetrics_WithBaseline(t *testing.T) {
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
 	}
 
 	reqBody := MetricsBatchRequest{
@@ -237,6 +241,7 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 		baselineCache: NewBaselineCache(5 * time.Minute),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
 	}
 
 	reqBody := MetricsBatchRequest{

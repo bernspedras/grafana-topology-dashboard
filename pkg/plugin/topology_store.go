@@ -54,7 +54,9 @@ func safeFileName(id string) string {
 // ─── Constructor ────────────────────────────────────────────────────────────
 
 // NewTopologyStore creates a TopologyStore rooted at dataDir. It ensures the
-// required subdirectory structure exists.
+// required subdirectory structure exists and runs a one-time migration to
+// dedupe any stale files left over from non-canonical seed data (e.g. files
+// whose JSON `id` matches another file's id but whose filename differs).
 func NewTopologyStore(dataDir string, logger log.Logger) (*TopologyStore, error) {
 	dirs := []string{
 		filepath.Join(dataDir, "flows"),
@@ -66,7 +68,68 @@ func NewTopologyStore(dataDir string, logger log.Logger) (*TopologyStore, error)
 			return nil, fmt.Errorf("create dir %s: %w", d, err)
 		}
 	}
-	return &TopologyStore{dataDir: dataDir, logger: logger}, nil
+	store := &TopologyStore{dataDir: dataDir, logger: logger}
+	for _, d := range dirs {
+		store.dedupeStaleByID(d)
+	}
+	return store, nil
+}
+
+// dedupeStaleByID scans dir once and removes duplicate files that share the
+// same JSON `id` field, keeping the canonical-named file. Called once at
+// startup as a one-time migration so the write path can stay O(1).
+func (s *TopologyStore) dedupeStaleByID(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	type fileInfo struct {
+		filename  string
+		canonical bool
+	}
+	byID := make(map[string][]fileInfo)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		content, readErr := os.ReadFile(filepath.Join(dir, e.Name()))
+		if readErr != nil {
+			continue
+		}
+		var parsed struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(content, &parsed) != nil || parsed.ID == "" {
+			continue
+		}
+		canonical := safeFileName(parsed.ID) + ".json"
+		byID[parsed.ID] = append(byID[parsed.ID], fileInfo{
+			filename:  e.Name(),
+			canonical: e.Name() == canonical,
+		})
+	}
+	for id, files := range byID {
+		if len(files) <= 1 {
+			continue
+		}
+		keep := files[0].filename
+		for _, f := range files {
+			if f.canonical {
+				keep = f.filename
+				break
+			}
+		}
+		for _, f := range files {
+			if f.filename == keep {
+				continue
+			}
+			if err := os.Remove(filepath.Join(dir, f.filename)); err != nil {
+				s.logger.Warn("Failed to remove stale topology file", "dir", dir, "filename", f.filename, "error", err)
+				continue
+			}
+			s.logger.Info("Removed stale topology file at startup", "dir", dir, "filename", f.filename, "id", id)
+		}
+	}
 }
 
 // DataDir returns the root directory of the store.
@@ -319,45 +382,11 @@ func (s *TopologyStore) writeFile(relPath string, data json.RawMessage) error {
 		s.logger.Error("Failed to create directory", "path", filepath.Dir(dest), "error", err)
 		return fmt.Errorf("failed to write resource")
 	}
-	// Remove any stale file in the same directory whose JSON "id" matches
-	// but whose filename differs (e.g. seed used underscores, PutFlow uses hyphens).
-	s.removeStaleByID(filepath.Dir(dest), filepath.Base(dest), data)
 	if err := os.WriteFile(dest, data, 0o644); err != nil {
 		s.logger.Error("Failed to write file", "path", relPath, "error", err)
 		return fmt.Errorf("failed to write resource")
 	}
 	return nil
-}
-
-// removeStaleByID scans dir for JSON files (other than canonical) that contain
-// the same "id" field as data, and removes them.
-func (s *TopologyStore) removeStaleByID(dir, canonical string, data json.RawMessage) {
-	var incoming struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(data, &incoming); err != nil || incoming.ID == "" {
-		return
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") || e.Name() == canonical {
-			continue
-		}
-		path := filepath.Join(dir, e.Name())
-		content, readErr := os.ReadFile(path)
-		if readErr != nil {
-			continue
-		}
-		var existing struct {
-			ID string `json:"id"`
-		}
-		if json.Unmarshal(content, &existing) == nil && existing.ID == incoming.ID {
-			_ = os.Remove(path)
-		}
-	}
 }
 
 func (s *TopologyStore) deleteFile(relPath string) error {
