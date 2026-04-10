@@ -5,6 +5,7 @@ import { HttpJsonEdge, HttpXmlEdge, TcpDbConnectionEdge, AmqpEdge, KafkaEdge, Gr
 import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
 import type { ColoringMode } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
+import type { CollapseDbMap } from './collapseDbConnections';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 
@@ -37,7 +38,11 @@ function nodeBaseMetricCount(node: TopologyNode): number {
   return 0;
 }
 
-function estimateNodeCardHeight(node: TopologyNode): number {
+/** Extra height added when a collapsed DB is inlined into the node card.
+ *  2 dividers + 2 section headers (20px each) + DB connection rows (7) + DB instance rows (3). */
+const COLLAPSED_DB_EXTRA = 2 * NODE_DIVIDER + 2 * 20 + 2 * NODE_METRICS_PAD + 10 * NODE_METRIC_ROW + 9 * NODE_METRIC_GAP;
+
+function estimateNodeCardHeight(node: TopologyNode, hasCollapsedDb?: boolean): number {
   const hasDeploySelector = node instanceof EKSServiceNode;
   const metricCount = nodeBaseMetricCount(node) + node.customMetrics.length;
   return (
@@ -48,6 +53,7 @@ function estimateNodeCardHeight(node: TopologyNode): number {
     + metricCount * NODE_METRIC_ROW
     + Math.max(0, metricCount - 1) * NODE_METRIC_GAP
     + NODE_BORDER_OVERHEAD
+    + (hasCollapsedDb === true ? COLLAPSED_DB_EXTRA : 0)
   );
 }
 
@@ -131,6 +137,7 @@ export function layoutSequenceDiagram(
   coloringMode?: ColoringMode,
   slaMap?: Readonly<Record<string, SlaThresholdMap>>,
   lowPolyMode?: boolean,
+  collapseMap?: CollapseDbMap,
 ): SequenceLayoutResult {
   // 1. Sort edges by sequenceOrder ascending
   const sortedEdges = [...graph.edges]
@@ -175,7 +182,7 @@ export function layoutSequenceDiagram(
     .filter((n): n is TopologyNode => n !== undefined);
   const tallestNodeCard = lowPolyMode === true
     ? LOW_POLY_NODE_HEIGHT
-    : Math.max(...participantNodes.map(estimateNodeCardHeight), 150);
+    : Math.max(...participantNodes.map((n) => estimateNodeCardHeight(n, collapseMap?.has(n.id))), 150);
 
   // 5. Compute cumulative y-offset for each sequenceOrder.
   //    The edge card is centered on the handle (translate -50% -50%), so
@@ -220,7 +227,7 @@ export function layoutSequenceDiagram(
         sourceOrders: sourceOrdersMap.get(nodeId) ?? [],
         targetOrders: targetOrdersMap.get(nodeId) ?? [],
         orderToY,
-        nodeCardHeight: lowPolyMode === true ? LOW_POLY_NODE_HEIGHT : estimateNodeCardHeight(domainNode),
+        nodeCardHeight: lowPolyMode === true ? LOW_POLY_NODE_HEIGHT : estimateNodeCardHeight(domainNode, collapseMap?.has(nodeId)),
         lifelineHeight,
       };
       return {

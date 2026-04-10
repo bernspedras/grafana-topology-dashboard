@@ -8,6 +8,7 @@ import { layoutGraph } from './layoutGraph';
 import { layoutSequenceDiagram } from './layoutSequenceDiagram';
 import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
 import { graphId } from './graphId';
+import type { CollapseDbMap } from './collapseDbConnections';
 
 export interface TopologyLayoutPosition {
   readonly x: number;
@@ -58,7 +59,7 @@ interface TopologyPositionState {
   /** Whether the last sequence-mode initialize was in low-poly mode. */
   lastSeqLowPoly: boolean;
   setBundledLayout: (topologyId: string, layout: TopologyLayout) => void;
-  initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean) => void;
+  initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean, collapseMap?: CollapseDbMap) => void;
   setServerLayout: (topologyId: string, serverLayout: TopologyLayout) => void;
   syncServerLayout: (topologyId: string, layout: TopologyLayout) => void;
   clearServerLayout: (topologyId: string) => void;
@@ -91,7 +92,7 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
         set((state) => ({ bundledLayouts: { ...state.bundledLayouts, [topologyId]: layout } }));
       },
 
-      initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean): void => {
+      initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean, collapseMap?: CollapseDbMap): void => {
         const state = get();
         const newGraphId = graphId(graph);
         const isSequence = sequenceMode === true;
@@ -139,7 +140,7 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
         // Different topology, structural change, or mode change — full layout
         if (isSequence) {
           // Sequence diagram mode — deterministic layout, no position overrides
-          const { nodes, edges } = layoutSequenceDiagram(graph, undefined, undefined, lowPolyMode);
+          const { nodes, edges } = layoutSequenceDiagram(graph, undefined, undefined, lowPolyMode, collapseMap);
           set({
             nodes,
             edges,

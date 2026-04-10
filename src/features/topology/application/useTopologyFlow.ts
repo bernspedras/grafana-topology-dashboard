@@ -8,6 +8,7 @@ import { edgeStrokeStyle, edgeMarkerEnd, lowPolyEdgeStrokeStyle, lowPolyEdgeMark
 import type { ColoringMode } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
 import type { MetricDirectionMap } from './directionMap';
+import type { CollapseDbMap } from './collapseDbConnections';
 
 interface UseTopologyFlowResult {
   readonly nodes: Node[];
@@ -25,6 +26,7 @@ export function useTopologyFlow(
   lowPolyMode?: boolean,
   directionMap?: Readonly<Record<string, MetricDirectionMap>>,
   sequenceMode?: boolean,
+  collapseMap?: CollapseDbMap,
 ): UseTopologyFlowResult {
   const topologyId = useTopologyId();
 
@@ -56,8 +58,8 @@ export function useTopologyFlow(
     }
 
     // Then initialize (reads from bundledLayouts which was just set above)
-    initialize(graph, topologyId, sequenceMode, lowPolyMode);
-  }, [graph, topologyId, initialize, layoutVersion, bundledLayout, setBundledLayout, sequenceMode, lowPolyMode]);
+    initialize(graph, topologyId, sequenceMode, lowPolyMode, collapseMap);
+  }, [graph, topologyId, initialize, layoutVersion, bundledLayout, setBundledLayout, sequenceMode, lowPolyMode, collapseMap]);
 
   // Re-derive edge styles when coloringMode, slaMap, or lowPolyMode changes
   const edges = useMemo((): Edge[] => {

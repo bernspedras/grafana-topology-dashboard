@@ -10,6 +10,9 @@ import { EKSServiceNode } from '../domain';
 import { statusColor } from '../application/nodeStyles';
 import { healthFromMetricRows } from '../application/healthFromMetricRows';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
+import type { MetricRow } from '../application/nodeDisplayData';
+import { edgeMetricRows } from '../application/edgeDisplayData';
+import type { CollapsedDbInfo } from '../application/collapseDbConnections';
 import { SEQ_NODE_WIDTH } from '../application/layoutSequenceDiagram';
 import type { SequenceLifelineData } from '../application/layoutSequenceDiagram';
 import { usePromqlQueries } from './PromqlQueriesContext';
@@ -80,10 +83,21 @@ const seqHandleBase = {
 
 const seqHandleCls = css(seqHandleBase);
 
+const seqCollapsedDbHeaderCls = css({
+  fontSize: '11px',
+  fontWeight: 600,
+  letterSpacing: '0.025em',
+  color: '#8b5cf6',
+  paddingLeft: '16px',
+  paddingRight: '16px',
+  paddingTop: '6px',
+});
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifelineNodeType>): React.JSX.Element {
   const node: TopologyNode = data.domainNode;
+  const collapsedDb = (data as SequenceLifelineData & { collapsedDb?: CollapsedDbInfo }).collapsedDb;
   const { sourceOrders, targetOrders, orderToY, nodeCardHeight, lifelineHeight } = data;
 
   // Force React Flow to re-measure handle positions after mount
@@ -95,15 +109,33 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
   const [selectedDeployment, setSelectedDeployment] = useState(currentDeployment);
   useEffect(() => { setSelectedDeployment(currentDeployment); }, [currentDeployment]);
   const [showQueries, setShowQueries] = useState(false);
-  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined } | undefined>(undefined);
+  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; entityId?: string; entityType?: 'node' | 'edge' } | undefined>(undefined);
   const resolvedQueries = usePromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(node.id);
   const directions = useDirections(node.id);
+  const dbEdgeSla = useSla(collapsedDb?.dbEdge.id ?? '');
+  const dbEdgeDirections = useDirections(collapsedDb?.dbEdge.id ?? '');
+  const dbNodeSla = useSla(collapsedDb?.dbNode.id ?? '');
+  const dbNodeDirections = useDirections(collapsedDb?.dbNode.id ?? '');
   const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla, directions);
+
+  const dbConnectionRows: readonly MetricRow[] = collapsedDb !== undefined
+    ? edgeMetricRows(collapsedDb.dbEdge, undefined, viewOptions.coloringMode, dbEdgeSla, dbEdgeDirections)
+    : [];
+  const dbInstanceRows: readonly MetricRow[] = collapsedDb !== undefined
+    ? nodeMetricRows(collapsedDb.dbNode, undefined, viewOptions.coloringMode, dbNodeSla, dbNodeDirections)
+    : [];
+
+  const allMetricsForHealth: readonly MetricRow[] = collapsedDb !== undefined
+    ? [...allMetrics, ...dbConnectionRows, ...dbInstanceRows]
+    : allMetrics;
+
   const metrics = viewOptions.showNAMetrics ? allMetrics : allMetrics.filter((m) => m.value !== 'N/A');
-  const activeStatus = healthFromMetricRows(allMetrics);
+  const dbConnMetricsFiltered = viewOptions.showNAMetrics ? dbConnectionRows : dbConnectionRows.filter((m) => m.value !== 'N/A');
+  const dbInstMetricsFiltered = viewOptions.showNAMetrics ? dbInstanceRows : dbInstanceRows.filter((m) => m.value !== 'N/A');
+  const activeStatus = healthFromMetricRows(allMetricsForHealth);
   const borderColor = statusColor(activeStatus);
   const dotColor = STATUS_DOT[activeStatus];
   const isCritical = activeStatus === 'critical';
@@ -261,6 +293,74 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
               );
             })}
           </div>
+
+          {/* Collapsed DB Connection section */}
+          {collapsedDb !== undefined && dbConnMetricsFiltered.length > 0 && (
+            <>
+              <div className={styles.divider} />
+              <div className={seqCollapsedDbHeaderCls}>DB Connection</div>
+              <div className={styles.metricsWrapper}>
+                {dbConnMetricsFiltered.map((m) => {
+                  const key = m.metricKey;
+                  if (key !== undefined) {
+                    return (
+                      <button
+                        key={'dbc-' + m.label}
+                        type="button"
+                        className={'nodrag ' + styles.metricButton}
+                        onClick={(): void => {
+                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge' });
+                        }}
+                      >
+                        <span className={styles.metricLabel}>{m.label}</span>
+                        <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <div key={'dbc-' + m.label} className={styles.metricRow}>
+                      <span className={styles.metricLabel}>{m.label}</span>
+                      <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Collapsed DB Instance section */}
+          {collapsedDb !== undefined && dbInstMetricsFiltered.length > 0 && (
+            <>
+              <div className={styles.divider} />
+              <div className={seqCollapsedDbHeaderCls}>{'DB Instance: ' + collapsedDb.dbNode.label}</div>
+              <div className={styles.metricsWrapper}>
+                {dbInstMetricsFiltered.map((m) => {
+                  const key = m.metricKey;
+                  if (key !== undefined) {
+                    return (
+                      <button
+                        key={'dbi-' + m.label}
+                        type="button"
+                        className={'nodrag ' + styles.metricButton}
+                        onClick={(): void => {
+                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node' });
+                        }}
+                      >
+                        <span className={styles.metricLabel}>{m.label}</span>
+                        <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <div key={'dbi-' + m.label} className={styles.metricRow}>
+                      <span className={styles.metricLabel}>{m.label}</span>
+                      <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -286,11 +386,11 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
       {chartMetric !== undefined && chartMetric.key !== 'pods' && (
         <MetricChartModal
           title={node.label + (selectedDeployment !== '' ? ' (' + selectedDeployment + ')' : '') + ' — ' + chartMetric.label}
-          entityId={node.id}
-          entityType="node"
+          entityId={chartMetric.entityId ?? node.id}
+          entityType={chartMetric.entityType ?? 'node'}
           metricKey={chartMetric.key}
           description={chartMetric.description}
-          deployment={selectedDeployment !== '' ? selectedDeployment : undefined}
+          deployment={chartMetric.entityId !== undefined ? undefined : (selectedDeployment !== '' ? selectedDeployment : undefined)}
           endpointFilter={undefined}
           onClose={(): void => { setChartMetric(undefined); }}
         />
