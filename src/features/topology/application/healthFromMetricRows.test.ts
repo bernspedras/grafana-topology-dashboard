@@ -3,7 +3,7 @@ import { healthFromMetricRows } from './healthFromMetricRows';
 import type { MetricRow } from './nodeDisplayData';
 
 function metricRow(status: MetricRow['status'], metricKey: string | undefined): MetricRow {
-  return { label: 'test', value: '0', color: '#000', status, metricKey };
+  return { label: 'test', value: '0', color: '#000', status, metricKey, tooltip: undefined, weekAgoValue: undefined, unit: '' };
 }
 
 function row(status: MetricRow['status']): MetricRow {

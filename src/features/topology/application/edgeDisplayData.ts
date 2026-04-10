@@ -14,6 +14,7 @@ import type { SlaThresholdMap } from './slaThresholds';
 import type { MetricDirectionMap } from './directionMap';
 import type { MetricUnit } from './topologyDefinition';
 import { formatMetricValue } from './formatMetricValue';
+import { metricTooltipText } from './metricTooltip';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,9 @@ function row(
     value: formatMetricValue(value, unit),
     ...metricColorAndStatus(value, weekAgo, key, mode, sla?.[key], directions?.[key]),
     metricKey: key,
+    tooltip: metricTooltipText(value, weekAgo, unit, mode, sla?.[key], directions?.[key]),
+    weekAgoValue: weekAgo,
+    unit,
   };
 }
 
@@ -94,6 +98,9 @@ function customMetricRows(edge: TopologyEdge, mode: ColoringMode, sla: SlaThresh
     value: formatMetricValue(cm.value, cm.unit ?? ''),
     ...metricColorAndStatus(cm.value, cm.valueWeekAgo, cm.key, mode, sla?.['custom:' + cm.key], cm.direction),
     metricKey: 'custom:' + cm.key,
+    tooltip: metricTooltipText(cm.value, cm.valueWeekAgo, cm.unit ?? '', mode, sla?.['custom:' + cm.key], cm.direction),
+    weekAgoValue: cm.valueWeekAgo,
+    unit: cm.unit ?? '',
   }));
 }
 

@@ -6,7 +6,7 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, Edge } from '@xyflow/react';
  
-import { Select } from '@grafana/ui';
+import { Select, Tooltip } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import type { TopologyEdge } from '../domain';
 import { HttpJsonEdge, HttpXmlEdge, AmqpEdge, KafkaEdge } from '../domain';
@@ -366,7 +366,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const selectionKey = topologyId + ':' + edgeId;
 
   const [showQueries, setShowQueries] = useState(false);
-  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined } | undefined>(undefined);
+  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; weekAgoValue?: number; unit?: string } | undefined>(undefined);
   const [selectedEndpoint, setSelectedEndpoint] = useState((): string => {
     const saved = endpointSelections.get(selectionKey);
     if (saved !== undefined) return saved;
@@ -646,7 +646,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
               {metrics.map((m) => {
                 const key = m.metricKey;
                 if (key !== undefined) {
-                  return (
+                  const btn = (
                     <button
                       key={m.label}
                       type="button"
@@ -655,7 +655,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
                         const desc = key.startsWith('custom:')
                           ? edge.customMetrics.find((cm) => 'custom:' + cm.key === key)?.description
                           : undefined;
-                        setChartMetric({ key, label: m.label, description: desc });
+                        setChartMetric({ key, label: m.label, description: desc, weekAgoValue: m.weekAgoValue, unit: m.unit });
                       }}
                     >
                       <span className={styles.metricLabel}>{m.label}</span>
@@ -664,6 +664,10 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
                       </span>
                     </button>
                   );
+                  if (m.tooltip !== undefined) {
+                    return <Tooltip key={m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+                  }
+                  return btn;
                 }
                 return (
                   <div key={m.label} className={styles.metricRow}>
@@ -705,6 +709,8 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
               description={chartMetric.description}
               deployment={undefined}
               endpointFilter={effectiveEndpoint}
+              weekAgoValue={chartMetric.weekAgoValue}
+              unit={chartMetric.unit ?? ''}
               onClose={(): void => { setChartMetric(undefined); }}
             />
           )}

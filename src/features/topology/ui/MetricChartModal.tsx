@@ -19,12 +19,17 @@ import { useDatasourceDefs } from './DatasourceDefsContext';
 import { useMetricDatasource } from './MetricDatasourceContext';
 import { useSaveMetricQuery } from './SaveMetricQueryContext';
 import { useFlowData } from './FlowDataContext';
+import { useViewOptions } from './ViewOptionsContext';
+import { useSla } from './SlaContext';
+import { useDirections } from './DirectionContext';
 import { computeLayeredMetrics } from '../application/computeLayeredMetrics';
 import type { LayeredMetricRow, LayeredMetricData } from '../application/layeredMetricTypes';
 import type { MetricDefinition } from '../application/topologyDefinition';
 import { isNodeRef, isEdgeRef } from '../application/topologyDefinition';
 import type { FlowOverridePatch } from '../application/flowOverridePatch';
 import { metricDescription } from '../application/metricDescriptions';
+import { metricTooltipText } from '../application/metricTooltip';
+import { formatMetricValue } from '../application/formatMetricValue';
 import { PLUGIN_ID } from '../application/pluginConstants';
 
 // ─── Query key resolution ───────────────────────────────────────────────────
@@ -75,6 +80,8 @@ interface MetricChartModalProps {
   readonly description: string | undefined;
   readonly deployment: string | undefined;
   readonly endpointFilter: string | undefined;
+  readonly weekAgoValue: number | undefined;
+  readonly unit: string;
   readonly onClose: () => void;
 }
 
@@ -178,29 +185,17 @@ type FetchState =
 
 const CHART_HEIGHT = 280;
 
-const CHART_OPTS: Omit<uPlot.Options, 'width' | 'height'> = {
-  cursor: {
-    drag: { x: false, y: false },
-  },
-  scales: {
-    x: { time: true },
-  },
-  axes: [
-    {
-      stroke: '#94a3b8',
-      grid: { stroke: '#1e293b', width: 1 },
-      ticks: { stroke: '#334155', width: 1 },
-      font: '11px ui-monospace, monospace',
-    },
-    {
-      stroke: '#94a3b8',
-      grid: { stroke: '#1e293b', width: 1 },
-      ticks: { stroke: '#334155', width: 1 },
-      font: '11px ui-monospace, monospace',
-      size: 60,
-    },
-  ],
-  series: [
+// ─── Reference lines (rendered as flat data series) ────────────────────────
+
+interface ReferenceLine {
+  readonly value: number;
+  readonly color: string;
+  readonly label: string;
+}
+
+/** Build uPlot options with optional reference-line series appended. */
+function buildChartOpts(lines: readonly ReferenceLine[]): Omit<uPlot.Options, 'width' | 'height'> {
+  const series: uPlot.Series[] = [
     { label: 'Time' },
     {
       label: 'Value',
@@ -208,28 +203,72 @@ const CHART_OPTS: Omit<uPlot.Options, 'width' | 'height'> = {
       width: 2,
       fill: 'rgba(59, 130, 246, 0.08)',
     },
-  ],
-};
-
-function toAlignedData(data: MetricRangeData): uPlot.AlignedData {
-  return [
-    Float64Array.from(data.timestamps),
-    Float64Array.from(data.values),
   ];
+  for (const line of lines) {
+    series.push({
+      label: line.label,
+      stroke: line.color,
+      width: 1.5,
+      dash: [6, 4],
+      points: { show: false },
+    });
+  }
+
+  return {
+    cursor: { drag: { x: false, y: false } },
+    scales: { x: { time: true } },
+    axes: [
+      {
+        stroke: '#94a3b8',
+        grid: { stroke: '#1e293b', width: 1 },
+        ticks: { stroke: '#334155', width: 1 },
+        font: '11px ui-monospace, monospace',
+      },
+      {
+        stroke: '#94a3b8',
+        grid: { stroke: '#1e293b', width: 1 },
+        ticks: { stroke: '#334155', width: 1 },
+        font: '11px ui-monospace, monospace',
+        size: 60,
+      },
+    ],
+    series,
+  };
 }
 
-function TimeSeriesChart({ data }: { readonly data: MetricRangeData }): React.JSX.Element {
+/** Build aligned data: timestamps, values, then one flat array per reference line. */
+function toAlignedData(data: MetricRangeData, lines: readonly ReferenceLine[]): uPlot.AlignedData {
+  const timestamps = Float64Array.from(data.timestamps);
+  const values = Float64Array.from(data.values);
+  const result: uPlot.AlignedData = [timestamps, values];
+  for (const line of lines) {
+    const flat = new Float64Array(timestamps.length);
+    flat.fill(line.value);
+    result.push(flat);
+  }
+  return result;
+}
+
+interface TimeSeriesChartProps {
+  readonly data: MetricRangeData;
+  readonly referenceLines: readonly ReferenceLine[];
+}
+
+function TimeSeriesChart({ data, referenceLines }: TimeSeriesChartProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
 
-  // Create chart once on mount
+  // Recreate chart when the number of reference lines changes (series count must match)
+  const lineCount = referenceLines.length;
+
   useEffect((): (() => void) => {
     const container = containerRef.current;
     if (container === null) return (): void => { /* noop */ };
 
+    const opts = buildChartOpts(referenceLines);
     const chart = new uPlot(
-      { ...CHART_OPTS, width: container.clientWidth, height: CHART_HEIGHT },
-      toAlignedData(data),
+      { ...opts, width: container.clientWidth, height: CHART_HEIGHT },
+      toAlignedData(data, referenceLines),
       container,
     );
     chartRef.current = chart;
@@ -244,21 +283,21 @@ function TimeSeriesChart({ data }: { readonly data: MetricRangeData }): React.JS
       chart.destroy();
       chartRef.current = null;
     };
-  }, []);
+  }, [lineCount]);
 
   // Update data smoothly without recreating the chart
   useEffect((): void => {
     if (chartRef.current !== null) {
-      chartRef.current.setData(toAlignedData(data));
+      chartRef.current.setData(toAlignedData(data, referenceLines));
     }
-  }, [data]);
+  }, [data, referenceLines]);
 
   return <div ref={containerRef} className={styles.chartContainer} />;
 }
 
 // ─── Modal component ────────────────────────────────────────────────────────
 
-export function MetricChartModal({ title, entityId, entityType, metricKey, description, deployment, endpointFilter, onClose }: MetricChartModalProps): React.JSX.Element {
+export function MetricChartModal({ title, entityId, entityType, metricKey, description, deployment, endpointFilter, weekAgoValue, unit, onClose }: MetricChartModalProps): React.JSX.Element {
   const backdropRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<FetchState>({ status: 'loading' });
   const [timeRange, setTimeRange] = useState<TimeRange>(loadTimeRange);
@@ -272,6 +311,37 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
   const metricDsName = useMetricDatasource(entityId, metricKey);
   const onSaveQuery = useSaveMetricQuery();
   const flowData = useFlowData();
+  const { options: viewOptions } = useViewOptions();
+  const slaThresholds = useSla(entityId);
+  const directions = useDirections(entityId);
+
+  // ── Comparison reference lines for the chart ──
+  const referenceLines = useMemo((): readonly ReferenceLine[] => {
+    if (isEditing) return [];
+    const mode = viewOptions.coloringMode;
+    if (mode === 'baseline') {
+      if (weekAgoValue === undefined) return [];
+      return [{ value: weekAgoValue, color: '#94a3b8', label: 'Last week' }];
+    }
+    // SLA mode
+    const threshold = slaThresholds?.[metricKey];
+    if (threshold === undefined) return [];
+    return [
+      { value: threshold.warning, color: '#eab308', label: 'Warning' },
+      { value: threshold.critical, color: '#ef4444', label: 'Critical' },
+    ];
+  }, [isEditing, viewOptions.coloringMode, weekAgoValue, slaThresholds, metricKey]);
+
+  const comparisonText = useMemo((): string | undefined => {
+    if (isEditing) return undefined;
+    const mode = viewOptions.coloringMode;
+    if (mode === 'baseline') {
+      if (weekAgoValue === undefined) return undefined;
+      return 'Last week: ' + formatMetricValue(weekAgoValue, unit);
+    }
+    // SLA mode — reuse tooltip logic (it only needs threshold + direction, not value)
+    return metricTooltipText(1, undefined, unit, 'sla', slaThresholds?.[metricKey], directions?.[metricKey]);
+  }, [isEditing, weekAgoValue, unit, viewOptions.coloringMode, slaThresholds, directions, metricKey]);
 
   // ── Layered metric row for override UI ──
   const layeredData = useMemo((): LayeredMetricData | undefined => {
@@ -566,7 +636,7 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
           )}
 
           {state.status === 'success' && (
-            <TimeSeriesChart data={state.data} />
+            <TimeSeriesChart data={state.data} referenceLines={referenceLines} />
           )}
 
           {/* ── Override UI (edit mode with flow data) ── */}
@@ -782,6 +852,14 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
           {/* ── View mode (not editing) ── */}
           {!isEditing && state.status !== 'loading' && (
             <>
+              {comparisonText !== undefined && (
+                <div className={styles.comparisonSection}>
+                  <span className={styles.sectionLabel}>
+                    {viewOptions.coloringMode === 'baseline' ? 'Baseline comparison' : 'SLA thresholds'}
+                  </span>
+                  <p className={styles.comparisonText}>{comparisonText}</p>
+                </div>
+              )}
               <div className={styles.datasourceSection}>
                 <span className={styles.sectionLabel}>Datasource</span>
                 <div className={styles.disabledOverlay}>
@@ -1294,5 +1372,15 @@ const styles = {
     fontSize: '13px',
     lineHeight: 1.625,
     color: '#cbd5e1',
+  }),
+
+  comparisonSection: css({
+    marginTop: '0.75rem',
+  }),
+
+  comparisonText: css({
+    fontSize: '13px',
+    lineHeight: 1.625,
+    color: '#94a3b8',
   }),
 };

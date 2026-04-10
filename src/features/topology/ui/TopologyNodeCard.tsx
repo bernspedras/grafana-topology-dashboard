@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { css } from '@emotion/css';
  
-import { Select } from '@grafana/ui';
+import { Select, Tooltip } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import type { TopologyNode, NodeStatus } from '../domain';
 import { EKSServiceNode, EC2ServiceNode, DatabaseNode, ExternalNode } from '../domain';
@@ -148,7 +148,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const [selectedDeployment, setSelectedDeployment] = useState(currentDeployment);
   useEffect(() => { setSelectedDeployment(currentDeployment); }, [currentDeployment]);
   const [showQueries, setShowQueries] = useState(false);
-  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; entityId?: string; entityType?: 'node' | 'edge' } | undefined>(undefined);
+  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; entityId?: string; entityType?: 'node' | 'edge'; weekAgoValue?: number; unit?: string } | undefined>(undefined);
   const resolvedQueries = usePromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
@@ -295,7 +295,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
           {metrics.map((m) => {
             const key = m.metricKey;
             if (key !== undefined) {
-              return (
+              const btn = (
                 <button
                   key={m.label}
                   type="button"
@@ -304,7 +304,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
                     const desc = key.startsWith('custom:')
                       ? node.customMetrics.find((cm) => 'custom:' + cm.key === key)?.description
                       : undefined;
-                    setChartMetric({ key, label: m.label, description: desc });
+                    setChartMetric({ key, label: m.label, description: desc, weekAgoValue: m.weekAgoValue, unit: m.unit });
                   }}
                 >
                   <span className={styles.metricLabel}>{m.label}</span>
@@ -313,6 +313,10 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
                   </span>
                 </button>
               );
+              if (m.tooltip !== undefined) {
+                return <Tooltip key={m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+              }
+              return btn;
             }
             return (
               <div key={m.label} className={styles.metricRow}>
@@ -334,19 +338,23 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
               {dbConnMetricsFiltered.map((m) => {
                 const key = m.metricKey;
                 if (key !== undefined) {
-                  return (
+                  const btn = (
                     <button
                       key={'dbc-' + m.label}
                       type="button"
                       className={'nodrag ' + styles.metricButton}
                       onClick={(): void => {
-                        setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge' });
+                        setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge', weekAgoValue: m.weekAgoValue, unit: m.unit });
                       }}
                     >
                       <span className={styles.metricLabel}>{m.label}</span>
                       <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
                     </button>
                   );
+                  if (m.tooltip !== undefined) {
+                    return <Tooltip key={'dbc-' + m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+                  }
+                  return btn;
                 }
                 return (
                   <div key={'dbc-' + m.label} className={styles.metricRow}>
@@ -368,19 +376,23 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
               {dbInstMetricsFiltered.map((m) => {
                 const key = m.metricKey;
                 if (key !== undefined) {
-                  return (
+                  const btn = (
                     <button
                       key={'dbi-' + m.label}
                       type="button"
                       className={'nodrag ' + styles.metricButton}
                       onClick={(): void => {
-                        setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node' });
+                        setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node', weekAgoValue: m.weekAgoValue, unit: m.unit });
                       }}
                     >
                       <span className={styles.metricLabel}>{m.label}</span>
                       <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
                     </button>
                   );
+                  if (m.tooltip !== undefined) {
+                    return <Tooltip key={'dbi-' + m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+                  }
+                  return btn;
                 }
                 return (
                   <div key={'dbi-' + m.label} className={styles.metricRow}>
@@ -422,6 +434,8 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
           description={chartMetric.description}
           deployment={chartMetric.entityId !== undefined ? undefined : (selectedDeployment !== '' ? selectedDeployment : undefined)}
           endpointFilter={undefined}
+          weekAgoValue={chartMetric.weekAgoValue}
+          unit={chartMetric.unit ?? ''}
           onClose={(): void => { setChartMetric(undefined); }}
         />
       )}

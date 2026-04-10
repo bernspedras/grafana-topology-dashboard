@@ -109,7 +109,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
   const [selectedDeployment, setSelectedDeployment] = useState(currentDeployment);
   useEffect(() => { setSelectedDeployment(currentDeployment); }, [currentDeployment]);
   const [showQueries, setShowQueries] = useState(false);
-  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; entityId?: string; entityType?: 'node' | 'edge' } | undefined>(undefined);
+  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; entityId?: string; entityType?: 'node' | 'edge'; weekAgoValue?: number; unit?: string } | undefined>(undefined);
   const resolvedQueries = usePromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const { options: viewOptions } = useViewOptions();
@@ -273,7 +273,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
                       const desc = key.startsWith('custom:')
                         ? node.customMetrics.find((cm) => 'custom:' + cm.key === key)?.description
                         : undefined;
-                      setChartMetric({ key, label: m.label, description: desc });
+                      setChartMetric({ key, label: m.label, description: desc, weekAgoValue: m.weekAgoValue, unit: m.unit });
                     }}
                   >
                     <span className={styles.metricLabel}>{m.label}</span>
@@ -309,7 +309,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
                         type="button"
                         className={'nodrag ' + styles.metricButton}
                         onClick={(): void => {
-                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge' });
+                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge', weekAgoValue: m.weekAgoValue, unit: m.unit });
                         }}
                       >
                         <span className={styles.metricLabel}>{m.label}</span>
@@ -343,7 +343,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
                         type="button"
                         className={'nodrag ' + styles.metricButton}
                         onClick={(): void => {
-                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node' });
+                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node', weekAgoValue: m.weekAgoValue, unit: m.unit });
                         }}
                       >
                         <span className={styles.metricLabel}>{m.label}</span>
@@ -392,6 +392,8 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
           description={chartMetric.description}
           deployment={chartMetric.entityId !== undefined ? undefined : (selectedDeployment !== '' ? selectedDeployment : undefined)}
           endpointFilter={undefined}
+          weekAgoValue={chartMetric.weekAgoValue}
+          unit={chartMetric.unit ?? ''}
           onClose={(): void => { setChartMetric(undefined); }}
         />
       )}
