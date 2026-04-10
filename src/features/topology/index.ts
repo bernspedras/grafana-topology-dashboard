@@ -35,3 +35,5 @@ export { DirectionProvider, useDirections, useDirectionMap } from './ui/Directio
 export { buildDirectionMap } from './application/directionMap';
 export type { MetricDirectionMap } from './application/directionMap';
 export { formatMetricValue } from './application/formatMetricValue';
+export { canShowSequenceDiagram } from './application/sequenceDiagram';
+export { layoutSequenceDiagram } from './application/layoutSequenceDiagram';

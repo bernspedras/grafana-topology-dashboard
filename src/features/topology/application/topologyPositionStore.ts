@@ -5,6 +5,7 @@ import type { Node, Edge, NodeChange, Connection } from '@xyflow/react';
 import type { TopologyGraph } from '../domain';
 import { FlowStepNode } from '../domain';
 import { layoutGraph } from './layoutGraph';
+import { layoutSequenceDiagram } from './layoutSequenceDiagram';
 import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
 import { graphId } from './graphId';
 
@@ -52,8 +53,12 @@ interface TopologyPositionState {
   layoutVersion: number;
   /** True when layout has unsaved changes (user dragged/reconnected since last save/load). */
   isLayoutDirty: boolean;
+  /** Whether the last initialize was in sequence-diagram mode. */
+  lastSequenceMode: boolean;
+  /** Whether the last sequence-mode initialize was in low-poly mode. */
+  lastSeqLowPoly: boolean;
   setBundledLayout: (topologyId: string, layout: TopologyLayout) => void;
-  initialize: (graph: TopologyGraph, topologyId: string) => void;
+  initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean) => void;
   setServerLayout: (topologyId: string, serverLayout: TopologyLayout) => void;
   syncServerLayout: (topologyId: string, layout: TopologyLayout) => void;
   clearServerLayout: (topologyId: string) => void;
@@ -79,17 +84,25 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
       bundledLayouts: {},
       layoutVersion: 0,
       isLayoutDirty: false,
+      lastSequenceMode: false,
+      lastSeqLowPoly: false,
 
       setBundledLayout: (topologyId: string, layout: TopologyLayout): void => {
         set((state) => ({ bundledLayouts: { ...state.bundledLayouts, [topologyId]: layout } }));
       },
 
-      initialize: (graph: TopologyGraph, topologyId: string): void => {
+      initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean): void => {
         const state = get();
         const newGraphId = graphId(graph);
+        const isSequence = sequenceMode === true;
+        const isLowPoly = lowPolyMode === true;
 
-        // If same topology and same structural graph, only update domain data on existing nodes/edges
-        if (state.currentTopologyId === topologyId && state.lastGraphId === newGraphId) {
+        // Force full re-layout when sequence mode or low-poly mode (in sequence) changes
+        const modeChanged = state.lastSequenceMode !== isSequence
+          || (isSequence && state.lastSeqLowPoly !== isLowPoly);
+
+        // If same topology and same structural graph and same mode, only update domain data
+        if (!modeChanged && state.currentTopologyId === topologyId && state.lastGraphId === newGraphId) {
           const domainNodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
           const domainEdgeMap = new Map(graph.edges.map((e) => [e.id, e]));
           const domainStepMap = new Map(graph.flowSteps.map((s) => [s.id, s]));
@@ -123,7 +136,22 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
           return;
         }
 
-        // Different topology or structural change — full layout
+        // Different topology, structural change, or mode change — full layout
+        if (isSequence) {
+          // Sequence diagram mode — deterministic layout, no position overrides
+          const { nodes, edges } = layoutSequenceDiagram(graph, undefined, undefined, lowPolyMode);
+          set({
+            nodes,
+            edges,
+            currentTopologyId: topologyId,
+            lastGraphId: newGraphId,
+            lastSequenceMode: true,
+            lastSeqLowPoly: isLowPoly,
+            isLayoutDirty: false,
+          });
+          return;
+        }
+
         // Priority: server > bundled (from Grafana DB) > localStorage > dagre auto-layout
         const saved = state.serverLayouts[topologyId] ?? state.bundledLayouts[topologyId] ?? state.perTopology[topologyId];
         const positions: PositionMap = saved?.positions ?? {};
@@ -175,6 +203,7 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
           edges: edgesWithOverrides,
           currentTopologyId: topologyId,
           lastGraphId: newGraphId,
+          lastSequenceMode: false,
           perTopology: updatedPerTopology,
           isLayoutDirty: false,
         });

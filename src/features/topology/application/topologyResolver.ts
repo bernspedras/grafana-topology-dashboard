@@ -67,12 +67,12 @@ function edgeTemplateToDefinition(template: EdgeTemplate): EdgeDefinition {
   // `endpointPaths` is preserved from the spread — it exists on both shapes,
   // so an inlined entry that already carries the list keeps it.
   if (template.kind === 'http-json') {
-    return { ...template, method: undefined, endpointPath: undefined };
+    return { ...template, method: undefined, endpointPath: undefined, sequenceOrder: undefined };
   }
   if (template.kind === 'http-xml') {
-    return { ...template, method: undefined, endpointPath: undefined, soapAction: undefined };
+    return { ...template, method: undefined, endpointPath: undefined, soapAction: undefined, sequenceOrder: undefined };
   }
-  return template;
+  return { ...template, sequenceOrder: undefined };
 }
 
 // ─── Node resolution ─────────────────────────────────────────────────────────
@@ -114,6 +114,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
 
   const dataSource = ref.dataSource ?? template.dataSource;
   const customMetrics = ref.customMetrics ?? template.customMetrics;
+  const sequenceOrder = ref.sequenceOrder;
 
   if (template.kind === 'http-json' && ref.kind === 'http-json') {
     const resolved: HttpJsonEdgeDefinition = {
@@ -124,6 +125,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
       endpointPath: ref.endpointPath ?? undefined,
       endpointPaths: ref.endpointPaths ?? template.endpointPaths,
       customMetrics,
+      sequenceOrder,
     };
     return resolved;
   }
@@ -138,6 +140,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
       soapAction: ref.soapAction ?? undefined,
       endpointPaths: template.endpointPaths,
       customMetrics,
+      sequenceOrder,
     };
     return resolved;
   }
@@ -148,6 +151,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
       dataSource,
       metrics: mergeMetrics(template.metrics, ref.metrics),
       customMetrics,
+      sequenceOrder,
     };
     return resolved;
   }
@@ -176,6 +180,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
       queue,
       consumer,
       customMetrics,
+      sequenceOrder,
     };
     return resolved;
   }
@@ -200,6 +205,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
       topicMetrics,
       consumer,
       customMetrics,
+      sequenceOrder,
     };
     return resolved;
   }
@@ -210,6 +216,7 @@ export function resolveEdgeRef(template: EdgeTemplate, ref: TopologyEdgeRef): Ed
       dataSource,
       metrics: mergeMetrics(template.metrics, ref.metrics),
       customMetrics,
+      sequenceOrder,
     };
     return resolved;
   }

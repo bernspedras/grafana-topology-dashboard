@@ -351,6 +351,10 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
 
 export const TopologyNodeCard = memo(TopologyNodeCardInner);
 
+// Re-export internals for SequenceLifelineNode (avoids duplicating styles)
+// Re-export internals for SequenceLifelineNode (avoids duplicating styles)
+export { handleCls as nodeHandleCls, styles as nodeCardStyles, lowPolyStyles as nodeCardLowPolyStyles, nodeTypeIcon, filterNodeQueries, STATUS_DOT as NODE_STATUS_DOT };
+
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const groupCls = css({

@@ -151,6 +151,7 @@ export interface HttpJsonEdgeDto {
   readonly endpointPaths?: readonly string[];
   readonly endpointMetrics?: Readonly<Record<string, BaseEdgeMetricsDto>>;
   readonly customMetrics?: readonly CustomMetricValueDto[];
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface HttpXmlEdgeDto {
@@ -167,6 +168,7 @@ export interface HttpXmlEdgeDto {
   readonly endpointPaths?: readonly string[];
   readonly endpointMetrics?: Readonly<Record<string, BaseEdgeMetricsDto>>;
   readonly customMetrics?: readonly CustomMetricValueDto[];
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface TcpDbConnectionEdgeDto {
@@ -179,6 +181,7 @@ export interface TcpDbConnectionEdgeDto {
   readonly poolSize: number | undefined;
   readonly port: number | undefined;
   readonly customMetrics?: readonly CustomMetricValueDto[];
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface AmqpEdgeMetricsDto extends BaseEdgeMetricsDto {
@@ -215,6 +218,7 @@ export interface AmqpEdgeDto {
   readonly routingKeyFilters?: readonly string[];
   readonly routingKeyMetrics?: Readonly<Record<string, AmqpEdgeMetricsDto>>;
   readonly customMetrics?: readonly CustomMetricValueDto[];
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface KafkaEdgeMetricsDto extends BaseEdgeMetricsDto {
@@ -249,6 +253,7 @@ export interface KafkaEdgeDto {
   readonly topic: string;
   readonly consumerGroup: string | undefined;
   readonly customMetrics?: readonly CustomMetricValueDto[];
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface GrpcEdgeDto {
@@ -262,6 +267,7 @@ export interface GrpcEdgeDto {
   readonly grpcService: string;
   readonly grpcMethod: string;
   readonly customMetrics?: readonly CustomMetricValueDto[];
+  readonly sequenceOrder?: number | undefined;
 }
 
 export type TopologyEdgeDto =

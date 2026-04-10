@@ -220,7 +220,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sequenceOrder": { "type": "integer", "minimum": 1, "description": "Order of this edge in sequence diagram view" }
       }
     },
     "httpXmlEdgeRef": {
@@ -239,7 +240,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sequenceOrder": { "type": "integer", "minimum": 1, "description": "Order of this edge in sequence diagram view" }
       }
     },
     "tcpDbEdgeRef": {
@@ -255,7 +257,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sequenceOrder": { "type": "integer", "minimum": 1, "description": "Order of this edge in sequence diagram view" }
       }
     },
     "amqpEdgeRef": {
@@ -292,7 +295,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sequenceOrder": { "type": "integer", "minimum": 1, "description": "Order of this edge in sequence diagram view" }
       }
     },
     "kafkaEdgeRef": {
@@ -329,7 +333,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sequenceOrder": { "type": "integer", "minimum": 1, "description": "Order of this edge in sequence diagram view" }
       }
     },
     "grpcEdgeRef": {
@@ -345,7 +350,8 @@
         "customMetrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/customMetricDefinition" }
-        }
+        },
+        "sequenceOrder": { "type": "integer", "minimum": 1, "description": "Order of this edge in sequence diagram view" }
       }
     },
     "topologyNodeEntry": {

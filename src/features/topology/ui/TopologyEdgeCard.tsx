@@ -355,6 +355,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     targetX,
     targetY,
     targetPosition,
+    sourceHandleId,
     data,
     style,
     markerEnd,
@@ -386,11 +387,16 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   };
 
   const isSelfLoop = data !== undefined && data.domainEdge.source === data.domainEdge.target;
+  const isSequenceEdge = sourceHandleId?.startsWith('seq-') === true;
 
   // 1. Compute base label position (before any offset)
   let baseLabelX: number;
   let baseLabelY: number;
-  if (isSelfLoop) {
+  if (isSequenceEdge && !isSelfLoop) {
+    // Sequence mode: straight horizontal line — label at midpoint
+    baseLabelX = (sourceX + targetX) / 2;
+    baseLabelY = (sourceY + targetY) / 2;
+  } else if (isSelfLoop) {
     const defaultPos = selfLoopDefaultLabel(sourceX, sourceY, sourcePosition, targetX, targetY);
     baseLabelX = defaultPos.x;
     baseLabelY = defaultPos.y;
@@ -424,9 +430,15 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const labelY = baseLabelY + (dragOffset?.y ?? savedOffset?.y ?? 0);
 
   // 3. Compute edge path routed through the label position
-  const edgePath = isSelfLoop
-    ? selfLoopEdgePath(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, labelX, labelY)
-    : normalEdgePath(sourceX, sourceY, targetX, targetY, labelX, labelY);
+  let edgePath: string;
+  if (isSequenceEdge && !isSelfLoop) {
+    // Sequence mode: straight horizontal line
+    edgePath = `M ${String(sourceX)},${String(sourceY)} L ${String(targetX)},${String(targetY)}`;
+  } else if (isSelfLoop) {
+    edgePath = selfLoopEdgePath(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, labelX, labelY);
+  } else {
+    edgePath = normalEdgePath(sourceX, sourceY, targetX, targetY, labelX, labelY);
+  }
 
   const onDragStart = useCallback((e: React.MouseEvent): void => {
     e.preventDefault();
