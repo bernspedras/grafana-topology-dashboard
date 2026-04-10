@@ -37,3 +37,5 @@ export type { MetricDirectionMap } from './application/directionMap';
 export { formatMetricValue } from './application/formatMetricValue';
 export { canShowSequenceDiagram } from './application/sequenceDiagram';
 export { layoutSequenceDiagram } from './application/layoutSequenceDiagram';
+export { computeCollapseDbMap, applyDbCollapse } from './application/collapseDbConnections';
+export type { CollapsedDbInfo, CollapseDbMap } from './application/collapseDbConnections';

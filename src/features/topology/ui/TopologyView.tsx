@@ -21,7 +21,10 @@ import { FlowStepSettingsModal } from './FlowStepSettingsModal';
 import { FlowStepDetailsModal } from './FlowStepDetailsModal';
 import { useTopologyId } from '../application/TopologyIdContext';
 import { canShowSequenceDiagram } from '../application/sequenceDiagram';
+import { computeCollapseDbMap, applyDbCollapse } from '../application/collapseDbConnections';
+import type { CollapseDbMap } from '../application/collapseDbConnections';
 import { useViewOptions } from './ViewOptionsContext';
+import { useEditMode } from './EditModeContext';
 import type { ViewOptionKey } from './ViewOptionsContext';
 import { useSlaMap } from './SlaContext';
 import { useDirectionMap } from './DirectionContext';
@@ -73,6 +76,7 @@ const BASE_VIEW_OPTION_LABELS: readonly { readonly key: ViewOptionKey; readonly 
   { key: 'showNAMetrics', label: 'Show N/A metrics' },
   { key: 'showFlowStepCards', label: 'Show flow step cards' },
   { key: 'lowPolyMode', label: 'Low Poly Mode' },
+  { key: 'collapseDbConnections', label: 'Collapse DB connections' },
 ];
 
 // ─── Node kind metadata for the Add menu ────────────────────────────────────
@@ -347,6 +351,7 @@ function SettingsMenu({ canShowSequence }: SettingsMenuProps): React.JSX.Element
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { options, toggle, setColoringMode } = useViewOptions();
+  const editMode = useEditMode();
   const viewOptionLabels = useMemo((): readonly { readonly key: ViewOptionKey; readonly label: string }[] => {
     if (!canShowSequence) return BASE_VIEW_OPTION_LABELS;
     return [...BASE_VIEW_OPTION_LABELS, { key: 'sequenceDiagramMode' as ViewOptionKey, label: 'Sequence Diagram' }];
@@ -382,17 +387,21 @@ function SettingsMenu({ canShowSequence }: SettingsMenuProps): React.JSX.Element
       </button>
       {open && (
         <div className={settingsStyles.menu}>
-          {viewOptionLabels.map(({ key, label }) => (
-            <label key={key} className={settingsStyles.option}>
-              <input
-                type="checkbox"
-                checked={options[key]}
-                onChange={(): void => { toggle(key); }}
-                className={settingsStyles.checkbox}
-              />
-              {label}
-            </label>
-          ))}
+          {viewOptionLabels.map(({ key, label }) => {
+            const disabled = key === 'collapseDbConnections' && editMode;
+            return (
+              <label key={key} className={settingsStyles.option} style={disabled ? { opacity: 0.5 } : undefined}>
+                <input
+                  type="checkbox"
+                  checked={options[key]}
+                  onChange={(): void => { toggle(key); }}
+                  disabled={disabled}
+                  className={settingsStyles.checkbox}
+                />
+                {label}
+              </label>
+            );
+          })}
           <div className={settingsStyles.divider} />
           <div className={settingsStyles.sectionLabel}>Metric colors</div>
           {COLORING_MODE_OPTIONS.map(({ value, label }) => (
@@ -419,8 +428,18 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
   const dirMap = useDirectionMap();
   const sequenceMode = viewOpts.sequenceDiagramMode;
   const canShowSequence = useMemo(() => canShowSequenceDiagram(graph), [graph]);
+
+  const collapseMap: CollapseDbMap = useMemo(
+    () => viewOpts.collapseDbConnections ? computeCollapseDbMap(graph) : new Map(),
+    [graph, viewOpts.collapseDbConnections],
+  );
+  const effectiveGraph = useMemo(
+    () => collapseMap.size > 0 ? applyDbCollapse(graph, collapseMap) : graph,
+    [graph, collapseMap],
+  );
+
   const { nodes, edges, onNodesChange, onReconnect, getCurrentLayout } =
-    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode, dirMap, sequenceMode && canShowSequence);
+    useTopologyFlow(effectiveGraph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode, dirMap, sequenceMode && canShowSequence, collapseMap);
 
   const topologyId = useTopologyId();
   const toast = useToast();
@@ -480,9 +499,13 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
           }
           return { ...patched, data: { ...patched.data, ...extra } };
         }
+        const collapsed = collapseMap.get(node.id);
+        if (collapsed !== undefined) {
+          return { ...patched, data: { ...patched.data, collapsedDb: collapsed } };
+        }
         return patched;
       });
-  }, [nodes, onOpenFlowStepEditor, isEditing, hideFlowSteps, draggable]);
+  }, [nodes, onOpenFlowStepEditor, isEditing, hideFlowSteps, draggable, collapseMap]);
 
   const edgesWithEditState: Edge[] = useMemo((): Edge[] => {
     return edges.map((edge): Edge => ({

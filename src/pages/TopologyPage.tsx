@@ -117,7 +117,15 @@ function TopologyPage(): React.JSX.Element {
 
   const [selectedId, setSelectedId] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const toggleEditMode = useCallback((): void => { setIsEditing((prev) => !prev); }, []);
+  const toggleEditMode = useCallback((): void => {
+    setIsEditing((prev) => {
+      const next = !prev;
+      if (next) {
+        setViewOptions((vo) => vo.collapseDbConnections ? { ...vo, collapseDbConnections: false } : vo);
+      }
+      return next;
+    });
+  }, []);
 
   // Auto-select first topology when loaded
   const effectiveId = selectedId !== '' && topologies.some((t) => t.id === selectedId)
@@ -459,7 +467,7 @@ function TopologyPage(): React.JSX.Element {
     })();
   }, [topologies, effectiveId, reload]);
 
-  const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true, lowPolyMode: false, sequenceDiagramMode: false, coloringMode: 'baseline' });
+  const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true, lowPolyMode: false, sequenceDiagramMode: false, collapseDbConnections: false, coloringMode: 'baseline' });
   const toggleViewOption = useCallback((key: ViewOptionKey): void => {
     setViewOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
