@@ -16,9 +16,11 @@ import { TopologyNodeCard } from './TopologyNodeCard';
 import { TopologyFlowCard } from './TopologyFlowCard';
 import { TopologyFlowStepCard } from './TopologyFlowStepCard';
 import { TopologyEdgeCard } from './TopologyEdgeCard';
+import { SequenceLifelineNode } from './SequenceLifelineNode';
 import { FlowStepSettingsModal } from './FlowStepSettingsModal';
 import { FlowStepDetailsModal } from './FlowStepDetailsModal';
 import { useTopologyId } from '../application/TopologyIdContext';
+import { canShowSequenceDiagram } from '../application/sequenceDiagram';
 import { useViewOptions } from './ViewOptionsContext';
 import type { ViewOptionKey } from './ViewOptionsContext';
 import { useSlaMap } from './SlaContext';
@@ -67,7 +69,7 @@ function useToast(): { visible: boolean; message: string; show: (msg: string) =>
   return { visible, message, show };
 }
 
-const VIEW_OPTION_LABELS: readonly { readonly key: ViewOptionKey; readonly label: string }[] = [
+const BASE_VIEW_OPTION_LABELS: readonly { readonly key: ViewOptionKey; readonly label: string }[] = [
   { key: 'showNAMetrics', label: 'Show N/A metrics' },
   { key: 'showFlowStepCards', label: 'Show flow step cards' },
   { key: 'lowPolyMode', label: 'Low Poly Mode' },
@@ -337,10 +339,18 @@ const COLORING_MODE_OPTIONS: readonly { readonly value: ColoringMode; readonly l
   { value: 'sla', label: 'Compare to SLA' },
 ];
 
-function SettingsMenu(): React.JSX.Element {
+interface SettingsMenuProps {
+  readonly canShowSequence: boolean;
+}
+
+function SettingsMenu({ canShowSequence }: SettingsMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { options, toggle, setColoringMode } = useViewOptions();
+  const viewOptionLabels = useMemo((): readonly { readonly key: ViewOptionKey; readonly label: string }[] => {
+    if (!canShowSequence) return BASE_VIEW_OPTION_LABELS;
+    return [...BASE_VIEW_OPTION_LABELS, { key: 'sequenceDiagramMode' as ViewOptionKey, label: 'Sequence Diagram' }];
+  }, [canShowSequence]);
 
   useEffect(() => {
     if (!open) {
@@ -372,7 +382,7 @@ function SettingsMenu(): React.JSX.Element {
       </button>
       {open && (
         <div className={settingsStyles.menu}>
-          {VIEW_OPTION_LABELS.map(({ key, label }) => (
+          {viewOptionLabels.map(({ key, label }) => (
             <label key={key} className={settingsStyles.option}>
               <input
                 type="checkbox"
@@ -407,8 +417,10 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
   const { options: viewOpts } = useViewOptions();
   const slaMap = useSlaMap();
   const dirMap = useDirectionMap();
+  const sequenceMode = viewOpts.sequenceDiagramMode;
+  const canShowSequence = useMemo(() => canShowSequenceDiagram(graph), [graph]);
   const { nodes, edges, onNodesChange, onReconnect, getCurrentLayout } =
-    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode, dirMap);
+    useTopologyFlow(graph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode, dirMap, sequenceMode && canShowSequence);
 
   const topologyId = useTopologyId();
   const toast = useToast();
@@ -449,7 +461,8 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
     onAddEdge?.(connection.source, connection.target);
   }, [onAddEdge]);
 
-  const draggable = isEditing === true;
+  const activeSequenceMode = sequenceMode && canShowSequence;
+  const draggable = isEditing === true && !activeSequenceMode;
 
   const nodesWithEditCallback: Node[] = useMemo((): Node[] => {
     return nodes
@@ -479,7 +492,7 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
   }, [edges, isEditing]);
 
   const nodeTypes: NodeTypes = useMemo(
-    () => ({ topologyNode: TopologyNodeCard, topologyFlowCard: TopologyFlowCard, topologyFlowStep: TopologyFlowStepCard }),
+    () => ({ topologyNode: TopologyNodeCard, topologyFlowCard: TopologyFlowCard, topologyFlowStep: TopologyFlowStepCard, sequenceLifelineNode: SequenceLifelineNode }),
     [],
   );
 
@@ -493,11 +506,11 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
       <ReactFlow
         nodes={nodesWithEditCallback}
         edges={edgesWithEditState}
-        onNodesChange={isEditing === true ? onNodesChange : undefined}
-        onConnect={isEditing === true ? handleConnect : undefined}
-        onReconnect={isEditing === true ? onReconnect : undefined}
-        nodesDraggable={isEditing === true}
-        edgesReconnectable={isEditing === true}
+        onNodesChange={isEditing === true && !activeSequenceMode ? onNodesChange : undefined}
+        onConnect={isEditing === true && !activeSequenceMode ? handleConnect : undefined}
+        onReconnect={isEditing === true && !activeSequenceMode ? onReconnect : undefined}
+        nodesDraggable={isEditing === true && !activeSequenceMode}
+        edgesReconnectable={isEditing === true && !activeSequenceMode}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -508,7 +521,7 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
         <Controls />
         <Panel position="top-right">
           <div className={styles.buttonGroup}>
-            <SettingsMenu />
+            <SettingsMenu canShowSequence={canShowSequence} />
             {canEdit === true && onToggleEditMode !== undefined && (
               <button
                 type="button"

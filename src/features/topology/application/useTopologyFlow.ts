@@ -24,6 +24,7 @@ export function useTopologyFlow(
   slaMap?: Readonly<Record<string, SlaThresholdMap>>,
   lowPolyMode?: boolean,
   directionMap?: Readonly<Record<string, MetricDirectionMap>>,
+  sequenceMode?: boolean,
 ): UseTopologyFlowResult {
   const topologyId = useTopologyId();
 
@@ -55,8 +56,8 @@ export function useTopologyFlow(
     }
 
     // Then initialize (reads from bundledLayouts which was just set above)
-    initialize(graph, topologyId);
-  }, [graph, topologyId, initialize, layoutVersion, bundledLayout, setBundledLayout]);
+    initialize(graph, topologyId, sequenceMode, lowPolyMode);
+  }, [graph, topologyId, initialize, layoutVersion, bundledLayout, setBundledLayout, sequenceMode, lowPolyMode]);
 
   // Re-derive edge styles when coloringMode, slaMap, or lowPolyMode changes
   const edges = useMemo((): Edge[] => {

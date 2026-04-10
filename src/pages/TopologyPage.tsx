@@ -459,7 +459,7 @@ function TopologyPage(): React.JSX.Element {
     })();
   }, [topologies, effectiveId, reload]);
 
-  const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true, lowPolyMode: false, coloringMode: 'baseline' });
+  const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true, lowPolyMode: false, sequenceDiagramMode: false, coloringMode: 'baseline' });
   const toggleViewOption = useCallback((key: ViewOptionKey): void => {
     setViewOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);

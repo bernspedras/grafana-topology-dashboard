@@ -198,6 +198,7 @@ export interface HttpJsonEdgeDefinition {
   readonly endpointPath: string | undefined;
   readonly endpointPaths: readonly string[] | undefined;
   readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface HttpXmlEdgeDefinition {
@@ -212,6 +213,7 @@ export interface HttpXmlEdgeDefinition {
   readonly soapAction: string | undefined;
   readonly endpointPaths: readonly string[] | undefined;
   readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface TcpDbEdgeDefinition {
@@ -224,6 +226,7 @@ export interface TcpDbEdgeDefinition {
   readonly poolSize: number | undefined;
   readonly port: number | undefined;
   readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface AmqpEdgeDefinition {
@@ -238,6 +241,7 @@ export interface AmqpEdgeDefinition {
   readonly consumer: AmqpConsumerSection | undefined;
   readonly routingKeyFilters: readonly string[] | undefined;
   readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface KafkaEdgeDefinition {
@@ -252,6 +256,7 @@ export interface KafkaEdgeDefinition {
   readonly topicMetrics: KafkaTopicSection | undefined;
   readonly consumer: KafkaConsumerSection | undefined;
   readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface GrpcEdgeDefinition {
@@ -264,6 +269,7 @@ export interface GrpcEdgeDefinition {
   readonly grpcService: string;
   readonly grpcMethod: string;
   readonly customMetrics: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export type EdgeDefinition =
@@ -350,6 +356,7 @@ interface BaseEdgeRef {
   readonly label?: string | undefined;
   readonly dataSource?: string | undefined;
   readonly customMetrics?: readonly CustomMetricDefinition[] | undefined;
+  readonly sequenceOrder?: number | undefined;
 }
 
 export interface HttpJsonEdgeRef extends BaseEdgeRef {

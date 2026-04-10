@@ -10,6 +10,7 @@ export abstract class BaseEdge {
   public readonly target: string;
   public readonly animated: boolean;
   public readonly customMetrics: readonly CustomMetricValue[];
+  public readonly sequenceOrder: number | undefined;
 
   protected constructor(params: {
     id: string;
@@ -17,12 +18,14 @@ export abstract class BaseEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
   }) {
     this.id = params.id;
     this.source = params.source;
     this.target = params.target;
     this.animated = params.animated ?? false;
     this.customMetrics = params.customMetrics ?? [];
+    this.sequenceOrder = params.sequenceOrder;
   }
 }
 
@@ -50,6 +53,7 @@ export class HttpJsonEdge extends HttpEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
     metrics: HttpEdgeMetrics;
     aggregateMetrics?: HttpEdgeMetrics | undefined;
     method?: string;
@@ -85,6 +89,7 @@ export class HttpXmlEdge extends HttpEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
     metrics: HttpEdgeMetrics;
     aggregateMetrics?: HttpEdgeMetrics | undefined;
     method?: string;
@@ -125,6 +130,7 @@ export class TcpDbConnectionEdge extends TcpEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
     metrics: DbConnectionMetrics;
     poolSize?: number;
     port?: number;
@@ -153,6 +159,7 @@ export class AmqpEdge extends BaseEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
     metrics: AmqpEdgeMetrics;
     aggregateMetrics?: AmqpEdgeMetrics;
     routingKeyMetrics?: ReadonlyMap<string, AmqpEdgeMetrics>;
@@ -185,6 +192,7 @@ export class KafkaEdge extends BaseEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
     metrics: KafkaEdgeMetrics;
     aggregateMetrics?: KafkaEdgeMetrics;
     topic: string;
@@ -213,6 +221,7 @@ export class GrpcEdge extends BaseEdge {
     target: string;
     animated?: boolean;
     customMetrics?: readonly CustomMetricValue[];
+    sequenceOrder?: number | undefined;
     metrics: HttpEdgeMetrics;
     aggregateMetrics?: HttpEdgeMetrics | undefined;
     grpcService: string;
