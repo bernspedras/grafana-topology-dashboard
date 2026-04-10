@@ -41,7 +41,7 @@ const handleCls = css({
 function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React.JSX.Element {
   const node = data.domainNode;
   const [showQueries, setShowQueries] = useState(false);
-  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined } | undefined>(undefined);
+  const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; weekAgoValue?: number; unit?: string } | undefined>(undefined);
   const queries = usePromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
   const metrics = nodeMetricRows(node);
@@ -107,7 +107,7 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
                   const desc = key.startsWith('custom:')
                     ? node.customMetrics.find((cm) => 'custom:' + cm.key === key)?.description
                     : undefined;
-                  setChartMetric({ key, label: m.label, description: desc });
+                  setChartMetric({ key, label: m.label, description: desc, weekAgoValue: m.weekAgoValue, unit: m.unit });
                 }}
               >
                 <span className={styles.metricLabel}>{m.label}</span>
@@ -148,6 +148,8 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
           description={chartMetric.description}
           deployment={undefined}
           endpointFilter={undefined}
+          weekAgoValue={chartMetric.weekAgoValue}
+          unit={chartMetric.unit ?? ''}
           onClose={(): void => { setChartMetric(undefined); }}
         />
       )}

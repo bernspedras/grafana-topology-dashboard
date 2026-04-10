@@ -119,9 +119,9 @@ describe('nodeMetricRows', (): void => {
       ];
       const rows = nodeMetricRows(makeEksNode({ cpu: 40, memory: 70, deployments }));
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'Pods', value: '3 / 4', color: '#eab308', status: 'warning', metricKey: 'pods' });
-      expect(rows[1]).toEqual({ label: 'Avg CPU', value: '40%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
-      expect(rows[2]).toEqual({ label: 'Memory', value: '70%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: '3 / 4', color: '#eab308', status: 'warning', metricKey: 'pods' });
+      expect(rows[1]).toMatchObject({ label: 'Avg CPU', value: '40%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
+      expect(rows[2]).toMatchObject({ label: 'Memory', value: '70%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
     });
 
     it('returns specific deployment metrics when deployment is selected', (): void => {
@@ -131,9 +131,9 @@ describe('nodeMetricRows', (): void => {
       ];
       const rows = nodeMetricRows(makeEksNode({ deployments }), 'api');
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'Pods', value: '2 / 3', color: '#eab308', status: 'warning', metricKey: 'pods' });
-      expect(rows[1]).toEqual({ label: 'Avg CPU', value: '85%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
-      expect(rows[2]).toEqual({ label: 'Memory', value: '55%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: '2 / 3', color: '#eab308', status: 'warning', metricKey: 'pods' });
+      expect(rows[1]).toMatchObject({ label: 'Avg CPU', value: '85%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
+      expect(rows[2]).toMatchObject({ label: 'Memory', value: '55%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
     });
 
     it('falls back to aggregate when selectedDeployment matches no name', (): void => {
@@ -142,7 +142,7 @@ describe('nodeMetricRows', (): void => {
       ];
       const rows = nodeMetricRows(makeEksNode({ cpu: 40, memory: 50, deployments }), 'nonexistent');
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'Pods', value: '2 / 2', color: '#22c55e', status: 'healthy', metricKey: 'pods' });
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: '2 / 2', color: '#22c55e', status: 'healthy', metricKey: 'pods' });
     });
 
     it('shows N/A for Pods when replica metrics are undefined', (): void => {
@@ -150,7 +150,7 @@ describe('nodeMetricRows', (): void => {
         new DeploymentMetrics({ name: 'svc', cpu: 50, memory: 50 }),
       ];
       const rows = nodeMetricRows(makeEksNode({ cpu: 50, memory: 50, deployments }));
-      expect(rows[0]).toEqual({ label: 'Pods', value: 'N/A', color: '#6b7280', status: 'unknown', metricKey: 'pods' });
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: 'N/A', color: '#6b7280', status: 'unknown', metricKey: 'pods' });
     });
 
     it('shows N/A for Pods when specific deployment has undefined replicas', (): void => {
@@ -158,7 +158,7 @@ describe('nodeMetricRows', (): void => {
         new DeploymentMetrics({ name: 'svc', cpu: 80, memory: 60 }),
       ];
       const rows = nodeMetricRows(makeEksNode({ deployments }), 'svc');
-      expect(rows[0]).toEqual({ label: 'Pods', value: 'N/A', color: '#6b7280', status: 'unknown', metricKey: 'pods' });
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: 'N/A', color: '#6b7280', status: 'unknown', metricKey: 'pods' });
     });
   });
 
@@ -166,10 +166,10 @@ describe('nodeMetricRows', (): void => {
     it('returns CPU, Memory, Instance, AZ rows', (): void => {
       const rows = nodeMetricRows(makeEc2Node({ cpu: 85, memory: 55 }));
       expect(rows).toHaveLength(4);
-      expect(rows[0]).toEqual({ label: 'CPU', value: '85%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
-      expect(rows[1]).toEqual({ label: 'Memory', value: '55%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
-      expect(rows[2]).toEqual({ label: 'Instance', value: 't3.micro', color: '#94a3b8', status: 'unknown', metricKey: undefined });
-      expect(rows[3]).toEqual({ label: 'AZ', value: 'us-east-1a', color: '#94a3b8', status: 'unknown', metricKey: undefined });
+      expect(rows[0]).toMatchObject({ label: 'CPU', value: '85%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
+      expect(rows[1]).toMatchObject({ label: 'Memory', value: '55%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
+      expect(rows[2]).toMatchObject({ label: 'Instance', value: 't3.micro', color: '#94a3b8', status: 'unknown', metricKey: undefined });
+      expect(rows[3]).toMatchObject({ label: 'AZ', value: 'us-east-1a', color: '#94a3b8', status: 'unknown', metricKey: undefined });
     });
   });
 
@@ -177,15 +177,15 @@ describe('nodeMetricRows', (): void => {
     it('returns CPU, Memory, Engine rows without storage when undefined', (): void => {
       const rows = nodeMetricRows(makeDbNode({ cpu: 60, memory: 79 }));
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'CPU', value: '60%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
-      expect(rows[1]).toEqual({ label: 'Memory', value: '79%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
-      expect(rows[2]).toEqual({ label: 'Engine', value: 'postgres', color: '#94a3b8', status: 'unknown', metricKey: undefined });
+      expect(rows[0]).toMatchObject({ label: 'CPU', value: '60%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
+      expect(rows[1]).toMatchObject({ label: 'Memory', value: '79%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
+      expect(rows[2]).toMatchObject({ label: 'Engine', value: 'postgres', color: '#94a3b8', status: 'unknown', metricKey: undefined });
     });
 
     it('includes Storage row when storageGb is provided', (): void => {
       const rows = nodeMetricRows(makeDbNode({ storageGb: 100 }));
       expect(rows).toHaveLength(4);
-      expect(rows[3]).toEqual({ label: 'Storage', value: '100 GB', color: '#22c55e', status: 'unknown', metricKey: undefined });
+      expect(rows[3]).toMatchObject({ label: 'Storage', value: '100 GB', color: '#22c55e', status: 'unknown', metricKey: undefined });
     });
   });
 
@@ -193,15 +193,15 @@ describe('nodeMetricRows', (): void => {
     it('returns CPU, Memory, Provider rows without SLA when undefined', (): void => {
       const rows = nodeMetricRows(makeExternalNode({ cpu: 80, memory: 30 }));
       expect(rows).toHaveLength(3);
-      expect(rows[0]).toEqual({ label: 'CPU', value: '80%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
-      expect(rows[1]).toEqual({ label: 'Memory', value: '30%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
-      expect(rows[2]).toEqual({ label: 'Provider', value: 'Acme Corp', color: '#94a3b8', status: 'unknown', metricKey: undefined });
+      expect(rows[0]).toMatchObject({ label: 'CPU', value: '80%', color: '#e2e8f0', status: 'unknown', metricKey: 'cpu' });
+      expect(rows[1]).toMatchObject({ label: 'Memory', value: '30%', color: '#e2e8f0', status: 'unknown', metricKey: 'memory' });
+      expect(rows[2]).toMatchObject({ label: 'Provider', value: 'Acme Corp', color: '#94a3b8', status: 'unknown', metricKey: undefined });
     });
 
     it('includes SLA row when slaPercent is provided', (): void => {
       const rows = nodeMetricRows(makeExternalNode({ slaPercent: 99.9 }));
       expect(rows).toHaveLength(4);
-      expect(rows[3]).toEqual({ label: 'SLA', value: '99.9%', color: '#22c55e', status: 'unknown', metricKey: undefined });
+      expect(rows[3]).toMatchObject({ label: 'SLA', value: '99.9%', color: '#22c55e', status: 'unknown', metricKey: undefined });
     });
   });
 

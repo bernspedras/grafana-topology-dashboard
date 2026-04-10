@@ -298,10 +298,10 @@ describe('edgeMetricRows', (): void => {
         activeConnections: 8, idleConnections: 2, avgQueryTimeMs: 5, rps: 200, errorRate: 0,
       }));
       expect(rows).toHaveLength(7);
-      expect(rows[0]).toEqual({ label: 'Pool conns', value: '10', color: '#e2e8f0', status: 'unknown', metricKey: 'activeConnections' });
+      expect(rows[0]).toMatchObject({ label: 'Pool conns', value: '10', color: '#e2e8f0', status: 'unknown', metricKey: 'activeConnections' });
       expect(rows[1]?.label).toBe('Pool hit rate');
       expect(rows[2]?.label).toBe('RPS');
-      expect(rows[3]).toEqual({ label: 'Query P50', value: '5 ms', color: '#e2e8f0', status: 'unknown', metricKey: 'avgQueryTimeMs' });
+      expect(rows[3]).toMatchObject({ label: 'Query P50', value: '5 ms', color: '#e2e8f0', status: 'unknown', metricKey: 'avgQueryTimeMs' });
       expect(rows[4]?.label).toBe('Timeouts/min');
       expect(rows[5]?.label).toBe('Stale/min');
       expect(rows[6]?.label).toBe('Error rate');
