@@ -13,7 +13,7 @@ import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
 import type { MetricRow } from '../application/nodeDisplayData';
 import { edgeMetricRows } from '../application/edgeDisplayData';
 import type { CollapsedDbInfo } from '../application/collapseDbConnections';
-import { SEQ_NODE_WIDTH } from '../application/layoutSequenceDiagram';
+import { SEQ_NODE_WIDTH, SEQ_SELF_LOOP_Y_OFFSET } from '../application/layoutSequenceDiagram';
 import type { SequenceLifelineData } from '../application/layoutSequenceDiagram';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
@@ -98,11 +98,12 @@ const seqCollapsedDbHeaderCls = css({
 function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifelineNodeType>): React.JSX.Element {
   const node: TopologyNode = data.domainNode;
   const collapsedDb = (data as SequenceLifelineData & { collapsedDb?: CollapsedDbInfo }).collapsedDb;
-  const { sourceOrders, targetOrders, orderToY, nodeCardHeight, lifelineHeight } = data;
+  const { sourceOrders, targetOrders, selfLoopOrders, orderToY, nodeCardHeight, lifelineHeight } = data;
+  const selfLoopSet = new Set(selfLoopOrders);
 
   // Force React Flow to re-measure handle positions after mount
   const updateNodeInternals = useUpdateNodeInternals();
-  useEffect(() => { updateNodeInternals(nodeId); }, [nodeId, updateNodeInternals, sourceOrders, targetOrders]);
+  useEffect(() => { updateNodeInternals(nodeId); }, [nodeId, updateNodeInternals, sourceOrders, targetOrders, selfLoopOrders]);
 
   const editMode = useEditMode();
   const currentDeployment = node instanceof EKSServiceNode ? (node.usedDeployment ?? '') : '';
@@ -158,7 +159,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
           position={Position.Right}
           id={`seq-right-${String(order)}`}
           className={seqHandleCls}
-          style={{ top: handleY(order) }}
+          style={{ top: handleY(order) - (selfLoopSet.has(order) ? SEQ_SELF_LOOP_Y_OFFSET : 0) }}
         />
       ))}
       {targetOrders.map((order) => (
@@ -168,7 +169,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
           position={Position.Left}
           id={`seq-left-${String(order)}`}
           className={seqHandleCls}
-          style={{ top: handleY(order) }}
+          style={{ top: handleY(order) + (selfLoopSet.has(order) ? SEQ_SELF_LOOP_Y_OFFSET : 0) }}
         />
       ))}
 

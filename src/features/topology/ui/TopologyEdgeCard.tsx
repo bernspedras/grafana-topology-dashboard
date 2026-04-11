@@ -297,6 +297,32 @@ function selfLoopEdgePath(
   );
 }
 
+// ─── Sequence diagram self-loop path ────────────────────────────────────────
+//
+// Draws a rectangular-ish loop to the right:
+//   source → right → down → left → target
+// Mimics UML sequence diagram self-call notation.
+
+function sequenceSelfLoopPath(
+  sx: number, sy: number,
+  tx: number, ty: number,
+  labelX: number,
+  isLowPoly: boolean,
+): string {
+  // Vertical segment of the loop. For full cards it sits just before the card's
+  // left edge; for low-poly tags it extends slightly past the tag.
+  const rx = isLowPoly ? labelX + 35 : labelX - 125;
+  const cornerR = Math.min(8, Math.abs(ty - sy) / 2);
+  return (
+    `M ${String(sx)},${String(sy)} ` +
+    `L ${String(rx - cornerR)},${String(sy)} ` +
+    `Q ${String(rx)},${String(sy)} ${String(rx)},${String(sy + cornerR)} ` +
+    `L ${String(rx)},${String(ty - cornerR)} ` +
+    `Q ${String(rx)},${String(ty)} ${String(rx - cornerR)},${String(ty)} ` +
+    `L ${String(tx)},${String(ty)}`
+  );
+}
+
 // ─── Normal edge path through label (quadratic bezier) ──────────────────────
 
 function normalEdgePath(
@@ -346,7 +372,7 @@ function filterEdgeQueries(
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JSX.Element {
+function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JSX.Element | null {
   const {
     id,
     sourceX,
@@ -362,6 +388,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   } = props;
 
   const topologyId = useTopologyId();
+  const { options: viewOptions } = useViewOptions();
   const edgeId = data?.domainEdge.id ?? '';
   const selectionKey = topologyId + ':' + edgeId;
 
@@ -389,10 +416,29 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const isSelfLoop = data !== undefined && data.domainEdge.source === data.domainEdge.target;
   const isSequenceEdge = sourceHandleId?.startsWith('seq-') === true;
 
+  // During layout transitions (e.g. normal → sequence), the first render may
+  // reference handles that don't exist on the new node type yet. React Flow
+  // falls back to the node center, producing identical source/target coords.
+  // Skip rendering until the next frame delivers the correct handles.
+  if (isSelfLoop && sourceX === targetX && sourceY === targetY) {
+    return null;
+  }
+
   // 1. Compute base label position (before any offset)
   let baseLabelX: number;
   let baseLabelY: number;
-  if (isSequenceEdge && !isSelfLoop) {
+  if (viewOptions.lowPolyMode) {
+    // Low-poly mode: always center the tag on the edge midpoint.
+    // For self-loops, nudge right so the tag doesn't sit on the lifeline.
+    baseLabelX = isSelfLoop ? sourceX + 50 : (sourceX + targetX) / 2;
+    baseLabelY = (sourceY + targetY) / 2;
+  } else if (isSequenceEdge && isSelfLoop) {
+    // Sequence self-loop: use pre-computed label X from layout (midpoint between
+    // this lifeline and the next column) since handle X may not equal the lifeline center.
+    const precomputedX = (data as Record<string, unknown>).seqSelfLoopLabelX as number | undefined;
+    baseLabelX = precomputedX ?? sourceX + 200;
+    baseLabelY = (sourceY + targetY) / 2;
+  } else if (isSequenceEdge) {
     // Sequence mode: straight horizontal line — label at midpoint
     baseLabelX = (sourceX + targetX) / 2;
     baseLabelY = (sourceY + targetY) / 2;
@@ -426,12 +472,19 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     };
   }, []);
 
-  const labelX = baseLabelX + (dragOffset?.x ?? savedOffset?.x ?? 0);
-  const labelY = baseLabelY + (dragOffset?.y ?? savedOffset?.y ?? 0);
+  // Low-poly mode and sequence self-loops use absolute positions — skip saved offsets.
+  const applyOffset = !viewOptions.lowPolyMode && !(isSequenceEdge && isSelfLoop);
+  const labelX = baseLabelX + (applyOffset ? (dragOffset?.x ?? savedOffset?.x ?? 0) : 0);
+  const labelY = baseLabelY + (applyOffset ? (dragOffset?.y ?? savedOffset?.y ?? 0) : 0);
+
+  const cardTransform = 'translate(-50%, -50%) translate(' + String(labelX) + 'px,' + String(labelY) + 'px)';
 
   // 3. Compute edge path routed through the label position
   let edgePath: string;
-  if (isSequenceEdge && !isSelfLoop) {
+  if (isSequenceEdge && isSelfLoop) {
+    // Sequence self-loop: right-ward loop from lifeline to near the card/tag
+    edgePath = sequenceSelfLoopPath(sourceX, sourceY, targetX, targetY, labelX, viewOptions.lowPolyMode);
+  } else if (isSequenceEdge) {
     // Sequence mode: straight horizontal line
     edgePath = `M ${String(sourceX)},${String(sourceY)} L ${String(targetX)},${String(targetY)}`;
   } else if (isSelfLoop) {
@@ -485,7 +538,6 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const edge = data.domainEdge;
   const tag = edgeProtocolTag(edge);
   const protocolColor = edgeProtocolColor(edge);
-  const { options: viewOptions } = useViewOptions();
   const sla = useSla(edge.id);
   const directions = useDirections(edge.id);
   const health = edgeHealth(edge, viewOptions.coloringMode, sla, directions);
@@ -513,7 +565,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
           <div
             style={{
               position: 'absolute',
-              transform: 'translate(-50%, -50%) translate(' + String(labelX) + 'px,' + String(labelY) + 'px)',
+              transform: cardTransform,
               pointerEvents: 'all',
             }}
             className="nodrag nopan"

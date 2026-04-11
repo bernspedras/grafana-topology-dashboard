@@ -111,10 +111,15 @@ function estimateEdgeCardHeight(edge: TopologyEdge): number {
 
 // ─── Data passed to the lifeline node component ─────────────────────────────
 
+/** Vertical handle offset for self-loop source/target (creates visual separation). */
+export const SEQ_SELF_LOOP_Y_OFFSET = 18;
+
 export interface SequenceLifelineData {
   readonly domainNode: TopologyNode;
   readonly sourceOrders: readonly number[];
   readonly targetOrders: readonly number[];
+  /** Orders that are self-loop edges (source === target on this node). */
+  readonly selfLoopOrders: readonly number[];
   /** Maps sequenceOrder → cumulative y-offset (px below the node card). */
   readonly orderToY: Readonly<Record<number, number>>;
   /** Estimated height of THIS node's card (lifeline SVG starts here). */
@@ -165,7 +170,14 @@ export function layoutSequenceDiagram(
   // 3. Build per-node handle information
   const sourceOrdersMap = new Map<string, number[]>();
   const targetOrdersMap = new Map<string, number[]>();
+  const selfLoopOrdersMap = new Map<string, number[]>();
   for (const edge of sortedEdges) {
+    if (edge.source === edge.target) {
+      const selfOrders = selfLoopOrdersMap.get(edge.source) ?? [];
+      selfOrders.push(edge.sequenceOrder);
+      selfLoopOrdersMap.set(edge.source, selfOrders);
+    }
+
     const srcOrders = sourceOrdersMap.get(edge.source) ?? [];
     srcOrders.push(edge.sequenceOrder);
     sourceOrdersMap.set(edge.source, srcOrders);
@@ -191,6 +203,10 @@ export function layoutSequenceDiagram(
   const orderToY: Record<number, number> = {};
   const ELEMENT_GAP = 20; // gap between consecutive cards
 
+  const selfEdgeSet = new Set(
+    sortedEdges.filter((e) => e.source === e.target).map((e) => e.sequenceOrder),
+  );
+
   if (lowPolyMode === true) {
     // Low poly: fixed spacing, cards are tiny tags
     let y = tallestNodeCard + HEADER_GAP;
@@ -205,11 +221,16 @@ export function layoutSequenceDiagram(
 
     for (const edge of sortedEdges) {
       const cardH = estimateEdgeCardHeight(edge);
-      // Handle is at center of card, card top is at (handleY - cardH/2)
-      // So handleY = nextCardTop + cardH/2
-      const handleY = nextCardTop + cardH / 2;
+      const isSelf = selfEdgeSet.has(edge.sequenceOrder);
+      // Self-loop cards are positioned beside the lifeline, not between two.
+      // The card center is at handleY, and the loop path adds vertical offset
+      // above and below, so we must account for that extra height.
+      const effectiveH = isSelf ? cardH + 40 : cardH;
+      // Handle is at center of card, card top is at (handleY - effectiveH/2)
+      // So handleY = nextCardTop + effectiveH/2
+      const handleY = nextCardTop + effectiveH / 2;
       orderToY[edge.sequenceOrder] = handleY;
-      nextCardTop = handleY + cardH / 2 + ELEMENT_GAP;
+      nextCardTop = handleY + effectiveH / 2 + ELEMENT_GAP;
     }
   }
 
@@ -226,6 +247,7 @@ export function layoutSequenceDiagram(
         domainNode,
         sourceOrders: sourceOrdersMap.get(nodeId) ?? [],
         targetOrders: targetOrdersMap.get(nodeId) ?? [],
+        selfLoopOrders: selfLoopOrdersMap.get(nodeId) ?? [],
         orderToY,
         nodeCardHeight: lowPolyMode === true ? LOW_POLY_NODE_HEIGHT : estimateNodeCardHeight(domainNode, collapseMap?.has(nodeId)),
         lifelineHeight,
@@ -246,20 +268,33 @@ export function layoutSequenceDiagram(
       };
     });
 
-  // 7. Build edges
-  const edges: Edge[] = sortedEdges.map((edge): Edge => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: `seq-right-${String(edge.sequenceOrder)}`,
-    targetHandle: `seq-left-${String(edge.sequenceOrder)}`,
-    type: 'topologyEdge',
-    reconnectable: false,
-    animated: edge.animated,
-    style: edgeStrokeStyle(edge, coloringMode, slaMap?.[edge.id]),
-    markerEnd: edgeMarkerEnd(edge, coloringMode, slaMap?.[edge.id]),
-    data: { domainEdge: edge },
-  }));
+  // 7. Build node column index map
+  const nodeColumnIndex = new Map<string, number>();
+  nodeOrder.forEach((id, idx) => { nodeColumnIndex.set(id, idx); });
+
+  // 8. Build edges
+  const edges: Edge[] = sortedEdges.map((edge): Edge => {
+    const isSelf = edge.source === edge.target;
+    // For self-loop edges, compute the label X in flow coordinates:
+    // midpoint between this lifeline and the next column's lifeline.
+    const colIdx = nodeColumnIndex.get(edge.source) ?? 0;
+    const selfLoopLabelX = isSelf
+      ? colIdx * COLUMN_SPACING + SEQ_NODE_WIDTH / 2 + COLUMN_SPACING / 2
+      : undefined;
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: `seq-right-${String(edge.sequenceOrder)}`,
+      targetHandle: `seq-left-${String(edge.sequenceOrder)}`,
+      type: 'topologyEdge',
+      reconnectable: false,
+      animated: edge.animated,
+      style: edgeStrokeStyle(edge, coloringMode, slaMap?.[edge.id]),
+      markerEnd: edgeMarkerEnd(edge, coloringMode, slaMap?.[edge.id]),
+      data: { domainEdge: edge, seqSelfLoopLabelX: selfLoopLabelX },
+    };
+  });
 
   return { nodes, edges };
 }
