@@ -165,6 +165,33 @@ function TopologyPage(): React.JSX.Element {
     [flowRefs, entry, effectiveId, reload],
   );
 
+  const handleSaveEdgeSequenceOrder = useCallback(
+    async (edgeId: string, sequenceOrder: number | undefined): Promise<void> => {
+      if (flowRefs === undefined || entry === undefined) {
+        return;
+      }
+      const clonedRefs = JSON.parse(JSON.stringify(flowRefs)) as Record<string, unknown>;
+      const mutableEdges = clonedRefs.edges as Record<string, unknown>[];
+      const idx = mutableEdges.findIndex((e) => {
+        const hasEdgeId = typeof e.edgeId === 'string';
+        return hasEdgeId ? e.edgeId === edgeId : e.id === edgeId;
+      });
+      if (idx === -1) {
+        return;
+      }
+      if (sequenceOrder !== undefined) {
+        mutableEdges[idx].sequenceOrder = sequenceOrder;
+      } else {
+        delete mutableEdges[idx].sequenceOrder;
+      }
+      const rawFlow = entry.raw as Record<string, unknown>;
+      const updatedFlow = { ...rawFlow, definition: clonedRefs as unknown as TopologyDefinitionRefs };
+      await saveFlow(effectiveId, updatedFlow);
+      reload();
+    },
+    [flowRefs, entry, effectiveId, reload],
+  );
+
   const dataSourceNames = useMemo(
     () => Object.keys(dataSourceMap),
     [dataSourceMap],
@@ -791,7 +818,7 @@ function TopologyPage(): React.JSX.Element {
                     <EntityDatasourceProvider value={entityDefaultDsMap}>
                       <SaveMetricQueryProvider value={handleSaveMetricQuery}>
                         <SaveAllMetricQueriesProvider value={handleSaveAllMetricQueries}>
-                          <FlowDataProvider value={flowRefs !== undefined ? { flowId: effectiveId, flowRefs, nodeTemplates, edgeTemplates, saveFlowOverride: handleSaveFlowOverride } : undefined}>
+                          <FlowDataProvider value={flowRefs !== undefined ? { flowId: effectiveId, flowRefs, nodeTemplates, edgeTemplates, saveFlowOverride: handleSaveFlowOverride, saveEdgeSequenceOrder: handleSaveEdgeSequenceOrder } : undefined}>
                           <DeleteCardProvider value={handleDeleteCard}>
                             <SseRefreshProvider value={0}>
                               <ViewOptionsProvider value={viewOptionsCtx}>

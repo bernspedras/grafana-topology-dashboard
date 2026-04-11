@@ -150,6 +150,7 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
   const [editingSection, setEditingSection] = useState<MetricSection | undefined>(undefined);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sequenceOrderDraft, setSequenceOrderDraft] = useState('');
 
   // ── Compute layered data ──
   // Resolve the flow entry first so inline definitions (which only live in
@@ -191,6 +192,41 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
     }
     return computeLayeredMetrics('edge', template, flowEntry, 0);
   }, [flowData, entityId, entityType]);
+
+  // ── Sequence order (edges only) ──
+  const currentSequenceOrder = useMemo((): number | undefined => {
+    if (entityType !== 'edge' || flowData === undefined) {
+      return undefined;
+    }
+    const edgeEntry = flowData.flowRefs.edges.find((e) =>
+      isEdgeRef(e) ? e.edgeId === entityId : e.id === entityId,
+    );
+    if (edgeEntry === undefined) {
+      return undefined;
+    }
+    return (edgeEntry as unknown as Record<string, unknown>).sequenceOrder as number | undefined;
+  }, [entityType, entityId, flowData]);
+
+  useEffect((): void => {
+    setSequenceOrderDraft(currentSequenceOrder !== undefined ? String(currentSequenceOrder) : '');
+  }, [currentSequenceOrder]);
+
+  const handleSaveSequenceOrder = useCallback(async (): Promise<void> => {
+    if (flowData === undefined) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const trimmed = sequenceOrderDraft.trim();
+      const value = trimmed === '' ? undefined : Number(trimmed);
+      if (value !== undefined && isNaN(value)) {
+        return;
+      }
+      await flowData.saveEdgeSequenceOrder(entityId, value);
+    } finally {
+      setSaving(false);
+    }
+  }, [flowData, entityId, sequenceOrderDraft]);
 
   const sectionGroups = useMemo(() => {
     if (layeredData === undefined) {
@@ -361,6 +397,39 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
 
         {/* Body */}
         <div className={s.body}>
+          {/* Sequence Order (edges only, in edit mode) */}
+          {entityType === 'edge' && editMode && (
+            <div className={s.sequenceOrderRow}>
+              <div className={s.sequenceOrderHeader}>
+                <label className={s.sequenceOrderLabel}>Sequence Order</label>
+                <span className={s.sequenceOrderHint}>
+                  Position in the sequence diagram. Leave empty to remove.
+                </span>
+              </div>
+              <div className={s.sequenceOrderControls}>
+                <input
+                  className={s.sequenceOrderInput}
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={sequenceOrderDraft}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
+                    setSequenceOrderDraft(e.target.value);
+                  }}
+                  placeholder="Not set"
+                />
+                <button
+                  type="button"
+                  className={s.saveButton}
+                  onClick={(): void => { void handleSaveSequenceOrder(); }}
+                  disabled={saving || (sequenceOrderDraft === (currentSequenceOrder !== undefined ? String(currentSequenceOrder) : ''))}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+
           {Array.from(sectionGroups.entries()).map(([section, rows]) => (
             <div key={section ?? '__standard'} className={s.sectionGroup}>
               {section !== undefined && (
@@ -834,6 +903,45 @@ const s = {
     padding: '16px 24px',
     overflowY: 'auto',
     flex: 1,
+  }),
+  sequenceOrderRow: css({
+    borderRadius: '8px',
+    padding: '10px 14px',
+    borderLeft: '3px solid #f59e0b',
+    backgroundColor: 'rgba(245,158,11,0.04)',
+  }),
+  sequenceOrderHeader: css({
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    marginBottom: '8px',
+  }),
+  sequenceOrderLabel: css({
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#e2e4e9',
+  }),
+  sequenceOrderHint: css({
+    fontSize: '11px',
+    color: '#64748b',
+  }),
+  sequenceOrderControls: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  }),
+  sequenceOrderInput: css({
+    width: '100px',
+    borderRadius: '6px',
+    backgroundColor: '#0f172a',
+    padding: '6px 12px',
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    color: '#e2e4e9',
+    border: '1px solid #334155',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+    '&:focus': { borderColor: '#60a5fa' },
   }),
   sectionGroup: css({
     display: 'flex',

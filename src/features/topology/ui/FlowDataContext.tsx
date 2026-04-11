@@ -23,6 +23,11 @@ export interface FlowDataContextValue {
     entityType: 'node' | 'edge',
     patch: FlowOverridePatch,
   ) => Promise<void>;
+  /** Save sequenceOrder on an edge ref (undefined removes it). */
+  readonly saveEdgeSequenceOrder: (
+    edgeId: string,
+    sequenceOrder: number | undefined,
+  ) => Promise<void>;
 }
 
 // ─── React context ──────────────────────────────────────────────────────────
