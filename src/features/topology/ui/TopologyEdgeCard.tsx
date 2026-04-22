@@ -26,6 +26,8 @@ import { useDirections } from './DirectionContext';
 import { PromQLModal } from './PromQLModal';
 import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
+import { EntitySettingsMenu } from './EntitySettingsMenu';
+import { EntityPropertiesModal } from './EntityPropertiesModal';
 import { useTopologyId } from '../application/TopologyIdContext';
 import { useTopologyPositionStore } from '../application/topologyPositionStore';
 import { css } from '@emotion/css';
@@ -393,6 +395,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const selectionKey = topologyId + ':' + edgeId;
 
   const [showQueries, setShowQueries] = useState(false);
+  const [showProperties, setShowProperties] = useState(false);
   const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; weekAgoValue?: number; unit?: string } | undefined>(undefined);
   const [selectedEndpoint, setSelectedEndpoint] = useState((): string => {
     const saved = endpointSelections.get(selectionKey);
@@ -626,17 +629,13 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
             )}
 
             {/* Settings gear */}
-            <button
-              type="button"
+            <EntitySettingsMenu
+              editMode={editMode}
+              onEditProperties={(): void => { setShowProperties(true); }}
+              onEditMetrics={(): void => { setShowQueries(true); }}
+              onViewQueries={(): void => { setShowQueries(true); }}
               className={'edge-settings-btn ' + styles.settingsBtn}
-              onClick={(): void => { setShowQueries(true); }}
-              title="View PromQL queries"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </button>
+            />
 
             {/* Header: protocol tag + health dot (tinted background) */}
             <div
@@ -748,6 +747,15 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
               entityId={edgeId}
               queries={filterEdgeQueries(resolvedQueries, selectedEndpoint)}
               onClose={(): void => { setShowQueries(false); }}
+            />
+          )}
+
+          {/* Entity Properties Modal */}
+          {showProperties && (
+            <EntityPropertiesModal
+              entityId={edgeId}
+              entityType="edge"
+              onClose={(): void => { setShowProperties(false); }}
             />
           )}
 
