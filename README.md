@@ -650,11 +650,11 @@ For contributors and local development:
 
 ```bash
 npm install
-npm run build           # Go backend + frontend -> dist/
+npm run build           # Go backend (linux amd64+arm64) + frontend -> dist/
 npm run server          # docker compose up (Grafana at localhost:3000, login: admin/admin)
 
 npm run dev             # Webpack watch (hot-reload frontend)
-npm run dev:backend     # Build Go backend for macOS (darwin/arm64)
+npm run dev:backend     # Build Go backend for current platform
 npm run test            # Jest frontend tests
 go test ./pkg/...       # Go backend tests
 npm run lint            # ESLint
