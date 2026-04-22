@@ -15,6 +15,12 @@ export interface TopologyLayoutPosition {
   readonly y: number;
 }
 
+export interface SavedViewport {
+  readonly x: number;
+  readonly y: number;
+  readonly zoom: number;
+}
+
 export interface TopologyLayoutHandleOverride {
   readonly sourceHandle: string;
   readonly targetHandle: string;
@@ -58,6 +64,9 @@ interface TopologyPositionState {
   lastSequenceMode: boolean;
   /** Whether the last sequence-mode initialize was in low-poly mode. */
   lastSeqLowPoly: boolean;
+  /** Camera viewports per topology, persisted to localStorage. */
+  viewports: Partial<Record<string, SavedViewport>>;
+  setViewportForTopology: (topologyId: string, viewport: SavedViewport) => void;
   setBundledLayout: (topologyId: string, layout: TopologyLayout) => void;
   initialize: (graph: TopologyGraph, topologyId: string, sequenceMode?: boolean, lowPolyMode?: boolean, collapseMap?: CollapseDbMap) => void;
   setServerLayout: (topologyId: string, serverLayout: TopologyLayout) => void;
@@ -87,6 +96,11 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
       isLayoutDirty: false,
       lastSequenceMode: false,
       lastSeqLowPoly: false,
+      viewports: {},
+
+      setViewportForTopology: (topologyId: string, viewport: SavedViewport): void => {
+        set((state) => ({ viewports: { ...state.viewports, [topologyId]: viewport } }));
+      },
 
       setBundledLayout: (topologyId: string, layout: TopologyLayout): void => {
         set((state) => ({ bundledLayouts: { ...state.bundledLayouts, [topologyId]: layout } }));
@@ -365,22 +379,30 @@ export const useTopologyPositionStore = create<TopologyPositionState>()(
       },
 
       pruneStaleEntries: (knownIds: ReadonlySet<string>): void => {
-        const { perTopology } = get();
+        const { perTopology, viewports } = get();
         const staleKeys = Object.keys(perTopology).filter((id) => !knownIds.has(id));
-        if (staleKeys.length === 0) return;
+        const staleVpKeys = Object.keys(viewports).filter((id) => !knownIds.has(id));
+        if (staleKeys.length === 0 && staleVpKeys.length === 0) return;
         const pruned: TopologyLayoutMap = {};
         for (const [id, layout] of Object.entries(perTopology)) {
           if (knownIds.has(id)) {
             pruned[id] = layout;
           }
         }
-        set({ perTopology: pruned });
+        const prunedVp: Partial<Record<string, SavedViewport>> = {};
+        for (const [id, vp] of Object.entries(viewports)) {
+          if (knownIds.has(id)) {
+            prunedVp[id] = vp;
+          }
+        }
+        set({ perTopology: pruned, viewports: prunedVp });
       },
     }),
     {
       name: 'topology-positions',
       partialize: (state) => ({
         perTopology: state.perTopology,
+        viewports: state.viewports,
         // serverLayouts NOT persisted — always fetched from server
       }),
     },

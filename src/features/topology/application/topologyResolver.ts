@@ -266,7 +266,10 @@ export function resolveTopology(
       if (template === undefined) {
         throw new Error('Edge template not found: ' + entry.edgeId);
       }
-      return resolveEdgeRef(template, entry);
+      // Backwards compat: older edge refs may lack `kind` — fill from template.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime JSON may omit kind
+      const normalizedEntry = { ...entry, kind: entry.kind ?? template.kind };
+      return resolveEdgeRef(template, normalizedEntry);
     }
     // Inline definition — convert template shape to full definition shape
     return edgeTemplateToDefinition(entry);
