@@ -11,6 +11,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,17 +32,21 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
-      - name: Build backend (linux/amd64)
-        run: go run github.com/magefile/mage -v build:linux
+      - name: Build backend (all platforms)
+        run: go run github.com/magefile/mage -v buildAll
 
-      - name: Build backend (linux/arm64)
-        run: go run github.com/magefile/mage -v build:linuxARM64
+      - name: Sign plugin
+        run: npx --yes @grafana/sign-plugin@latest
+
+      - name: Validate plugin
+        run: npx --yes @grafana/plugin-validator@latest -sourceCodeUri "${{ github.server_url }}/${{ github.repository }}" dist/
 
       - name: Package plugin
         run: |
-          PLUGIN_ID=$(jq -r '.id' src/plugin.json)
+          PLUGIN_ID=$(jq -r '.id' dist/plugin.json)
+          VERSION=$(jq -r '.info.version' dist/plugin.json)
           mv dist "$PLUGIN_ID"
-          zip -r "${PLUGIN_ID}.zip" "$PLUGIN_ID"
+          zip -r "${PLUGIN_ID}-${VERSION}.zip" "$PLUGIN_ID"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

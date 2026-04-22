@@ -7,13 +7,23 @@
     "keywords": ["topology", "monitoring", "grafana", "prometheus"],
     "description": "Interactive service topology visualization with live Prometheus metrics",
     "author": {
-      "name": "Bernardo Frankenfeld"
+      "name": "Bernardo Frankenfeld",
+      "url": "https://github.com/bernspedras"
     },
     "logos": {
       "small": "img/logo.svg",
       "large": "img/logo.svg"
     },
-    "screenshots": [],
+    "screenshots": [
+      {
+        "name": "Topology View",
+        "path": "img/screenshot-topology-view.png"
+      },
+      {
+        "name": "View Options",
+        "path": "img/screenshot-view-options.png"
+      }
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%",
     "links": [
