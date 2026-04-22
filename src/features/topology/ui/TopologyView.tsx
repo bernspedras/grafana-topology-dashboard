@@ -5,12 +5,15 @@ import {
   Controls,
   BackgroundVariant,
   Panel,
+  useReactFlow,
+  useNodesInitialized,
 } from '@xyflow/react';
-import type { NodeTypes, EdgeTypes, Node, Edge, Connection } from '@xyflow/react';
+import type { NodeTypes, EdgeTypes, Node, Edge, Connection, Viewport } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { css } from '@emotion/css';
 import type { TopologyGraph, FlowStepNode } from '../domain';
 import { useTopologyFlow } from '../application/useTopologyFlow';
+import { useTopologyPositionStore } from '../application/topologyPositionStore';
 import type { FlowLayout } from '../application/pluginSettings';
 import { TopologyNodeCard } from './TopologyNodeCard';
 import { TopologyFlowCard } from './TopologyFlowCard';
@@ -48,6 +51,8 @@ interface TopologyViewProps {
   onSaveLayout?: (topologyId: string, layout: FlowLayout) => Promise<boolean>;
   rawFlowJson?: unknown;
   onOpenTemplatesManager?: () => void;
+  onRenameTopology?: () => void;
+  onDeleteTopology?: () => void;
 }
 
 function useToast(): { visible: boolean; message: string; show: (msg: string) => void } {
@@ -274,9 +279,11 @@ function LayoutMenu({ canSave, canCopy, onSaveLayout, onCopyLayout }: LayoutMenu
 
 interface ManageMenuProps {
   readonly onOpenTemplatesManager: () => void;
+  readonly onRenameTopology?: () => void;
+  readonly onDeleteTopology?: () => void;
 }
 
-function ManageMenu({ onOpenTemplatesManager }: ManageMenuProps): React.JSX.Element {
+function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology }: ManageMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -311,6 +318,51 @@ function ManageMenu({ onOpenTemplatesManager }: ManageMenuProps): React.JSX.Elem
       </button>
       {open && (
         <div className={manageMenuStyles.menu}>
+          {(onRenameTopology !== undefined || onDeleteTopology !== undefined) && (
+            <>
+              <div className={manageMenuStyles.menuHeader}>Topology</div>
+              {onRenameTopology !== undefined && (
+                <button
+                  type="button"
+                  className={manageMenuStyles.menuItem}
+                  onClick={(): void => {
+                    onRenameTopology();
+                    setOpen(false);
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                  </svg>
+                  <span className={manageMenuStyles.menuItemContent}>
+                    <span className={manageMenuStyles.menuItemLabel}>Rename topology</span>
+                    <span className={manageMenuStyles.menuItemDesc}>Change the topology name</span>
+                  </span>
+                </button>
+              )}
+              {onDeleteTopology !== undefined && (
+                <button
+                  type="button"
+                  className={manageMenuStyles.menuItemDanger}
+                  onClick={(): void => {
+                    onDeleteTopology();
+                    setOpen(false);
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
+                  <span className={manageMenuStyles.menuItemContent}>
+                    <span className={manageMenuStyles.menuItemLabel}>Delete topology</span>
+                    <span className={manageMenuStyles.menuItemDesc}>Permanently remove this topology</span>
+                  </span>
+                </button>
+              )}
+              <div className={manageMenuStyles.menuDivider} />
+            </>
+          )}
           <button
             type="button"
             className={manageMenuStyles.menuItem}
@@ -422,7 +474,34 @@ function SettingsMenu({ canShowSequence }: SettingsMenuProps): React.JSX.Element
   );
 }
 
-export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson, onOpenTemplatesManager }: TopologyViewProps): React.JSX.Element {
+// ─── Viewport Restorer (child of ReactFlow) ───────────────────────────────
+
+/** Restores the saved camera viewport when the topology changes. */
+function ViewportRestorer(): null {
+  const { setViewport } = useReactFlow();
+  const topologyId = useTopologyId();
+  const nodesReady = useNodesInitialized();
+  const appliedRef = useRef('');
+
+  useEffect(() => {
+    if (!nodesReady) return;
+    if (appliedRef.current === topologyId) return;
+    appliedRef.current = topologyId;
+
+    const saved = useTopologyPositionStore.getState().viewports[topologyId];
+    if (saved === undefined) return; // fitView prop handles the default
+
+    // Run after fitView's frame to override it
+    const frame = requestAnimationFrame(() => {
+      void setViewport(saved);
+    });
+    return (): void => { cancelAnimationFrame(frame); };
+  }, [topologyId, nodesReady, setViewport]);
+
+  return null;
+}
+
+export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson, onOpenTemplatesManager, onRenameTopology, onDeleteTopology }: TopologyViewProps): React.JSX.Element {
   const { options: viewOpts } = useViewOptions();
   const slaMap = useSlaMap();
   const dirMap = useDirectionMap();
@@ -479,6 +558,10 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
   const handleConnect = useCallback((connection: Connection): void => {
     onAddEdge?.(connection.source, connection.target);
   }, [onAddEdge]);
+
+  const handleMoveEnd = useCallback((_event: MouseEvent | TouchEvent | null, viewport: Viewport): void => {
+    useTopologyPositionStore.getState().setViewportForTopology(topologyId, viewport);
+  }, [topologyId]);
 
   const activeSequenceMode = sequenceMode && canShowSequence;
   const draggable = isEditing === true && !activeSequenceMode;
@@ -538,8 +621,10 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
         edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
+        onMoveEnd={handleMoveEnd}
         proOptions={{ hideAttribution: true }}
       >
+        <ViewportRestorer />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
         <Controls />
         <Panel position="top-right">
@@ -563,7 +648,11 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
               <AddMenu onSelectNode={onAddNode} onAddFlowStep={onAddFlowStep} />
             )}
             {isEditing === true && onOpenTemplatesManager !== undefined && (
-              <ManageMenu onOpenTemplatesManager={onOpenTemplatesManager} />
+              <ManageMenu
+                onOpenTemplatesManager={onOpenTemplatesManager}
+                onRenameTopology={onRenameTopology}
+                onDeleteTopology={onDeleteTopology}
+              />
             )}
             {isEditing === true && (
               <LayoutMenu
@@ -891,6 +980,14 @@ const manageMenuStyles = {
     padding: '4px 0',
     zIndex: 50,
   }),
+  menuHeader: css({
+    padding: '8px 12px 4px',
+    fontSize: '11px',
+    fontWeight: 600,
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  }),
   menuItem: css({
     display: 'flex',
     alignItems: 'center',
@@ -905,6 +1002,25 @@ const manageMenuStyles = {
     textAlign: 'left',
     transition: 'background-color 100ms',
     '&:hover': { backgroundColor: '#334155' },
+  }),
+  menuItemDanger: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '13px',
+    color: '#f87171',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'background-color 100ms',
+    '&:hover': { backgroundColor: 'rgba(127,29,29,0.3)' },
+  }),
+  menuDivider: css({
+    margin: '4px 0',
+    borderTop: '1px solid #334155',
   }),
   menuItemContent: css({
     display: 'flex',

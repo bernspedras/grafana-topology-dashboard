@@ -9,7 +9,7 @@ import { useGrafanaMetrics } from '../features/topology/application/useGrafanaMe
 import { useTopologyPositionStore } from '../features/topology/application/topologyPositionStore';
 import { buildAllQueryMaps } from '../features/topology/application/metricQueriesMap';
 import { buildMetricDatasourceMap, buildEntityDefaultDatasourceMap } from '../features/topology/application/metricDatasourceMap';
-import { saveNodeTemplate, saveEdgeTemplate, saveFlow } from '../features/topology/application/topologyApi';
+import { saveNodeTemplate, saveEdgeTemplate, saveFlow, createFlow, deleteFlow } from '../features/topology/application/topologyApi';
 import type { NodeTemplate, TopologyDefinitionRefs } from '../features/topology/application/topologyDefinition';
 import { applyFlowOverridePatch } from '../features/topology/application/flowOverridePatch';
 import type { FlowOverridePatch } from '../features/topology/application/flowOverridePatch';
@@ -20,6 +20,9 @@ import type { ExistingTemplate, NodeTemplatePayload } from '../features/topology
 import { AddEdgeModal } from '../features/topology/ui/AddEdgeModal';
 import type { ExistingEdgeTemplate, EdgeTemplatePayload } from '../features/topology/ui/AddEdgeModal';
 import { TemplatesManagerModal } from '../features/topology/ui/TemplatesManagerModal';
+import { CreateTopologyModal } from '../features/topology/ui/CreateTopologyModal';
+import { RenameTopologyModal } from '../features/topology/ui/RenameTopologyModal';
+import { DeleteTopologyConfirmModal } from '../features/topology/ui/DeleteTopologyConfirmModal';
 import { TopologyIdProvider } from '../features/topology/application/TopologyIdContext';
 import { PromqlQueriesProvider } from '../features/topology/ui/PromqlQueriesContext';
 import { RawPromqlQueriesProvider } from '../features/topology/ui/RawPromqlQueriesContext';
@@ -44,6 +47,7 @@ import type { MetricChange } from '../features/topology/ui/SaveAllMetricQueriesC
 import { FlowDataProvider } from '../features/topology/ui/FlowDataContext';
 
 const POLL_INTERVAL_MS = 30000;
+const SELECTED_TOPOLOGY_KEY = 'topology-selected-id';
 
 interface RefreshStatusProps {
   readonly lastRefreshAt: number | undefined;
@@ -115,7 +119,9 @@ function TopologyPage(): React.JSX.Element {
   const { loading: topologyLoading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, slaDefaultsRaw, saveTopologyLayout, reload } = useTopologyData();
   const canEdit = canEditTopology(editAllowList);
 
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState((): string => {
+    try { return localStorage.getItem(SELECTED_TOPOLOGY_KEY) ?? ''; } catch { return ''; }
+  });
   const [isEditing, setIsEditing] = useState(false);
   const toggleEditMode = useCallback((): void => {
     setIsEditing((prev) => {
@@ -131,6 +137,12 @@ function TopologyPage(): React.JSX.Element {
   const effectiveId = selectedId !== '' && topologies.some((t) => t.id === selectedId)
     ? selectedId
     : topologies[0]?.id ?? '';
+
+  // Persist selected topology to localStorage
+  useEffect(() => {
+    if (effectiveId === '') return;
+    try { localStorage.setItem(SELECTED_TOPOLOGY_KEY, effectiveId); } catch { /* ignore */ }
+  }, [effectiveId]);
 
   const entry = useMemo(
     () => topologies.find((t) => t.id === effectiveId),
@@ -205,6 +217,117 @@ function TopologyPage(): React.JSX.Element {
   const handleCloseTemplatesManager = useCallback((): void => {
     setTemplatesManagerOpen(false);
   }, []);
+
+  // ── Create topology modal state ──
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | undefined>(undefined);
+
+  const handleOpenCreateModal = useCallback((): void => {
+    setCreateError(undefined);
+    setCreateModalOpen(true);
+  }, []);
+
+  const handleCloseCreateModal = useCallback((): void => {
+    setCreateModalOpen(false);
+    setCreateError(undefined);
+  }, []);
+
+  const handleCreateTopology = useCallback((name: string): void => {
+    setCreateSaving(true);
+    setCreateError(undefined);
+
+    const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const id = slug !== '' ? slug : 'topology-' + String(Date.now());
+    const newFlow = { id, name, definition: { nodes: [] as unknown[], edges: [] as unknown[] } };
+
+    void (async (): Promise<void> => {
+      try {
+        const createdId = await createFlow(newFlow);
+        setCreateModalOpen(false);
+        reload();
+        setSelectedId(createdId);
+      } catch (err) {
+        setCreateError(err instanceof Error ? err.message : 'Failed to create topology');
+      } finally {
+        setCreateSaving(false);
+      }
+    })();
+  }, [reload]);
+
+  // ── Rename topology modal state ──
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | undefined>(undefined);
+
+  const handleOpenRenameModal = useCallback((): void => {
+    setRenameError(undefined);
+    setRenameModalOpen(true);
+  }, []);
+
+  const handleCloseRenameModal = useCallback((): void => {
+    setRenameModalOpen(false);
+    setRenameError(undefined);
+  }, []);
+
+  const handleRenameTopology = useCallback((newName: string): void => {
+    if (entry === undefined) return;
+    setRenameSaving(true);
+    setRenameError(undefined);
+
+    void (async (): Promise<void> => {
+      try {
+        const rawFlow = entry.raw as Record<string, unknown>;
+        const updatedFlow = { ...rawFlow, name: newName };
+        await saveFlow(effectiveId, updatedFlow);
+        setRenameModalOpen(false);
+        reload();
+      } catch (err) {
+        setRenameError(err instanceof Error ? err.message : 'Failed to rename topology');
+      } finally {
+        setRenameSaving(false);
+      }
+    })();
+  }, [entry, effectiveId, reload]);
+
+  // ── Delete topology modal state ──
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
+
+  const handleOpenDeleteModal = useCallback((): void => {
+    setDeleteError(undefined);
+    setDeleteModalOpen(true);
+  }, []);
+
+  const handleCloseDeleteModal = useCallback((): void => {
+    setDeleteModalOpen(false);
+    setDeleteError(undefined);
+  }, []);
+
+  const handleDeleteTopology = useCallback((): void => {
+    setDeleteInProgress(true);
+    setDeleteError(undefined);
+
+    void (async (): Promise<void> => {
+      try {
+        await deleteFlow(effectiveId);
+        setDeleteModalOpen(false);
+        setSelectedId('');
+        setIsEditing(false);
+        reload();
+      } catch (err) {
+        setDeleteError(err instanceof Error ? err.message : 'Failed to delete topology');
+      } finally {
+        setDeleteInProgress(false);
+      }
+    })();
+  }, [effectiveId, reload]);
+
+  const existingTopologyNames = useMemo(
+    () => topologies.map((t) => t.name),
+    [topologies],
+  );
 
   // ── Add node modal state ──
   const [addNodeKind, setAddNodeKind] = useState<AddableNodeKind | undefined>(undefined);
@@ -336,7 +459,7 @@ function TopologyPage(): React.JSX.Element {
   }, []);
 
   /** Add an edgeRef to the current flow and save it. */
-  const addEdgeRefToFlow = useCallback(async (edgeId: string): Promise<void> => {
+  const addEdgeRefToFlow = useCallback(async (edgeId: string, kind: string): Promise<void> => {
     const currentEntry = topologies.find((t) => t.id === effectiveId);
     if (currentEntry === undefined) {
       return;
@@ -348,7 +471,7 @@ function TopologyPage(): React.JSX.Element {
       ...rawFlow,
       definition: {
         ...definition,
-        edges: [...existingEdges, { edgeId }],
+        edges: [...existingEdges, { edgeId, kind }],
       },
     };
     await saveFlow(effectiveId, updatedFlow);
@@ -361,7 +484,11 @@ function TopologyPage(): React.JSX.Element {
 
     void (async (): Promise<void> => {
       try {
-        await addEdgeRefToFlow(templateId);
+        const tmpl = edgeTemplates.find((t) => t.id === templateId);
+        if (tmpl === undefined) {
+          throw new Error('Edge template not found: ' + templateId);
+        }
+        await addEdgeRefToFlow(templateId, tmpl.kind);
         setPendingConnection(undefined);
         reload();
       } catch (err) {
@@ -370,7 +497,7 @@ function TopologyPage(): React.JSX.Element {
         setAddEdgeSaving(false);
       }
     })();
-  }, [addEdgeRefToFlow, reload]);
+  }, [addEdgeRefToFlow, edgeTemplates, reload]);
 
   /** User filled in the manual edge form and clicked Create. */
   const handleCreateEdge = useCallback((template: EdgeTemplatePayload, saveAsTemplateToo: boolean): void => {
@@ -381,7 +508,7 @@ function TopologyPage(): React.JSX.Element {
       try {
         if (saveAsTemplateToo) {
           await saveEdgeTemplate(template.id, template);
-          await addEdgeRefToFlow(template.id);
+          await addEdgeRefToFlow(template.id, template.kind);
         } else {
           await addInlineEntryToFlow('edges', template);
         }
@@ -787,7 +914,28 @@ function TopologyPage(): React.JSX.Element {
   if (topologies.length === 0) {
     return (
       <div className={styles.container}>
-        <p className={styles.error}>No topologies configured. Check plugin settings.</p>
+        <div className={styles.toolbar}>
+          <label className={styles.label}>Topology:</label>
+          {canEdit && (
+            <button type="button" onClick={handleOpenCreateModal} className={styles.newTopologyButton} title="Create new topology">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New
+            </button>
+          )}
+        </div>
+        <p className={styles.emptyMessage}>No topologies configured. {canEdit ? 'Create one to get started.' : 'Check plugin settings.'}</p>
+        {createModalOpen && (
+          <CreateTopologyModal
+            existingNames={existingTopologyNames}
+            onClose={handleCloseCreateModal}
+            onConfirm={handleCreateTopology}
+            saving={createSaving}
+            error={createError}
+          />
+        )}
       </div>
     );
   }
@@ -804,6 +952,15 @@ function TopologyPage(): React.JSX.Element {
           isClearable={false}
           width={40}
         />
+        {canEdit && (
+          <button type="button" onClick={handleOpenCreateModal} className={styles.newTopologyButton} title="Create new topology">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New
+          </button>
+        )}
         <RefreshStatus lastRefreshAt={lastRefreshAt} pollIntervalMs={POLL_INTERVAL_MS} loading={metricsLoading} />
         {error !== undefined && <span className={styles.error}>{error}</span>}
       </div>
@@ -843,6 +1000,8 @@ function TopologyPage(): React.JSX.Element {
                                     onSaveLayout={saveTopologyLayout}
                                     rawFlowJson={entry?.raw}
                                     onOpenTemplatesManager={handleOpenTemplatesManager}
+                                    onRenameTopology={handleOpenRenameModal}
+                                    onDeleteTopology={handleOpenDeleteModal}
                                   />
                                 </div>
                               </DirectionProvider>
@@ -897,6 +1056,34 @@ function TopologyPage(): React.JSX.Element {
           onReload={reload}
         />
       )}
+      {createModalOpen && (
+        <CreateTopologyModal
+          existingNames={existingTopologyNames}
+          onClose={handleCloseCreateModal}
+          onConfirm={handleCreateTopology}
+          saving={createSaving}
+          error={createError}
+        />
+      )}
+      {renameModalOpen && entry !== undefined && (
+        <RenameTopologyModal
+          currentName={entry.name}
+          existingNames={existingTopologyNames}
+          onClose={handleCloseRenameModal}
+          onConfirm={handleRenameTopology}
+          saving={renameSaving}
+          error={renameError}
+        />
+      )}
+      {deleteModalOpen && entry !== undefined && (
+        <DeleteTopologyConfirmModal
+          topologyName={entry.name}
+          onClose={handleCloseDeleteModal}
+          onConfirm={handleDeleteTopology}
+          deleting={deleteInProgress}
+          error={deleteError}
+        />
+      )}
     </div>
   );
 }
@@ -947,6 +1134,27 @@ const getStyles = (theme: GrafanaTheme2): Record<string, string> => ({
   error: css({
     color: theme.colors.error.text,
     fontSize: theme.typography.bodySmall.fontSize,
+  }),
+  emptyMessage: css({
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.body.fontSize,
+    textAlign: 'center',
+    marginTop: theme.spacing(4),
+  }),
+  newTopologyButton: css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    borderRadius: theme.shape.radius.default,
+    backgroundColor: theme.colors.primary.main,
+    padding: theme.spacing(0.5, 1.5),
+    fontSize: theme.typography.bodySmall.fontSize,
+    fontWeight: 500,
+    color: theme.colors.primary.contrastText,
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'background-color 150ms',
+    '&:hover': { backgroundColor: theme.colors.primary.shade },
   }),
   graphArea: css({
     flex: 1,
