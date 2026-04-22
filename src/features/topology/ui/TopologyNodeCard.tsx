@@ -22,6 +22,8 @@ import { PromQLModal } from './PromQLModal';
 import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
 import { PodsChartModal } from './PodsChartModal';
+import { EntitySettingsMenu } from './EntitySettingsMenu';
+import { EntityPropertiesModal } from './EntityPropertiesModal';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -148,6 +150,7 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const [selectedDeployment, setSelectedDeployment] = useState(currentDeployment);
   useEffect(() => { setSelectedDeployment(currentDeployment); }, [currentDeployment]);
   const [showQueries, setShowQueries] = useState(false);
+  const [showProperties, setShowProperties] = useState(false);
   const [chartMetric, setChartMetric] = useState<{ key: string; label: string; description: string | undefined; entityId?: string; entityType?: 'node' | 'edge'; weekAgoValue?: number; unit?: string } | undefined>(undefined);
   const resolvedQueries = usePromqlQueries(node.id);
   const typeTag = nodeTypeTag(node);
@@ -232,17 +235,13 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
         style={{ borderLeft: '4px solid ' + borderColor }}
       >
         {/* Settings gear */}
-        <button
-          type="button"
-          className={'nodrag ' + styles.settingsButton}
-          onClick={(): void => { setShowQueries(true); }}
-          title="View PromQL queries"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </button>
+        <EntitySettingsMenu
+          editMode={editMode}
+          onEditProperties={(): void => { setShowProperties(true); }}
+          onEditMetrics={(): void => { setShowQueries(true); }}
+          onViewQueries={(): void => { setShowQueries(true); }}
+          className={styles.settingsButton}
+        />
 
         {/* Header */}
         <div className={styles.header}>
@@ -421,6 +420,15 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
           entityId={node.id}
           queries={filterNodeQueries(resolvedQueries, selectedDeployment)}
           onClose={(): void => { setShowQueries(false); }}
+        />
+      )}
+
+      {/* Entity Properties Modal */}
+      {showProperties && (
+        <EntityPropertiesModal
+          entityId={node.id}
+          entityType="node"
+          onClose={(): void => { setShowProperties(false); }}
         />
       )}
 

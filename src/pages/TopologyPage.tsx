@@ -45,6 +45,9 @@ import { DeleteCardProvider } from '../features/topology/ui/DeleteCardContext';
 import { SaveAllMetricQueriesProvider } from '../features/topology/ui/SaveAllMetricQueriesContext';
 import type { MetricChange } from '../features/topology/ui/SaveAllMetricQueriesContext';
 import { FlowDataProvider } from '../features/topology/ui/FlowDataContext';
+import { SaveEntityPropertiesProvider } from '../features/topology/ui/SaveEntityPropertiesContext';
+import type { EntityPropertySave } from '../features/topology/ui/SaveEntityPropertiesContext';
+import { applyPropertyPatchToFlowRefs } from '../features/topology/application/applyPropertyPatch';
 
 const POLL_INTERVAL_MS = 30000;
 const SELECTED_TOPOLOGY_KEY = 'topology-selected-id';
@@ -903,6 +906,50 @@ function TopologyPage(): React.JSX.Element {
     }
   }, [nodeTemplates, edgeTemplates, reload]);
 
+  /** Save entity property edits (ref overrides + template updates + inline patches). */
+  const handleSaveEntityProperties = useCallback(async (save: EntityPropertySave): Promise<void> => {
+    if (flowRefs === undefined || entry === undefined) {
+      return;
+    }
+    const rawFlow = entry.raw as Record<string, unknown>;
+
+    // 1. Inline patch — modify the inline entry directly in the flow
+    if (save.inlinePatch !== undefined) {
+      const updatedRefs = applyPropertyPatchToFlowRefs(flowRefs, save.entityId, save.entityType, save.inlinePatch);
+      const updatedFlow = { ...rawFlow, definition: updatedRefs };
+      await saveFlow(effectiveId, updatedFlow);
+    }
+
+    // 2. Ref patch — set overridable fields on the flow ref entry
+    if (save.refPatch !== undefined) {
+      const updatedRefs = applyPropertyPatchToFlowRefs(flowRefs, save.entityId, save.entityType, save.refPatch);
+      const updatedFlow = { ...rawFlow, definition: updatedRefs };
+      await saveFlow(effectiveId, updatedFlow);
+    }
+
+    // 3. Template patch — save structural fields to the shared template
+    if (save.templatePatch !== undefined) {
+      const deepClone = (obj: unknown): Record<string, unknown> =>
+        JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
+
+      if (save.entityType === 'node') {
+        const template = nodeTemplates.find((t) => t.id === save.entityId);
+        if (template !== undefined) {
+          const updated = { ...deepClone(template), ...save.templatePatch };
+          await saveNodeTemplate(save.entityId, updated);
+        }
+      } else {
+        const template = edgeTemplates.find((t) => t.id === save.entityId);
+        if (template !== undefined) {
+          const updated = { ...deepClone(template), ...save.templatePatch };
+          await saveEdgeTemplate(save.entityId, updated);
+        }
+      }
+    }
+
+    reload();
+  }, [flowRefs, entry, effectiveId, nodeTemplates, edgeTemplates, reload]);
+
   if (topologyLoading) {
     return (
       <div className={styles.container}>
@@ -976,6 +1023,7 @@ function TopologyPage(): React.JSX.Element {
                       <SaveMetricQueryProvider value={handleSaveMetricQuery}>
                         <SaveAllMetricQueriesProvider value={handleSaveAllMetricQueries}>
                           <FlowDataProvider value={flowRefs !== undefined ? { flowId: effectiveId, flowRefs, nodeTemplates, edgeTemplates, saveFlowOverride: handleSaveFlowOverride, saveEdgeSequenceOrder: handleSaveEdgeSequenceOrder } : undefined}>
+                          <SaveEntityPropertiesProvider value={handleSaveEntityProperties}>
                           <DeleteCardProvider value={handleDeleteCard}>
                             <SseRefreshProvider value={0}>
                               <ViewOptionsProvider value={viewOptionsCtx}>
@@ -1009,6 +1057,7 @@ function TopologyPage(): React.JSX.Element {
                               </ViewOptionsProvider>
                             </SseRefreshProvider>
                           </DeleteCardProvider>
+                          </SaveEntityPropertiesProvider>
                           </FlowDataProvider>
                         </SaveAllMetricQueriesProvider>
                       </SaveMetricQueryProvider>
