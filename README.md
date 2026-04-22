@@ -2,23 +2,28 @@
 
 Grafana app plugin for interactive service topology visualization with live Prometheus metrics.
 
-Render a graph of your services, databases, message brokers, and external systems — with real-time metrics on every node and edge. Define topologies as JSON, point them at your Prometheus datasources, and get a live health dashboard out of the box.
+Render a graph of your services, databases, message brokers, and external systems — with real-time metrics on every node and edge. Define topologies as JSON or build them directly in the UI, point them at your Prometheus datasources, and get a live health dashboard out of the box.
+
+![Topology View](src/img/screenshot-topology-view.png)
 
 ## Features
 
 - **Interactive graph** of nodes (EKS services, EC2 instances, databases, external systems) and edges (HTTP, gRPC, Kafka, AMQP, TCP)
 - **Live metrics** on nodes (CPU, memory, replicas) and edges (RPS, latency P95, error rate, consumer lag, etc.)
+- **Full topology CRUD** — create, rename, and delete topologies directly from the UI
+- **Edit mode** — add nodes, edges, and flow steps; edit properties and metrics; drag to reposition
 - **SLA thresholds** — per-metric warning/critical thresholds with color-coded health status
 - **Week-ago baseline comparison** — detect metric regressions by comparing to the same time last week
 - **Reusable templates** — define node/edge templates once, reference them across multiple topologies with overrides
 - **Flow steps** — annotate topologies with numbered business flow steps and descriptions
-- **Low Poly mode** — simplified rendering for large topologies or low-resource environments
-- **Edit mode** — create and modify topologies directly in the UI (permission-controlled)
 - **Bulk import/export** — upload or download all topology data as a ZIP file
 - **Go backend** — single POST fans out all PromQL queries with 50 concurrent goroutines, deduplicates identical queries, and caches baseline data
 - **Custom metrics** — add arbitrary PromQL queries to any node or edge beyond the built-in metric slots
 - **Per-deployment and per-endpoint drill-down** — for EKS services with multiple deployments or HTTP edges with multiple endpoints
 - **Range query charts** — click any metric to see a time-series chart with configurable time windows
+- **Low Poly mode** — simplified rendering for large topologies or low-resource environments
+
+![View Options](src/img/screenshot-view-options.png)
 
 ## Requirements
 
@@ -33,15 +38,21 @@ Install from the [Grafana plugin catalog](https://grafana.com/grafana/plugins/) 
 grafana-cli plugins install bernspedras-topology-app
 ```
 
+After installing, enable the plugin at **Administration > Plugins > Topology Dashboard**.
+
 ## Quick start
 
-```bash
-npm install
-npm run build       # Builds Go backend + frontend → dist/
-npm run server      # Starts Grafana at http://localhost:3000 (admin/admin)
-```
+1. **Configure datasources** — go to **Plugins > Topology Dashboard > Configuration** (requires Admin role). Under **Datasource mapping**, map at least one logical datasource name to a Grafana Prometheus datasource UID.
 
-Then navigate to **Plugins > Topology Dashboard > Configuration** to set up your datasources and create your first topology.
+2. **Set up the service account token** — the Go backend needs a token to query Prometheus. Go to **Administration > Service accounts**, create one with **Viewer** role, generate a token, and paste it into the plugin config page under **Service Account Token**.
+
+3. **Create your first topology** — navigate to **Topology Dashboard** in the side menu. Click **+ New** next to the topology selector to create an empty topology.
+
+4. **Add nodes and edges** — click **Edit Mode**, then use **+ Add** to add nodes (EKS services, EC2 instances, databases, external systems). Connect them by adding edges with the appropriate protocol type (HTTP, gRPC, AMQP, Kafka, TCP).
+
+5. **Configure metrics** — click the gear icon on any node or edge card to edit its properties (label, datasource, namespace, etc.) or PromQL metric queries.
+
+6. **Save layout** — drag nodes to arrange them, then click **Layout** to persist positions.
 
 ---
 
@@ -89,11 +100,11 @@ Email matching is case-insensitive and whitespace is trimmed.
 Topologies are defined as JSON files. The system uses a **template + reference** pattern:
 
 ```
-templates/nodes/    ← Reusable node definitions (one JSON file each)
-templates/edges/    ← Reusable edge definitions (one JSON file each)
-flows/              ← Topologies that reference templates and add overrides
-datasources.json    ← Logical datasource name list
-sla-defaults.json   ← Default SLA thresholds (optional)
+templates/nodes/    <- Reusable node definitions (one JSON file each)
+templates/edges/    <- Reusable edge definitions (one JSON file each)
+flows/              <- Topologies that reference templates and add overrides
+datasources.json    <- Logical datasource name list
+sla-defaults.json   <- Default SLA thresholds (optional)
 ```
 
 ### How templates and flows work
@@ -103,26 +114,26 @@ sla-defaults.json   ← Default SLA thresholds (optional)
 **Flows** (topologies) are the actual graphs. A flow references templates by ID and can optionally override any field. This lets you define a service template once and reuse it across multiple topologies with different configurations.
 
 ```
-┌─────────────────────┐     ┌─────────────────────┐
-│   Node Template     │     │   Edge Template      │
-│   "order-service"   │     │   "order--db"        │
-│                     │     │                      │
-│   kind: eks-service │     │   kind: tcp-db       │
-│   metrics: { ... }  │     │   metrics: { ... }   │
-└────────┬────────────┘     └────────┬─────────────┘
-         │  referenced by                │  referenced by
-         ▼                               ▼
-┌──────────────────────────────────────────────────┐
-│   Flow "checkout-flow"                           │
-│                                                  │
-│   nodes:                                         │
-│     - { nodeId: "order-service" }          ← use as-is
-│     - { nodeId: "order-service",           ← with overrides
-│         usedDeployment: "order-api-v2",          │
-│         metrics: { cpu: { sla: { warning: 80 }}}}│
-│   edges:                                         │
-│     - { edgeId: "order--db", kind: "tcp-db" }    │
-└──────────────────────────────────────────────────┘
++---------------------+     +---------------------+
+|   Node Template     |     |   Edge Template      |
+|   "order-service"   |     |   "order--db"        |
+|                     |     |                      |
+|   kind: eks-service |     |   kind: tcp-db       |
+|   metrics: { ... }  |     |   metrics: { ... }   |
++--------+------------+     +--------+-------------+
+         |  referenced by                |  referenced by
+         v                               v
++--------------------------------------------------+
+|   Flow "checkout-flow"                           |
+|                                                  |
+|   nodes:                                         |
+|     - { nodeId: "order-service" }          <- use as-is
+|     - { nodeId: "order-service",           <- with overrides
+|         usedDeployment: "order-api-v2",          |
+|         metrics: { cpu: { sla: { warning: 80 }}}}|
+|   edges:                                         |
+|     - { edgeId: "order--db", kind: "tcp-db" }    |
++--------------------------------------------------+
 ```
 
 **Merge behavior**: When a flow references a template with overrides:
@@ -518,17 +529,11 @@ Access these from the settings menu on the topology page:
 
 ## Managing topology data
 
-### Via the config page (UI)
+### Via the topology page (UI)
 
-The plugin config page (**Plugins > Topology Dashboard > Configuration**) includes editors for:
-
-- **Flows** — create, edit, and delete topology flows
-- **Node templates** — create, edit, and delete reusable node templates
-- **Edge templates** — create, edit, and delete reusable edge templates
-- **Datasources** — configure the logical datasource list
-- **SLA defaults** — set global SLA thresholds
-
-Each section has a JSON code editor with line numbers and validation.
+- **Create** — click **+ New** next to the topology selector to create a new topology
+- **Rename** — open the **Manage** menu and select **Rename**
+- **Delete** — open the **Manage** menu and select **Delete**
 
 ### Via edit mode (topology page)
 
@@ -536,10 +541,23 @@ When edit mode is enabled on the topology page:
 
 - **Add nodes** — click the add menu to create nodes (EKS, EC2, Database, External) from templates or inline
 - **Add edges** — draw connections between nodes and configure the edge type
+- **Edit properties** — click the gear icon on any card and select "Edit Properties" to change label, datasource, namespace, and other fields
+- **Edit metrics** — click the gear icon and select "Edit Metrics" to configure PromQL queries, units, directions, and SLA thresholds
 - **Add flow steps** — annotate the graph with numbered steps
 - **Drag nodes** — reposition nodes on the canvas
-- **Edit metrics** — click a metric to edit its PromQL query, unit, direction, or SLA thresholds
 - **Save layout** — persist node positions and edge handle overrides
+
+### Via the config page
+
+The plugin config page (**Plugins > Topology Dashboard > Configuration**) includes editors for:
+
+- **Flows** — edit topology flow JSON directly
+- **Node templates** — create, edit, and delete reusable node templates
+- **Edge templates** — create, edit, and delete reusable edge templates
+- **Datasources** — configure the logical datasource list
+- **SLA defaults** — set global SLA thresholds
+
+Each section has a JSON code editor with line numbers and validation.
 
 ### Bulk import/export (ZIP)
 
@@ -558,7 +576,7 @@ sla-defaults.json
 
 ### Via REST API
 
-The Go backend exposes a full CRUD REST API. All routes are prefixed with `/api/plugins/bernspedras-topology-dashboard-app/resources/`.
+The Go backend exposes a full CRUD REST API. All routes are prefixed with `/api/plugins/bernspedras-topology-app/resources/`.
 
 **Read-only endpoints** (any authenticated user):
 
@@ -603,20 +621,20 @@ Topology data is stored as JSON files on the server filesystem. The directory is
 
 ```
 Browser                              Go Backend (gRPC subprocess)
-   │                                        │
-   │  POST /resources/metrics               │
-   │  { queries, dataSourceMap }            │
-   │ ────────────────────────────►          │
-   │                                        │── 50 concurrent goroutines
-   │                                        │──► Prometheus (via Grafana proxy)
-   │   { results, baselineResults }         │
-   │ ◄────────────────────────────          │
+   |                                        |
+   |  POST /resources/metrics               |
+   |  { queries, dataSourceMap }            |
+   | ---------------------------------------->
+   |                                        |-- 50 concurrent goroutines
+   |                                        |---> Prometheus (via Grafana proxy)
+   |   { results, baselineResults }         |
+   | <----------------------------------------
 ```
 
 ### Query flow
 
 1. Frontend resolves topology JSON (templates + refs) into a full `TopologyDefinition`
-2. `buildGroupedQueryMaps()` creates a map of datasource → query key → PromQL
+2. `buildGroupedQueryMaps()` creates a map of datasource -> query key -> PromQL
 3. Frontend sends a single POST to the Go backend with all queries
 4. Go backend fans out queries concurrently (up to 50 at a time) via Grafana's datasource proxy
 5. Go backend deduplicates identical queries and caches week-ago baseline results (5-min TTL)
@@ -628,19 +646,19 @@ Browser                              Go Backend (gRPC subprocess)
 
 ## Development
 
-```bash
-npm run dev           # Webpack watch (hot-reload frontend)
-npm run dev:backend   # Build Go backend for macOS (darwin/arm64)
-npm run test          # Jest frontend tests
-go test ./pkg/...     # Go backend tests
-npm run lint          # ESLint
-npm run typecheck     # TypeScript check
-```
-
-### Docker
+For contributors and local development:
 
 ```bash
-npm run server        # docker compose up (Grafana at localhost:3000, login: admin/admin)
+npm install
+npm run build           # Go backend + frontend -> dist/
+npm run server          # docker compose up (Grafana at localhost:3000, login: admin/admin)
+
+npm run dev             # Webpack watch (hot-reload frontend)
+npm run dev:backend     # Build Go backend for macOS (darwin/arm64)
+npm run test            # Jest frontend tests
+go test ./pkg/...       # Go backend tests
+npm run lint            # ESLint
+npm run typecheck       # TypeScript check
 ```
 
 The plugin is volume-mounted from `dist/`. After `npm run build`, restart Grafana to pick up changes:
