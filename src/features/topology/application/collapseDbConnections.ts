@@ -37,6 +37,11 @@ export function computeCollapseDbMap(graph: TopologyGraph): CollapseDbMap {
     if (sourceNode === undefined) continue;
     if (!(sourceNode instanceof EKSServiceNode) && !(sourceNode instanceof EC2ServiceNode)) continue;
 
+    if (map.has(sourceNode.id)) {
+      // Service already has a collapsed DB — ambiguous, skip both.
+      map.delete(sourceNode.id);
+      continue;
+    }
     map.set(sourceNode.id, { dbNode: node, dbEdge: edge });
   }
 

@@ -70,21 +70,23 @@ func (a *App) handleMetricRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateRangeRequest(req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if len(req.Queries) == 0 {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(MetricRangeResponse{
+		if err := json.NewEncoder(w).Encode(MetricRangeResponse{
 			Results: make(map[string]*RangeQueryResult),
-		})
+		}); err != nil {
+			a.logger.Error("Failed to encode empty range response", "error", err)
+		}
 		return
 	}
 
 	if req.Datasource == "" {
 		http.Error(w, "Missing datasource field", http.StatusBadRequest)
-		return
-	}
-
-	if err := validateRangeRequest(req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

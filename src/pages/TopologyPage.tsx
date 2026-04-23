@@ -241,7 +241,14 @@ function TopologyPage(): React.JSX.Element {
     setCreateError(undefined);
 
     const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    const id = slug !== '' ? slug : 'topology-' + String(Date.now());
+    const baseId = slug !== '' ? slug : 'topology-' + String(Date.now());
+    const existingIds = new Set(topologies.map((t) => t.id));
+    let id = baseId;
+    let counter = 2;
+    while (existingIds.has(id)) {
+      id = `${baseId}-${String(counter)}`;
+      counter++;
+    }
     const newFlow = { id, name, definition: { nodes: [] as unknown[], edges: [] as unknown[] } };
 
     void (async (): Promise<void> => {
@@ -256,7 +263,7 @@ function TopologyPage(): React.JSX.Element {
         setCreateSaving(false);
       }
     })();
-  }, [reload]);
+  }, [topologies, reload]);
 
   // ── Rename topology modal state ──
   const [renameModalOpen, setRenameModalOpen] = useState(false);
@@ -913,18 +920,19 @@ function TopologyPage(): React.JSX.Element {
     }
     const rawFlow = entry.raw as Record<string, unknown>;
 
-    // 1. Inline patch — modify the inline entry directly in the flow
+    // 1. Apply inline + ref patches to a running copy so both are preserved in a single save.
+    let currentRefs = flowRefs;
+
     if (save.inlinePatch !== undefined) {
-      const updatedRefs = applyPropertyPatchToFlowRefs(flowRefs, save.entityId, save.entityType, save.inlinePatch);
-      const updatedFlow = { ...rawFlow, definition: updatedRefs };
-      await saveFlow(effectiveId, updatedFlow);
+      currentRefs = applyPropertyPatchToFlowRefs(currentRefs, save.entityId, save.entityType, save.inlinePatch);
     }
 
-    // 2. Ref patch — set overridable fields on the flow ref entry
     if (save.refPatch !== undefined) {
-      const updatedRefs = applyPropertyPatchToFlowRefs(flowRefs, save.entityId, save.entityType, save.refPatch);
-      const updatedFlow = { ...rawFlow, definition: updatedRefs };
-      await saveFlow(effectiveId, updatedFlow);
+      currentRefs = applyPropertyPatchToFlowRefs(currentRefs, save.entityId, save.entityType, save.refPatch);
+    }
+
+    if (save.inlinePatch !== undefined || save.refPatch !== undefined) {
+      await saveFlow(effectiveId, { ...rawFlow, definition: currentRefs });
     }
 
     // 3. Template patch — save structural fields to the shared template
