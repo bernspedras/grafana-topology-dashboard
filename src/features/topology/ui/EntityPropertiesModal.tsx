@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { Select } from '@grafana/ui';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 import type { SelectableValue } from '@grafana/data';
 import { useFlowData } from './FlowDataContext';
 import { useDatasourceDefs } from './DatasourceDefsContext';
@@ -164,23 +165,9 @@ export function EntityPropertiesModal({
   );
 
   // ── Escape key ──
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
+  useEscapeKey(onClose);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) {
-      onClose();
-    }
-  }, [onClose]);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   // ── Field setters ──
   const setField = useCallback(<K extends keyof PropertyDraft>(key: K, value: PropertyDraft[K]): void => {

@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 import type { TemplateDependency } from '../application/templateDependencies';
 import { totalRefCount } from '../application/templateDependencies';
 
@@ -36,21 +37,9 @@ export function DeleteTemplateDialog({
   const flowCount = dependencies.length;
 
   // ── Keyboard / backdrop ──
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => { document.removeEventListener('keydown', handleEsc); };
-  }, [onClose]);
+  useEscapeKey(onClose);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) {
-      onClose();
-    }
-  }, [onClose]);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const handleConfirm = useCallback((): void => {
     void onConfirmInlineAndDelete();

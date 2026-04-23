@@ -22,6 +22,7 @@ import { useFlowData } from './FlowDataContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { useDirections } from './DirectionContext';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 import { computeLayeredMetrics } from '../application/computeLayeredMetrics';
 import type { LayeredMetricRow, LayeredMetricData } from '../application/layeredMetricTypes';
 import type { MetricDefinition } from '../application/topologyDefinition';
@@ -432,13 +433,7 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
     }));
   }, [datasourceDefs]);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => { document.removeEventListener('keydown', handleEsc); };
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   const rangeInflightRef = useRef(false);
 
@@ -527,9 +522,7 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
     setTimeRange(range);
   };
 
-  const handleBackdropClick = (e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  };
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const handleCancel = (): void => {
     setEditQuery(rawPromql);

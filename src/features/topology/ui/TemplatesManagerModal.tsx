@@ -15,6 +15,7 @@ import type { TemplateDependency, FlowWithRaw } from '../application/templateDep
 import { inlineAndDeleteTemplate } from '../application/inlineAndDeleteTemplate';
 import type { NodeTemplate, EdgeTemplate } from '../application/topologyDefinition';
 import { DeleteTemplateDialog } from './DeleteTemplateDialog';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -338,25 +339,17 @@ export function TemplatesManagerModal(props: TemplatesManagerModalProps): React.
   }, [dirty]);
 
   // ── ESC handling ──
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
-      if (deleteDialogOpen) return; // delete dialog handles its own ESC
-      if (view === 'detail') {
-        guardedBack();
-      } else {
-        guardedClose();
-      }
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => { document.removeEventListener('keydown', handleEsc); };
-  }, [view, guardedBack, guardedClose, deleteDialogOpen]);
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) {
+  const handleEscape = useCallback((): void => {
+    if (deleteDialogOpen) return; // delete dialog handles its own ESC
+    if (view === 'detail') {
+      guardedBack();
+    } else {
       guardedClose();
     }
-  }, [guardedClose]);
+  }, [view, guardedBack, guardedClose, deleteDialogOpen]);
+  useEscapeKey(handleEscape);
+
+  const handleBackdropClick = useBackdropClick(backdropRef, guardedClose);
 
   // ── Filtered list ──
   const filteredNodeTemplates = useMemo((): readonly NodeTemplate[] => {

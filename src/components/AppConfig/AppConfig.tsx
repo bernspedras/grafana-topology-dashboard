@@ -6,6 +6,7 @@ import { getBackendSrv } from '@grafana/runtime';
 import { Button, FieldSet, InlineField, Select, useStyles2, CodeEditor, CollapsableSection } from '@grafana/ui';
 import type { AppSettings } from '../../module';
 import { DEFAULT_BASELINE_THRESHOLDS } from '../../features/topology/application/baselineThresholdConfig';
+import { isValidEmail } from './validateEmail';
 import {
   fetchTopologyBundle,
   saveFlow,
@@ -21,6 +22,7 @@ import {
 } from '../../features/topology/application/topologyApi';
 import type { TopologyBundleResponse } from '../../features/topology/application/topologyApi';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
+import { validateZipFileSize, validateZipEntries } from './validateZipUpload';
 
 export type AppConfigProps = PluginConfigPageProps<AppPluginMeta>;
 
@@ -308,6 +310,9 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
       },
       secureJsonData,
     } as Partial<PluginMeta<AppSettings>>);
+    // Clear token from React state immediately after save so it doesn't
+    // linger in memory / DevTools while the page reloads.
+    setSaToken('');
     window.location.reload();
   };
 
@@ -344,8 +349,20 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
   };
 
   const onUploadZip = async (file: File): Promise<void> => {
+    const sizeErr = validateZipFileSize(file.size);
+    if (sizeErr !== undefined) {
+      alert(sizeErr.message);
+      return;
+    }
+
     const buffer = await file.arrayBuffer();
     const unzipped = unzipSync(new Uint8Array(buffer));
+
+    const entriesErr = validateZipEntries(unzipped);
+    if (entriesErr !== undefined) {
+      alert(entriesErr.message);
+      return;
+    }
 
     const flows: ItemWithId[] = [];
     const nodes: ItemWithId[] = [];
@@ -465,7 +482,7 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 const trimmed = newEmail.trim().toLowerCase();
-                if (trimmed !== '' && !editAllowList.includes(trimmed)) {
+                if (trimmed !== '' && isValidEmail(trimmed) && !editAllowList.includes(trimmed)) {
                   setEditAllowList([...editAllowList, trimmed]);
                   setNewEmail('');
                 }
@@ -476,7 +493,7 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
             size="sm"
             onClick={() => {
               const trimmed = newEmail.trim().toLowerCase();
-              if (trimmed !== '' && !editAllowList.includes(trimmed)) {
+              if (trimmed !== '' && isValidEmail(trimmed) && !editAllowList.includes(trimmed)) {
                 setEditAllowList([...editAllowList, trimmed]);
                 setNewEmail('');
               }

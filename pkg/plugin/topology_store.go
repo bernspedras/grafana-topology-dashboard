@@ -93,6 +93,10 @@ func (s *TopologyStore) dedupeStaleByID(dir string) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
+		if e.Type()&os.ModeSymlink != 0 {
+			s.logger.Warn("Skipping symlink during deduplication", "path", e.Name())
+			continue
+		}
 		content, readErr := os.ReadFile(filepath.Join(dir, e.Name()))
 		if readErr != nil {
 			continue
@@ -170,7 +174,7 @@ func (s *TopologyStore) WriteDatasources(data json.RawMessage) error {
 	path := filepath.Join(s.dataDir, "datasources.json")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		s.logger.Error("Failed to write datasources", "error", err)
-		return fmt.Errorf("failed to write datasources")
+		return fmt.Errorf("failed to write datasources: %w", err)
 	}
 	return nil
 }
@@ -185,11 +189,11 @@ func (s *TopologyStore) readDatasources() ([]json.RawMessage, error) {
 			return []json.RawMessage{}, nil
 		}
 		s.logger.Error("Failed to read datasources", "error", err)
-		return nil, fmt.Errorf("failed to read datasources")
+		return nil, fmt.Errorf("failed to read datasources: %w", err)
 	}
 	var items []json.RawMessage
 	if err := json.Unmarshal(data, &items); err != nil {
-		return nil, fmt.Errorf("failed to parse datasources")
+		return nil, fmt.Errorf("failed to parse datasources: %w", err)
 	}
 	return items, nil
 }
@@ -217,7 +221,7 @@ func (s *TopologyStore) WriteSlaDefaults(data json.RawMessage) error {
 	path := filepath.Join(s.dataDir, "sla-defaults.json")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		s.logger.Error("Failed to write SLA defaults", "error", err)
-		return fmt.Errorf("failed to write SLA defaults")
+		return fmt.Errorf("failed to write SLA defaults: %w", err)
 	}
 	return nil
 }
@@ -230,7 +234,7 @@ func (s *TopologyStore) DeleteSlaDefaults() error {
 	err := os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		s.logger.Error("Failed to delete SLA defaults", "error", err)
-		return fmt.Errorf("failed to delete SLA defaults")
+		return fmt.Errorf("failed to delete SLA defaults: %w", err)
 	}
 	return nil
 }
@@ -340,6 +344,29 @@ func (s *TopologyStore) DeleteEdgeTemplate(id string) error {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
+// isContainedIn verifies that dest resides strictly within baseDir after
+// path cleaning, preventing path traversal via ".." or symlinks.
+func isContainedIn(baseDir, dest string) bool {
+	absBase, err := filepath.Abs(filepath.Clean(baseDir))
+	if err != nil {
+		return false
+	}
+	absDest, err := filepath.Abs(filepath.Clean(dest))
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(absDest, absBase+string(filepath.Separator))
+}
+
+// isSymlink returns true if path exists and is a symbolic link.
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeSymlink != 0
+}
+
 func (s *TopologyStore) readDir(subdir string) ([]json.RawMessage, error) {
 	dir := filepath.Join(s.dataDir, subdir)
 	entries, err := os.ReadDir(dir)
@@ -348,11 +375,16 @@ func (s *TopologyStore) readDir(subdir string) ([]json.RawMessage, error) {
 			return nil, nil
 		}
 		s.logger.Error("Failed to read directory", "path", dir, "error", err)
-		return nil, fmt.Errorf("failed to list resources")
+		return nil, fmt.Errorf("failed to list resources: %w", err)
 	}
 	var result []json.RawMessage
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		// Skip symlinks to prevent reading arbitrary files outside the data directory.
+		if e.Type()&os.ModeSymlink != 0 {
+			s.logger.Warn("Skipping symlink in data directory", "path", e.Name())
 			continue
 		}
 		data, readErr := os.ReadFile(filepath.Join(dir, e.Name()))
@@ -366,36 +398,61 @@ func (s *TopologyStore) readDir(subdir string) ([]json.RawMessage, error) {
 }
 
 func (s *TopologyStore) readFile(relPath string) (json.RawMessage, error) {
-	data, err := os.ReadFile(filepath.Join(s.dataDir, relPath))
+	dest := filepath.Join(s.dataDir, relPath)
+	if !isContainedIn(s.dataDir, dest) {
+		s.logger.Warn("Path traversal attempt blocked", "path", relPath)
+		return nil, fmt.Errorf("failed to read resource")
+	}
+	if isSymlink(dest) {
+		s.logger.Warn("Refusing to follow symlink", "path", relPath)
+		return nil, fmt.Errorf("failed to read resource")
+	}
+	data, err := os.ReadFile(dest)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
 		}
 		s.logger.Error("Failed to read file", "path", relPath, "error", err)
-		return nil, fmt.Errorf("failed to read resource")
+		return nil, fmt.Errorf("failed to read resource: %w", err)
 	}
 	return json.RawMessage(data), nil
 }
 
 func (s *TopologyStore) writeFile(relPath string, data json.RawMessage) error {
 	dest := filepath.Join(s.dataDir, relPath)
+	if !isContainedIn(s.dataDir, dest) {
+		s.logger.Warn("Path traversal attempt blocked", "path", relPath)
+		return fmt.Errorf("failed to write resource")
+	}
+	if isSymlink(dest) {
+		s.logger.Warn("Refusing to follow symlink", "path", relPath)
+		return fmt.Errorf("failed to write resource")
+	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		s.logger.Error("Failed to create directory", "path", filepath.Dir(dest), "error", err)
-		return fmt.Errorf("failed to write resource")
+		return fmt.Errorf("failed to write resource: %w", err)
 	}
 	if err := os.WriteFile(dest, data, 0o644); err != nil {
 		s.logger.Error("Failed to write file", "path", relPath, "error", err)
-		return fmt.Errorf("failed to write resource")
+		return fmt.Errorf("failed to write resource: %w", err)
 	}
 	return nil
 }
 
 func (s *TopologyStore) deleteFile(relPath string) error {
 	dest := filepath.Join(s.dataDir, relPath)
+	if !isContainedIn(s.dataDir, dest) {
+		s.logger.Warn("Path traversal attempt blocked", "path", relPath)
+		return fmt.Errorf("failed to delete resource")
+	}
+	if isSymlink(dest) {
+		s.logger.Warn("Refusing to follow symlink", "path", relPath)
+		return fmt.Errorf("failed to delete resource")
+	}
 	err := os.Remove(dest)
 	if err != nil && !os.IsNotExist(err) {
 		s.logger.Error("Failed to delete file", "path", relPath, "error", err)
-		return fmt.Errorf("failed to delete resource")
+		return fmt.Errorf("failed to delete resource: %w", err)
 	}
 	return nil
 }

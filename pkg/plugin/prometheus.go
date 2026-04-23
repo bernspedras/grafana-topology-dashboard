@@ -49,8 +49,8 @@ func deduplicateTasks(tasks []QueryTask) []deduplicatedQuery {
 		Time   int64 // 0 means "now"
 	}
 
-	seen := make(map[dedupKey]int) // dedupKey → index in result slice
-	var result []deduplicatedQuery
+	seen := make(map[dedupKey]int, len(tasks)) // dedupKey → index in result slice
+	result := make([]deduplicatedQuery, 0, len(tasks))
 
 	for _, t := range tasks {
 		var ts int64
@@ -148,8 +148,8 @@ func (a *App) queryPrometheus(
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		a.logger.Warn("Prometheus returned non-200", "status", resp.StatusCode, "body", string(body), "dsUID", dsUID)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		a.logger.Warn("Prometheus returned non-200", "status", resp.StatusCode, "body", string(body), "readErr", readErr, "dsUID", dsUID)
 		return nil
 	}
 
@@ -159,7 +159,7 @@ func (a *App) queryPrometheus(
 		return nil
 	}
 
-	if len(promResp.Data.Result) == 0 {
+	if len(promResp.Data.Result) == 0 || promResp.Data.Result[0].Value[1] == nil {
 		return nil
 	}
 
@@ -275,8 +275,8 @@ func (a *App) queryPrometheusRange(
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		a.logger.Warn("Prometheus range query returned non-200", "status", resp.StatusCode, "body", string(body), "dsUID", dsUID)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		a.logger.Warn("Prometheus range query returned non-200", "status", resp.StatusCode, "body", string(body), "readErr", readErr, "dsUID", dsUID)
 		return nil
 	}
 
@@ -291,6 +291,10 @@ func (a *App) queryPrometheusRange(
 	}
 
 	values := promResp.Data.Result[0].Values
+	if len(values) == 0 {
+		return nil
+	}
+
 	result := &RangeQueryResult{
 		Timestamps: make([]float64, 0, len(values)),
 		Values:     make([]float64, 0, len(values)),

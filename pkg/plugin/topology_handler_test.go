@@ -3,6 +3,8 @@ package plugin
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -510,5 +512,92 @@ func TestHandler_CreateThenDelete_FileSystemState(t *testing.T) {
 	}
 	if len(items) != 2 {
 		t.Fatalf("expected 2 items in list, got %d", len(items))
+	}
+}
+
+// ─── BUG-03 / BUG-04: writeJSON and writeRawJSON error logging ───────────
+
+// errWriter is an http.ResponseWriter that fails on Write.
+type errWriter struct {
+	header http.Header
+	code   int
+}
+
+func (w *errWriter) Header() http.Header        { return w.header }
+func (w *errWriter) WriteHeader(code int)        { w.code = code }
+func (w *errWriter) Write([]byte) (int, error)   { return 0, errors.New("connection reset") }
+
+func newWriteTestApp(t *testing.T) *App {
+	t.Helper()
+	return &App{
+		logger: log.DefaultLogger,
+	}
+}
+
+func TestWriteJSON_UnencodableValue_LogsError(t *testing.T) {
+	app := newWriteTestApp(t)
+	rec := httptest.NewRecorder()
+
+	// math.Inf(1) cannot be JSON-encoded — Encode returns an error.
+	app.writeJSON(rec, http.StatusOK, math.Inf(1))
+
+	// Should still set Content-Type and status.
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected application/json, got %q", ct)
+	}
+}
+
+func TestWriteJSON_WriterError_LogsError(t *testing.T) {
+	app := newWriteTestApp(t)
+	w := &errWriter{header: http.Header{}}
+
+	// Even a valid value fails because the writer rejects writes.
+	app.writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+
+	if w.code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.code)
+	}
+}
+
+func TestWriteRawJSON_WriterError_LogsError(t *testing.T) {
+	app := newWriteTestApp(t)
+	w := &errWriter{header: http.Header{}}
+
+	app.writeRawJSON(w, http.StatusOK, json.RawMessage(`{"ok":true}`))
+
+	if w.code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.code)
+	}
+}
+
+func TestWriteJSON_ValidValue_WritesBody(t *testing.T) {
+	app := newWriteTestApp(t)
+	rec := httptest.NewRecorder()
+
+	app.writeJSON(rec, http.StatusCreated, map[string]string{"id": "test"})
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["id"] != "test" {
+		t.Fatalf("expected id=test, got %q", body["id"])
+	}
+}
+
+func TestWriteRawJSON_ValidValue_WritesBody(t *testing.T) {
+	app := newWriteTestApp(t)
+	rec := httptest.NewRecorder()
+
+	app.writeRawJSON(rec, http.StatusOK, json.RawMessage(`{"ok":true}`))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if rec.Body.String() != `{"ok":true}` {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }

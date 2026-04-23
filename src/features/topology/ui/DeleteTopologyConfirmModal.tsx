@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,19 +18,8 @@ interface DeleteTopologyConfirmModalProps {
 export function DeleteTopologyConfirmModal({ topologyName, onClose, onConfirm, deleting, error }: DeleteTopologyConfirmModalProps): React.JSX.Element {
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  }, [onClose]);
+  useEscapeKey(onClose);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   return createPortal(
     <div ref={backdropRef} onClick={handleBackdropClick} className={styles.backdrop}>

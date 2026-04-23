@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import uPlot from 'uplot';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 import 'uplot/dist/uPlot.min.css';
 import { css, keyframes } from '@emotion/css';
 import { getBackendSrv } from '@grafana/runtime';
@@ -192,13 +193,7 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
     }));
   }, [datasourceDefs]);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => { document.removeEventListener('keydown', handleEsc); };
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   const fetchData = useCallback(async (signal: AbortSignal, showLoading: boolean): Promise<void> => {
     // In edit mode, don't fetch — the user edits the raw template query
@@ -294,9 +289,7 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
     setTimeRange(range);
   };
 
-  const handleBackdropClick = (e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  };
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const handleCancel = (): void => {
     setEditReadyQuery(rawReadyPromql);

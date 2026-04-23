@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -88,8 +89,14 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Count total queries across all datasources for slice pre-allocation.
+	var totalQueries int
+	for _, queries := range req.Queries {
+		totalQueries += len(queries)
+	}
+
 	// Build current-time tasks.
-	var currentTasks []QueryTask
+	currentTasks := make([]QueryTask, 0, totalQueries)
 	for dsName, queries := range req.Queries {
 		dsUID, ok := dsMap[dsName]
 		if !ok || dsUID == "" {
@@ -109,31 +116,43 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	currentResults := a.executeQueries(ctx, currentTasks, grafanaURL, authHeader)
 
 	// Handle baseline (week-ago) queries.
+	// Uses singleflight to deduplicate concurrent fetches for the same cache
+	// key, preventing a cache stampede when multiple users/tabs poll at once.
 	var baselineResults map[string]*float64
 	if req.IncludeBaseline {
 		cacheKey := a.baselineCacheKey(req, dsMap)
 		if cached, ok := a.baselineCache.Get(cacheKey); ok {
 			baselineResults = cached
 		} else {
-			weekAgo := time.Now().Unix() - 7*86400
-			var baselineTasks []QueryTask
-			for dsName, queries := range req.Queries {
-				dsUID, ok := dsMap[dsName]
-				if !ok || dsUID == "" {
-					continue
+			result, _, _ := a.baselineFlight.Do(cacheKey, func() (interface{}, error) {
+				// Double-check cache: another goroutine in this flight group
+				// may have populated it just before we acquired the slot.
+				if cached, ok := a.baselineCache.Get(cacheKey); ok {
+					return cached, nil
 				}
-				for key, promql := range queries {
-					t := weekAgo
-					baselineTasks = append(baselineTasks, QueryTask{
-						Key:    key,
-						DsUID:  dsUID,
-						PromQL: promql,
-						Time:   &t,
-					})
+
+				weekAgo := time.Now().Unix() - 7*86400
+				baselineTasks := make([]QueryTask, 0, totalQueries)
+				for dsName, queries := range req.Queries {
+					dsUID, ok := dsMap[dsName]
+					if !ok || dsUID == "" {
+						continue
+					}
+					for key, promql := range queries {
+						t := weekAgo
+						baselineTasks = append(baselineTasks, QueryTask{
+							Key:    key,
+							DsUID:  dsUID,
+							PromQL: promql,
+							Time:   &t,
+						})
+					}
 				}
-			}
-			baselineResults = a.executeQueries(ctx, baselineTasks, grafanaURL, authHeader)
-			a.baselineCache.Set(cacheKey, baselineResults)
+				results := a.executeQueries(ctx, baselineTasks, grafanaURL, authHeader)
+				a.baselineCache.Set(cacheKey, results)
+				return results, nil
+			})
+			baselineResults = result.(map[string]*float64)
 		}
 	}
 
@@ -167,7 +186,7 @@ func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string
 	}
 
 	// Strip trailing slash.
-	if grafanaURL[len(grafanaURL)-1] == '/' {
+	if len(grafanaURL) > 0 && grafanaURL[len(grafanaURL)-1] == '/' {
 		grafanaURL = grafanaURL[:len(grafanaURL)-1]
 	}
 
@@ -186,12 +205,10 @@ func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string
 	// Dev-only fallback: basic auth (requires explicit opt-in).
 	if os.Getenv("TOPOLOGY_DEV_MODE") == "true" {
 		user := os.Getenv("GF_SECURITY_ADMIN_USER")
-		if user == "" {
-			user = "admin"
-		}
 		pass := os.Getenv("GF_SECURITY_ADMIN_PASSWORD")
-		if pass == "" {
-			pass = "admin"
+		if user == "" || pass == "" {
+			a.logger.Error("DEV MODE: GF_SECURITY_ADMIN_USER and GF_SECURITY_ADMIN_PASSWORD must be set")
+			return grafanaURL, ""
 		}
 		a.logger.Warn("DEV MODE: using basic auth fallback for Prometheus proxy — do not use in production")
 		return grafanaURL, "Basic " + basicAuth(user, pass)
@@ -264,9 +281,5 @@ func validateQueries(req MetricsBatchRequest) error {
 
 // basicAuth encodes credentials for HTTP Basic Authentication.
 func basicAuth(user, password string) string {
-	// Using a simple base64 encode instead of importing encoding/base64 directly.
-	// net/http.Request.SetBasicAuth does this internally.
-	r, _ := http.NewRequest("GET", "/", nil)
-	r.SetBasicAuth(user, password)
-	return r.Header.Get("Authorization")[len("Basic "):]
+	return base64.StdEncoding.EncodeToString([]byte(user + ":" + password))
 }
