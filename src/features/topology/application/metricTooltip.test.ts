@@ -36,6 +36,44 @@ describe('metricTooltipText', () => {
     expect(result).toBeDefined();
     expect(result).toContain('Last week:');
   });
+
+  // ── Precise decimal cases ──────────────────────────────────────────────────
+
+  it('shows +5% for 100 → 105 (precise, no rounding artefacts)', () => {
+    const result = metricTooltipText(105, 100, 'count', 'baseline', undefined, undefined);
+    expect(result).toContain('+5%');
+    expect(result).not.toContain('+4.9%');
+    expect(result).not.toContain('+5.1%');
+  });
+
+  it('shows "(was zero)" when weekAgo=0 and current=5', () => {
+    const result = metricTooltipText(5, 0, 'count', 'baseline', undefined, undefined);
+    expect(result).toBeDefined();
+    expect(result).toContain('(was zero)');
+  });
+
+  it('shows "(no change)" when both current and weekAgo are 0', () => {
+    const result = metricTooltipText(0, 0, 'count', 'baseline', undefined, undefined);
+    expect(result).toBeDefined();
+    expect(result).toContain('(no change)');
+  });
+
+  it('shows +9900% for large increase 1 → 100', () => {
+    // ratio = (100 - 1) / 1 = 99 → 99 * 1000 = 99000, round → 99000, / 10 = 9900
+    const result = metricTooltipText(100, 1, 'count', 'baseline', undefined, undefined);
+    expect(result).toContain('+9900%');
+  });
+
+  it('shows +0.5% for small fractional 100 → 100.5', () => {
+    // ratio = 0.5 / 100 = 0.005 → 0.005 * 1000 = 5, round → 5, / 10 = 0.5
+    const result = metricTooltipText(100.5, 100, 'count', 'baseline', undefined, undefined);
+    expect(result).toContain('+0.5%');
+  });
+
+  it('shows +0% when current === weekAgo (exact match)', () => {
+    const result = metricTooltipText(42, 42, 'count', 'baseline', undefined, undefined);
+    expect(result).toContain('+0%');
+  });
 });
 
 describe('slaTooltipText', () => {

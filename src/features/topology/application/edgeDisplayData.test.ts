@@ -11,8 +11,13 @@ import {
   HttpJsonEdge,
   HttpXmlEdge,
   TcpDbConnectionEdge,
+  AmqpEdge,
+  KafkaEdge,
+  GrpcEdge,
   HttpEdgeMetrics,
   DbConnectionMetrics,
+  AmqpEdgeMetrics,
+  KafkaEdgeMetrics,
 } from '../domain/index';
 
 // ─── Factories ──────────────────────────────────────────────────────────────
@@ -328,6 +333,220 @@ describe('edgeMetricRows', (): void => {
       const dirs: MetricDirectionMap = { avgQueryTimeMs: 'lower-is-better' };
       const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 75, avgQueryTimeMsWeekAgo: 100 }), undefined, undefined, undefined, dirs);
       expect(rows[3]?.color).toBe('#22c55e');
+    });
+  });
+
+  // ─── AmqpEdge ─────────────────────────────────────────────────────────────
+
+  describe('AmqpEdge', (): void => {
+    function makeAmqpEdge(overrides?: {
+      exchange?: string;
+      routingKeyFilter?: string;
+      routingKeyFilters?: readonly string[];
+    }): AmqpEdge {
+      return new AmqpEdge({
+        id: 'e-amqp', source: 'a', target: 'b',
+        metrics: new AmqpEdgeMetrics({ lastUpdatedAt: new Date() }),
+        exchange: overrides?.exchange ?? 'orders.exchange',
+        routingKeyFilter: overrides?.routingKeyFilter,
+        routingKeyFilters: overrides?.routingKeyFilters,
+      });
+    }
+
+    it('returns AMQP protocol tag', (): void => {
+      expect(edgeProtocolTag(makeAmqpEdge())).toBe('AMQP');
+    });
+
+    it('returns green color (#10b981)', (): void => {
+      expect(edgeProtocolColor(makeAmqpEdge())).toBe('#10b981');
+    });
+
+    it('returns dashed route', (): void => {
+      expect(edgeRouteIsDashed(makeAmqpEdge())).toBe(true);
+    });
+
+    it('returns exchange as endpoint label', (): void => {
+      expect(edgeEndpointLabel(makeAmqpEdge())).toBe('orders.exchange');
+    });
+
+    it('returns exchange / routingKeyFilter as endpoint label when routingKeyFilter is set', (): void => {
+      expect(edgeEndpointLabel(makeAmqpEdge({ routingKeyFilter: 'order.created' }))).toBe('orders.exchange / order.created');
+    });
+
+    it('returns 13 metric rows', (): void => {
+      const rows = edgeMetricRows(makeAmqpEdge());
+      expect(rows).toHaveLength(13);
+      expect(rows[0]?.label).toBe('Pub RPS');
+      expect(rows[1]?.label).toBe('Pub P95');
+      expect(rows[2]?.label).toBe('Pub Avg');
+      expect(rows[3]?.label).toBe('Pub errors');
+      expect(rows[4]?.label).toBe('Queue P95');
+      expect(rows[5]?.label).toBe('Queue Avg');
+      expect(rows[6]?.label).toBe('Queue depth');
+      expect(rows[7]?.label).toBe('Process P95');
+      expect(rows[8]?.label).toBe('Process Avg');
+      expect(rows[9]?.label).toBe('Consumer RPS');
+      expect(rows[10]?.label).toBe('Consumer errors');
+      expect(rows[11]?.label).toBe('E2E P95');
+      expect(rows[12]?.label).toBe('E2E Avg');
+    });
+  });
+
+  // ─── KafkaEdge ────────────────────────────────────────────────────────────
+
+  describe('KafkaEdge', (): void => {
+    function makeKafkaEdge(overrides?: {
+      topic?: string;
+      consumerGroup?: string;
+    }): KafkaEdge {
+      return new KafkaEdge({
+        id: 'e-kafka', source: 'a', target: 'b',
+        metrics: new KafkaEdgeMetrics({ lastUpdatedAt: new Date() }),
+        topic: overrides?.topic ?? 'orders-topic',
+        consumerGroup: overrides?.consumerGroup,
+      });
+    }
+
+    it('returns Kafka protocol tag', (): void => {
+      expect(edgeProtocolTag(makeKafkaEdge())).toBe('Kafka');
+    });
+
+    it('returns orange color (#f97316)', (): void => {
+      expect(edgeProtocolColor(makeKafkaEdge())).toBe('#f97316');
+    });
+
+    it('returns dashed route', (): void => {
+      expect(edgeRouteIsDashed(makeKafkaEdge())).toBe(true);
+    });
+
+    it('returns topic as endpoint label when no consumerGroup', (): void => {
+      expect(edgeEndpointLabel(makeKafkaEdge())).toBe('orders-topic');
+    });
+
+    it('returns topic / consumerGroup as endpoint label when consumerGroup is set', (): void => {
+      expect(edgeEndpointLabel(makeKafkaEdge({ consumerGroup: 'order-processor' }))).toBe('orders-topic / order-processor');
+    });
+
+    it('returns 13 metric rows', (): void => {
+      const rows = edgeMetricRows(makeKafkaEdge());
+      expect(rows).toHaveLength(13);
+      expect(rows[0]?.label).toBe('Pub RPS');
+      expect(rows[1]?.label).toBe('Pub P95');
+      expect(rows[2]?.label).toBe('Pub Avg');
+      expect(rows[3]?.label).toBe('Pub errors');
+      expect(rows[4]?.label).toBe('Transit P95');
+      expect(rows[5]?.label).toBe('Transit Avg');
+      expect(rows[6]?.label).toBe('Consumer lag');
+      expect(rows[7]?.label).toBe('Process P95');
+      expect(rows[8]?.label).toBe('Process Avg');
+      expect(rows[9]?.label).toBe('Consumer RPS');
+      expect(rows[10]?.label).toBe('Consumer errors');
+      expect(rows[11]?.label).toBe('E2E P95');
+      expect(rows[12]?.label).toBe('E2E Avg');
+    });
+  });
+
+  // ─── GrpcEdge ─────────────────────────────────────────────────────────────
+
+  describe('GrpcEdge', (): void => {
+    function makeGrpcEdge(): GrpcEdge {
+      return new GrpcEdge({
+        id: 'e-grpc', source: 'a', target: 'b',
+        metrics: new HttpEdgeMetrics({
+          latencyP95: 15, rps: 800, errorRate: 0.1,
+          lastUpdatedAt: new Date(),
+        }),
+        grpcService: 'OrderService',
+        grpcMethod: 'CreateOrder',
+      });
+    }
+
+    it('returns gRPC protocol tag', (): void => {
+      expect(edgeProtocolTag(makeGrpcEdge())).toBe('gRPC');
+    });
+
+    it('returns cyan color (#06b6d4)', (): void => {
+      expect(edgeProtocolColor(makeGrpcEdge())).toBe('#06b6d4');
+    });
+
+    it('returns dashed route', (): void => {
+      expect(edgeRouteIsDashed(makeGrpcEdge())).toBe(true);
+    });
+
+    it('returns service/method as endpoint label', (): void => {
+      expect(edgeEndpointLabel(makeGrpcEdge())).toBe('OrderService/CreateOrder');
+    });
+
+    it('returns 4 metric rows (RPS, Latency P95, Latency Avg, Error rate)', (): void => {
+      const rows = edgeMetricRows(makeGrpcEdge());
+      expect(rows).toHaveLength(4);
+      expect(rows[0]?.label).toBe('RPS');
+      expect(rows[1]?.label).toBe('Latency P95');
+      expect(rows[1]?.value).toBe('15 ms');
+      expect(rows[2]?.label).toBe('Latency Avg');
+      expect(rows[3]?.label).toBe('Error rate');
+    });
+  });
+
+  // ─── Tooltip, weekAgoValue, and unit fields for HTTP edge ─────────────────
+
+  describe('HTTP edge tooltip/weekAgoValue/unit with weekAgo data', (): void => {
+    it('populates tooltip, weekAgoValue, and unit on RPS row', (): void => {
+      const edge = makeJsonEdge({ rps: 600, rpsWeekAgo: 500 });
+      const rows = edgeMetricRows(edge);
+      expect(rows[0].tooltip).toBeDefined();
+      expect(rows[0].tooltip).toContain('Last week:');
+      expect(rows[0].tooltip).toContain('%');
+      expect(rows[0].weekAgoValue).toBe(500);
+      expect(rows[0].unit).toBe('req/s');
+    });
+
+    it('populates tooltip, weekAgoValue, and unit on Latency P95 row', (): void => {
+      const edge = makeJsonEdge({ latencyP95: 45, latencyP95WeekAgo: 30 });
+      const rows = edgeMetricRows(edge);
+      expect(rows[1].tooltip).toBeDefined();
+      expect(rows[1].tooltip).toContain('Last week:');
+      expect(rows[1].weekAgoValue).toBe(30);
+      expect(rows[1].unit).toBe('ms');
+    });
+
+    it('populates tooltip, weekAgoValue, and unit on Error rate row', (): void => {
+      const edge = makeJsonEdge({ errorRate: 3, errorRateWeekAgo: 1 });
+      const rows = edgeMetricRows(edge);
+      expect(rows[3].tooltip).toBeDefined();
+      expect(rows[3].tooltip).toContain('Last week:');
+      expect(rows[3].weekAgoValue).toBe(1);
+      expect(rows[3].unit).toBe('percent');
+    });
+
+    it('has undefined tooltip when weekAgo is absent', (): void => {
+      const edge = makeJsonEdge({ rps: 500 });
+      const rows = edgeMetricRows(edge);
+      expect(rows[0]?.tooltip).toBeUndefined();
+      expect(rows[0]?.weekAgoValue).toBeUndefined();
+    });
+  });
+
+  // ─── DB edge Pool conns computation ──────────────────────────────────────
+
+  describe('TcpDbConnectionEdge Pool conns computation', (): void => {
+    it('sums active + idle connections: active=8, idle=2 → value="10"', (): void => {
+      const rows = edgeMetricRows(makeDbEdge({ activeConnections: 8, idleConnections: 2 }));
+      expect(rows[0]?.label).toBe('Pool conns');
+      expect(rows[0]?.value).toBe('10');
+    });
+
+    it('shows N/A when active connections is undefined', (): void => {
+      const edge = new TcpDbConnectionEdge({
+        id: 'e-db-na', source: 'a', target: 'b',
+        metrics: new DbConnectionMetrics({
+          lastUpdatedAt: new Date(),
+          idleConnections: 2,
+        }),
+      });
+      const rows = edgeMetricRows(edge);
+      expect(rows[0]?.label).toBe('Pool conns');
+      expect(rows[0]?.value).toBe('N/A');
     });
   });
 });

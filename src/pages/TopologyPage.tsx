@@ -23,6 +23,8 @@ import { TemplatesManagerModal } from '../features/topology/ui/TemplatesManagerM
 import { CreateTopologyModal } from '../features/topology/ui/CreateTopologyModal';
 import { RenameTopologyModal } from '../features/topology/ui/RenameTopologyModal';
 import { DeleteTopologyConfirmModal } from '../features/topology/ui/DeleteTopologyConfirmModal';
+import { uniqueTopologyId } from '../features/topology/application/topologySlug';
+import { applyEdgeSequenceOrder } from '../features/topology/application/saveEdgeSequenceOrder';
 import { TopologyIdProvider } from '../features/topology/application/TopologyIdContext';
 import { PromqlQueriesProvider } from '../features/topology/ui/PromqlQueriesContext';
 import { RawPromqlQueriesProvider } from '../features/topology/ui/RawPromqlQueriesContext';
@@ -187,17 +189,9 @@ function TopologyPage(): React.JSX.Element {
       }
       const clonedRefs = structuredClone(flowRefs);
       const mutableEdges = (clonedRefs as unknown as Record<string, unknown>).edges as Record<string, unknown>[];
-      const idx = mutableEdges.findIndex((e) => {
-        const hasEdgeId = typeof e.edgeId === 'string';
-        return hasEdgeId ? e.edgeId === edgeId : e.id === edgeId;
-      });
-      if (idx === -1) {
+      const result = applyEdgeSequenceOrder(mutableEdges, edgeId, sequenceOrder);
+      if (result === undefined) {
         return;
-      }
-      if (sequenceOrder !== undefined) {
-        mutableEdges[idx].sequenceOrder = sequenceOrder;
-      } else {
-        delete mutableEdges[idx].sequenceOrder;
       }
       const rawFlow = entry.raw as Record<string, unknown>;
       const updatedFlow = { ...rawFlow, definition: clonedRefs };
@@ -240,15 +234,8 @@ function TopologyPage(): React.JSX.Element {
     setCreateSaving(true);
     setCreateError(undefined);
 
-    const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    const baseId = slug !== '' ? slug : 'topology-' + String(Date.now());
     const existingIds = new Set(topologies.map((t) => t.id));
-    let id = baseId;
-    let counter = 2;
-    while (existingIds.has(id)) {
-      id = `${baseId}-${String(counter)}`;
-      counter++;
-    }
+    const id = uniqueTopologyId(name, existingIds);
     const newFlow = { id, name, definition: { nodes: [] as unknown[], edges: [] as unknown[] } };
 
     void (async (): Promise<void> => {
