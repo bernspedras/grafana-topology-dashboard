@@ -1,8 +1,15 @@
 package plugin
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 func TestValidateRangeRequest_RejectsInvertedRange(t *testing.T) {
@@ -87,6 +94,24 @@ func TestValidateRangeRequest_RejectsTooLongPromQL(t *testing.T) {
 	}
 }
 
+func TestValidateRangeRequest_DoesNotEchoUserKey(t *testing.T) {
+	secretKey := "user-secret-key-<script>alert(1)</script>"
+	long := strings.Repeat("x", maxPromQLLen+1)
+	req := MetricRangeRequest{
+		Queries: map[string]string{secretKey: long},
+		Start:   0,
+		End:     3600,
+		Step:    60,
+	}
+	err := validateRangeRequest(req)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), secretKey) {
+		t.Fatalf("validation error must not echo user-supplied key, got: %s", err.Error())
+	}
+}
+
 func TestValidateRangeRequest_AcceptsValidRequest(t *testing.T) {
 	req := MetricRangeRequest{
 		Queries: map[string]string{"k1": "up", "k2": "avg(cpu)"},
@@ -132,5 +157,39 @@ func TestValidateRangeRequest_AcceptsMaxBoundaries(t *testing.T) {
 	}
 	if err := validateRangeRequest(req); err != nil {
 		t.Fatalf("expected no error at boundaries, got: %v", err)
+	}
+}
+
+func TestHandleMetricRange_DoesNotEchoUserKeyInResponse(t *testing.T) {
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
+	}
+
+	secretKey := "user-secret-<script>alert(1)</script>"
+	long := strings.Repeat("x", maxPromQLLen+1)
+	reqBody := MetricRangeRequest{
+		Queries: map[string]string{secretKey: long},
+		Start:   0,
+		End:     3600,
+		Step:    60,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/metric-range", bytes.NewReader(body))
+	req = withPluginContext(req, "http://localhost:3000", map[string]string{"ds1": "uid1"})
+	rec := httptest.NewRecorder()
+
+	app.handleMetricRange(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	respBody := rec.Body.String()
+	if strings.Contains(respBody, secretKey) {
+		t.Fatalf("HTTP response must not echo user-supplied key, got: %s", respBody)
 	}
 }

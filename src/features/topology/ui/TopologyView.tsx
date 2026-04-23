@@ -519,6 +519,8 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
   const topologyId = useTopologyId();
   const hasSavedViewport = useTopologyPositionStore.getState().viewports[topologyId] !== undefined;
   const toast = useToast();
+  const viewportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => (): void => { if (viewportTimerRef.current !== null) clearTimeout(viewportTimerRef.current); }, []);
 
   const editingFlowStep = useMemo((): FlowStepNode | undefined => {
     if (editingFlowStepId === undefined) return undefined;
@@ -558,7 +560,10 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
 
   const handleMoveEnd = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport): void => {
     if (event === null) return; // skip programmatic viewport changes (fitView, setViewport)
-    useTopologyPositionStore.getState().setViewportForTopology(topologyId, viewport);
+    if (viewportTimerRef.current !== null) clearTimeout(viewportTimerRef.current);
+    viewportTimerRef.current = setTimeout(() => {
+      useTopologyPositionStore.getState().setViewportForTopology(topologyId, viewport);
+    }, 300);
   }, [topologyId]);
 
   const activeSequenceMode = sequenceMode && canShowSequence;

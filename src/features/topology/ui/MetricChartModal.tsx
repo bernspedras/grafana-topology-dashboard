@@ -258,9 +258,7 @@ function TimeSeriesChart({ data, referenceLines }: TimeSeriesChartProps): React.
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
 
-  // Recreate chart when the number of reference lines changes (series count must match)
-  const lineCount = referenceLines.length;
-
+  // Recreate chart when reference lines change (series count, labels, or colors)
   useEffect((): (() => void) => {
     const container = containerRef.current;
     if (container === null) return (): void => { /* noop */ };
@@ -283,7 +281,7 @@ function TimeSeriesChart({ data, referenceLines }: TimeSeriesChartProps): React.
       chart.destroy();
       chartRef.current = null;
     };
-  }, [lineCount]);
+  }, [referenceLines]);
 
   // Update data smoothly without recreating the chart
   useEffect((): void => {

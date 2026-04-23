@@ -105,4 +105,34 @@ describe('applyPropertyPatchToFlowRefs', () => {
       applyPropertyPatchToFlowRefs(refs, 'unknown', 'edge', { label: 'x' }),
     ).toThrow('Edge entry not found');
   });
+
+  // ── Prototype pollution protection ──
+  it('strips __proto__ key from node patch', () => {
+    const refs = makeFlowRefs(
+      [{ nodeId: 'n1', label: 'A' }],
+      [],
+    );
+    const maliciousPatch = JSON.parse('{"label":"B","__proto__":{"polluted":true}}') as Record<string, unknown>;
+    const result = applyPropertyPatchToFlowRefs(refs, 'n1', 'node', maliciousPatch);
+    const node = getNodes(result)[0];
+    expect(node.label).toBe('B');
+    expect(node.__proto__).not.toHaveProperty('polluted');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('strips constructor and prototype keys from edge patch', () => {
+    const refs = makeFlowRefs(
+      [],
+      [{ edgeId: 'a--b', label: 'old' }],
+    );
+    const result = applyPropertyPatchToFlowRefs(refs, 'a--b', 'edge', {
+      label: 'new',
+      constructor: { prototype: { polluted: true } },
+      prototype: { bad: true },
+    });
+    const edge = getEdges(result)[0];
+    expect(edge.label).toBe('new');
+    expect(Object.hasOwn(edge, 'constructor')).toBe(false);
+    expect(Object.hasOwn(edge, 'prototype')).toBe(false);
+  });
 });

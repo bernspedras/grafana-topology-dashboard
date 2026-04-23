@@ -57,6 +57,7 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validateQueries(req); err != nil {
+		a.logger.Warn("Metrics request validation failed", "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -248,13 +249,13 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string)
 // validateQueries checks that the request does not exceed per-datasource query
 // count or per-expression length limits.
 func validateQueries(req MetricsBatchRequest) error {
-	for dsName, queries := range req.Queries {
+	for _, queries := range req.Queries {
 		if len(queries) > maxQueriesPerDS {
-			return fmt.Errorf("too many queries for datasource %q: %d (max %d)", dsName, len(queries), maxQueriesPerDS)
+			return fmt.Errorf("too many queries for datasource: %d (max %d)", len(queries), maxQueriesPerDS)
 		}
-		for key, promql := range queries {
+		for _, promql := range queries {
 			if len(promql) > maxPromQLLen {
-				return fmt.Errorf("PromQL expression too long for key %q: %d chars (max %d)", key, len(promql), maxPromQLLen)
+				return fmt.Errorf("PromQL expression too long: %d chars (max %d)", len(promql), maxPromQLLen)
 			}
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -61,6 +62,44 @@ func TestValidateQueries_RejectsTooLongPromQL(t *testing.T) {
 	if err := validateQueries(req); err == nil {
 		t.Fatal("expected error for too-long PromQL expression")
 	}
+}
+
+func TestValidateQueries_DoesNotEchoUserData(t *testing.T) {
+	secretDS := "secret-datasource-<script>"
+	secretKey := "secret-key-<img onerror>"
+
+	t.Run("does not echo datasource name in too-many-queries error", func(t *testing.T) {
+		queries := make(map[string]string, maxQueriesPerDS+1)
+		for i := 0; i <= maxQueriesPerDS; i++ {
+			queries[fmt.Sprintf("key-%d", i)] = "up"
+		}
+		req := MetricsBatchRequest{
+			Queries: map[string]map[string]string{secretDS: queries},
+		}
+		err := validateQueries(req)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if strings.Contains(err.Error(), secretDS) {
+			t.Fatalf("validation error must not echo datasource name, got: %s", err.Error())
+		}
+	})
+
+	t.Run("does not echo query key in too-long-promql error", func(t *testing.T) {
+		long := strings.Repeat("x", maxPromQLLen+1)
+		req := MetricsBatchRequest{
+			Queries: map[string]map[string]string{
+				"ds1": {secretKey: long},
+			},
+		}
+		err := validateQueries(req)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if strings.Contains(err.Error(), secretKey) {
+			t.Fatalf("validation error must not echo query key, got: %s", err.Error())
+		}
+	})
 }
 
 func TestValidateQueries_AcceptsValidRequest(t *testing.T) {
@@ -271,4 +310,65 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 	if secondDelta != 1 {
 		t.Errorf("expected only 1 new call (current only, baseline cached), got %d new calls", secondDelta)
 	}
+}
+
+func TestHandleMetrics_DoesNotEchoUserDataInResponse(t *testing.T) {
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5 * time.Minute),
+		logger:        log.DefaultLogger,
+		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
+	}
+
+	t.Run("does not echo query key for too-long PromQL", func(t *testing.T) {
+		secretKey := "secret-key-<script>alert(1)</script>"
+		long := strings.Repeat("x", maxPromQLLen+1)
+		reqBody := MetricsBatchRequest{
+			Queries: map[string]map[string]string{
+				"ds1": {secretKey: long},
+			},
+		}
+		body, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+		req = withPluginContext(req, "http://localhost:3000", map[string]string{"ds1": "uid1"})
+		rec := httptest.NewRecorder()
+
+		app.handleMetrics(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+		respBody := rec.Body.String()
+		if strings.Contains(respBody, secretKey) {
+			t.Fatalf("HTTP response must not echo user-supplied key, got: %s", respBody)
+		}
+	})
+
+	t.Run("does not echo datasource name for too-many queries", func(t *testing.T) {
+		secretDS := "secret-datasource-<script>"
+		queries := make(map[string]string, maxQueriesPerDS+1)
+		for i := 0; i <= maxQueriesPerDS; i++ {
+			queries[fmt.Sprintf("key-%d", i)] = "up"
+		}
+		reqBody := MetricsBatchRequest{
+			Queries: map[string]map[string]string{secretDS: queries},
+		}
+		body, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+		req = withPluginContext(req, "http://localhost:3000", map[string]string{secretDS: "uid1"})
+		rec := httptest.NewRecorder()
+
+		app.handleMetrics(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+		respBody := rec.Body.String()
+		if strings.Contains(respBody, secretDS) {
+			t.Fatalf("HTTP response must not echo datasource name, got: %s", respBody)
+		}
+	})
 }

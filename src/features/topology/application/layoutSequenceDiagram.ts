@@ -5,7 +5,7 @@ import { HttpJsonEdge, HttpXmlEdge, TcpDbConnectionEdge, AmqpEdge, KafkaEdge, Gr
 import { edgeStrokeStyle, edgeMarkerEnd } from './edgeStyles';
 import type { ColoringMode } from './metricColor';
 import type { SlaThresholdMap } from './slaThresholds';
-import type { CollapseDbMap } from './collapseDbConnections';
+import type { CollapseDbMap, CollapsedDbInfo } from './collapseDbConnections';
 
 // ─── Layout constants ────────────────────────────────────────────────────────
 
@@ -125,6 +125,8 @@ export interface SequenceLifelineData {
   /** Estimated height of THIS node's card (lifeline SVG starts here). */
   readonly nodeCardHeight: number;
   readonly lifelineHeight: number;
+  /** Collapsed DB info — injected by TopologyView when collapseDbConnections is enabled. */
+  readonly collapsedDb?: CollapsedDbInfo | undefined;
   [key: string]: unknown;
 }
 

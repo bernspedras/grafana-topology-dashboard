@@ -16,8 +16,9 @@ import type { CollapsedDbInfo } from '../application/collapseDbConnections';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
-import { useSla } from './SlaContext';
-import { useDirections } from './DirectionContext';
+import { useSla, useSlaMap } from './SlaContext';
+import { useDirections, useDirectionMap } from './DirectionContext';
+import { CollapsedDbSection } from './CollapsedDbSection';
 import { PromQLModal } from './PromQLModal';
 import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
@@ -157,10 +158,12 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(node.id);
   const directions = useDirections(node.id);
-  const dbEdgeSla = useSla(collapsedDb?.dbEdge.id ?? '');
-  const dbEdgeDirections = useDirections(collapsedDb?.dbEdge.id ?? '');
-  const dbNodeSla = useSla(collapsedDb?.dbNode.id ?? '');
-  const dbNodeDirections = useDirections(collapsedDb?.dbNode.id ?? '');
+  const slaMap = useSlaMap();
+  const dirMap = useDirectionMap();
+  const dbEdgeSla = collapsedDb !== undefined ? slaMap[collapsedDb.dbEdge.id] : undefined;
+  const dbEdgeDirections = collapsedDb !== undefined ? dirMap[collapsedDb.dbEdge.id] : undefined;
+  const dbNodeSla = collapsedDb !== undefined ? slaMap[collapsedDb.dbNode.id] : undefined;
+  const dbNodeDirections = collapsedDb !== undefined ? dirMap[collapsedDb.dbNode.id] : undefined;
   const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla, directions);
 
   const dbConnectionRows: readonly MetricRow[] = collapsedDb !== undefined
@@ -328,80 +331,18 @@ function TopologyNodeCardInner({ data }: NodeProps<TopologyNodeCardType>): React
           })}
         </div>
 
-        {/* Collapsed DB Connection section */}
-        {collapsedDb !== undefined && dbConnMetricsFiltered.length > 0 && (
-          <>
-            <div className={styles.divider} />
-            <div className={collapsedDbStyles.sectionHeader}>DB Connection</div>
-            <div className={styles.metricsWrapper}>
-              {dbConnMetricsFiltered.map((m) => {
-                const key = m.metricKey;
-                if (key !== undefined) {
-                  const btn = (
-                    <button
-                      key={'dbc-' + m.label}
-                      type="button"
-                      className={'nodrag ' + styles.metricButton}
-                      onClick={(): void => {
-                        setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge', weekAgoValue: m.weekAgoValue, unit: m.unit });
-                      }}
-                    >
-                      <span className={styles.metricLabel}>{m.label}</span>
-                      <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                    </button>
-                  );
-                  if (m.tooltip !== undefined) {
-                    return <Tooltip key={'dbc-' + m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
-                  }
-                  return btn;
-                }
-                return (
-                  <div key={'dbc-' + m.label} className={styles.metricRow}>
-                    <span className={styles.metricLabel}>{m.label}</span>
-                    <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Collapsed DB Instance section */}
-        {collapsedDb !== undefined && dbInstMetricsFiltered.length > 0 && (
-          <>
-            <div className={styles.divider} />
-            <div className={collapsedDbStyles.sectionHeader}>{'DB Instance: ' + collapsedDb.dbNode.label}</div>
-            <div className={styles.metricsWrapper}>
-              {dbInstMetricsFiltered.map((m) => {
-                const key = m.metricKey;
-                if (key !== undefined) {
-                  const btn = (
-                    <button
-                      key={'dbi-' + m.label}
-                      type="button"
-                      className={'nodrag ' + styles.metricButton}
-                      onClick={(): void => {
-                        setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node', weekAgoValue: m.weekAgoValue, unit: m.unit });
-                      }}
-                    >
-                      <span className={styles.metricLabel}>{m.label}</span>
-                      <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                    </button>
-                  );
-                  if (m.tooltip !== undefined) {
-                    return <Tooltip key={'dbi-' + m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
-                  }
-                  return btn;
-                }
-                return (
-                  <div key={'dbi-' + m.label} className={styles.metricRow}>
-                    <span className={styles.metricLabel}>{m.label}</span>
-                    <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+        {/* Collapsed DB sections (connection + instance) */}
+        {collapsedDb !== undefined && (
+          <CollapsedDbSection
+            dbConnMetrics={dbConnMetricsFiltered}
+            dbInstMetrics={dbInstMetricsFiltered}
+            dbEdgeId={collapsedDb.dbEdge.id}
+            dbNodeId={collapsedDb.dbNode.id}
+            dbNodeLabel={collapsedDb.dbNode.label}
+            headerClassName={collapsedDbStyles.sectionHeader}
+            withTooltip={true}
+            onChartClick={setChartMetric}
+          />
         )}
       </div>
 

@@ -3,6 +3,12 @@ import { isNodeRef, isEdgeRef } from './topologyDefinition';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function stripDangerousKeys(patch: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(patch).filter(([k]) => !DANGEROUS_KEYS.has(k)));
+}
+
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj)) as T;
 }
@@ -35,7 +41,7 @@ export function applyPropertyPatchToFlowRefs(
     if (idx === -1) {
       throw new Error(`Node entry not found for entityId "${entityId}"`);
     }
-    Object.assign(mutableNodes[idx], patch);
+    Object.assign(mutableNodes[idx], stripDangerousKeys(patch));
   } else {
     const mutableEdges = cloned.edges as TopologyEdgeEntry[];
     const idx = mutableEdges.findIndex((e) =>
@@ -44,7 +50,7 @@ export function applyPropertyPatchToFlowRefs(
     if (idx === -1) {
       throw new Error(`Edge entry not found for entityId "${entityId}"`);
     }
-    Object.assign(mutableEdges[idx], patch);
+    Object.assign(mutableEdges[idx], stripDangerousKeys(patch));
   }
 
   return cloned;
