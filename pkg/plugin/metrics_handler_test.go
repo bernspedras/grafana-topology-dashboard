@@ -455,3 +455,304 @@ func TestBasicAuth(t *testing.T) {
 		})
 	}
 }
+
+// ─── resolveAuth tests ─────────────────────────────────────────────────────
+
+// withPluginContextForAuth injects a PluginContext with auth-specific fields
+// into the request context.
+func withPluginContextForAuth(r *http.Request, grafanaURL string, token string) *http.Request {
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{"serviceAccountToken": token},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: grafanaURL}),
+	}
+	ctx := backend.WithPluginContext(r.Context(), pCtx)
+	return r.WithContext(ctx)
+}
+
+func TestResolveAuth_ServiceAccountToken(t *testing.T) {
+	app := newTestApp()
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	req = withPluginContextForAuth(req, "http://grafana:3000", "my-sa-token")
+
+	_, authHeader := app.resolveAuth(req)
+	if authHeader != "Bearer my-sa-token" {
+		t.Errorf("expected 'Bearer my-sa-token', got %q", authHeader)
+	}
+}
+
+func TestResolveAuth_EnvVarToken(t *testing.T) {
+	t.Setenv("GF_SA_TOKEN", "envtoken")
+	t.Setenv("TOPOLOGY_DEV_MODE", "")
+
+	app := newTestApp()
+	// No service account token in plugin context.
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	_, authHeader := app.resolveAuth(req)
+	if authHeader != "Bearer envtoken" {
+		t.Errorf("expected 'Bearer envtoken', got %q", authHeader)
+	}
+}
+
+func TestResolveAuth_DevModeBasicAuth(t *testing.T) {
+	t.Setenv("GF_SA_TOKEN", "")
+	t.Setenv("TOPOLOGY_DEV_MODE", "true")
+	t.Setenv("GF_SECURITY_ADMIN_USER", "admin")
+	t.Setenv("GF_SECURITY_ADMIN_PASSWORD", "secret")
+
+	app := newTestApp()
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	_, authHeader := app.resolveAuth(req)
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+	if authHeader != want {
+		t.Errorf("expected %q, got %q", want, authHeader)
+	}
+}
+
+func TestResolveAuth_DevModeMissingCreds(t *testing.T) {
+	t.Setenv("GF_SA_TOKEN", "")
+	t.Setenv("TOPOLOGY_DEV_MODE", "true")
+	t.Setenv("GF_SECURITY_ADMIN_USER", "")
+	t.Setenv("GF_SECURITY_ADMIN_PASSWORD", "")
+
+	app := newTestApp()
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	_, authHeader := app.resolveAuth(req)
+	if authHeader != "" {
+		t.Errorf("expected empty auth header when dev mode creds missing, got %q", authHeader)
+	}
+}
+
+func TestResolveAuth_NoAuth(t *testing.T) {
+	t.Setenv("GF_SA_TOKEN", "")
+	t.Setenv("TOPOLOGY_DEV_MODE", "")
+
+	app := newTestApp()
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	_, authHeader := app.resolveAuth(req)
+	if authHeader != "" {
+		t.Errorf("expected empty auth header, got %q", authHeader)
+	}
+}
+
+func TestResolveAuth_GrafanaURL_FromConfig(t *testing.T) {
+	app := newTestApp()
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	req = withPluginContextForAuth(req, "http://my-grafana:8080", "token")
+
+	grafanaURL, _ := app.resolveAuth(req)
+	if grafanaURL != "http://my-grafana:8080" {
+		t.Errorf("expected 'http://my-grafana:8080', got %q", grafanaURL)
+	}
+}
+
+func TestResolveAuth_GrafanaURL_FromEnv(t *testing.T) {
+	t.Setenv("GF_APP_URL", "http://env-grafana:9090")
+
+	app := newTestApp()
+	// Empty AppURL in config.
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{"serviceAccountToken": "token"},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	grafanaURL, _ := app.resolveAuth(req)
+	if grafanaURL != "http://env-grafana:9090" {
+		t.Errorf("expected 'http://env-grafana:9090', got %q", grafanaURL)
+	}
+}
+
+func TestResolveAuth_GrafanaURL_Default(t *testing.T) {
+	t.Setenv("GF_APP_URL", "")
+
+	app := newTestApp()
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			DecryptedSecureJSONData: map[string]string{"serviceAccountToken": "token"},
+		},
+		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	grafanaURL, _ := app.resolveAuth(req)
+	if grafanaURL != "http://localhost:3000" {
+		t.Errorf("expected 'http://localhost:3000', got %q", grafanaURL)
+	}
+}
+
+func TestResolveAuth_StripsTrailingSlash(t *testing.T) {
+	app := newTestApp()
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	req = withPluginContextForAuth(req, "http://grafana:3000/", "token")
+
+	grafanaURL, _ := app.resolveAuth(req)
+	if grafanaURL != "http://grafana:3000" {
+		t.Errorf("expected trailing slash stripped, got %q", grafanaURL)
+	}
+}
+
+// ─── resolveDataSourceMap tests ────────────────────────────────────────────
+
+func TestResolveDataSourceMap_Valid(t *testing.T) {
+	app := newTestApp()
+	jsonData, _ := json.Marshal(map[string]interface{}{
+		"dataSourceMap": map[string]string{
+			"prometheus": "uid-1",
+			"loki":      "uid-2",
+		},
+	})
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			JSONData: jsonData,
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	dsMap := app.resolveDataSourceMap(req)
+	if len(dsMap) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(dsMap))
+	}
+	if dsMap["prometheus"] != "uid-1" {
+		t.Errorf("expected prometheus=uid-1, got %q", dsMap["prometheus"])
+	}
+	if dsMap["loki"] != "uid-2" {
+		t.Errorf("expected loki=uid-2, got %q", dsMap["loki"])
+	}
+}
+
+func TestResolveDataSourceMap_NilSettings(t *testing.T) {
+	app := newTestApp()
+	pCtx := backend.PluginContext{}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	dsMap := app.resolveDataSourceMap(req)
+	if dsMap != nil {
+		t.Errorf("expected nil for nil settings, got %v", dsMap)
+	}
+}
+
+func TestResolveDataSourceMap_MalformedJSON(t *testing.T) {
+	app := newTestApp()
+	pCtx := backend.PluginContext{
+		AppInstanceSettings: &backend.AppInstanceSettings{
+			JSONData: []byte(`{not valid json`),
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
+	ctx := backend.WithPluginContext(req.Context(), pCtx)
+	req = req.WithContext(ctx)
+
+	dsMap := app.resolveDataSourceMap(req)
+	if dsMap != nil {
+		t.Errorf("expected nil for malformed JSON, got %v", dsMap)
+	}
+}
+
+// ─── baselineCacheKey tests ────────────────────────────────────────────────
+
+func TestBaselineCacheKey_Deterministic(t *testing.T) {
+	app := newTestApp()
+	req := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"k1": "q1", "k2": "q2"},
+		},
+	}
+	dsMap := map[string]string{"ds1": "uid1"}
+
+	key1 := app.baselineCacheKey(req, dsMap)
+	key2 := app.baselineCacheKey(req, dsMap)
+
+	if key1 != key2 {
+		t.Errorf("expected deterministic cache key, got %q and %q", key1, key2)
+	}
+	if key1 == "" {
+		t.Error("cache key should not be empty")
+	}
+}
+
+func TestBaselineCacheKey_DifferentDatasources(t *testing.T) {
+	app := newTestApp()
+	req := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"k1": "q1"},
+		},
+	}
+
+	key1 := app.baselineCacheKey(req, map[string]string{"ds1": "uid-A"})
+	key2 := app.baselineCacheKey(req, map[string]string{"ds1": "uid-B"})
+
+	if key1 == key2 {
+		t.Errorf("expected different cache keys for different datasource UIDs, both got %q", key1)
+	}
+}
+
+func TestBaselineCacheKey_DifferentQueryKeys(t *testing.T) {
+	app := newTestApp()
+	dsMap := map[string]string{"ds1": "uid1"}
+
+	req1 := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"key-alpha": "q1"},
+		},
+	}
+	req2 := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"key-beta": "q1"},
+		},
+	}
+
+	key1 := app.baselineCacheKey(req1, dsMap)
+	key2 := app.baselineCacheKey(req2, dsMap)
+
+	if key1 == key2 {
+		t.Errorf("expected different cache keys for different query keys, both got %q", key1)
+	}
+}
