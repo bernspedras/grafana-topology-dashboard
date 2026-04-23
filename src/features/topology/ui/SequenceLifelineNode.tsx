@@ -12,14 +12,14 @@ import { healthFromMetricRows } from '../application/healthFromMetricRows';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
 import type { MetricRow } from '../application/nodeDisplayData';
 import { edgeMetricRows } from '../application/edgeDisplayData';
-import type { CollapsedDbInfo } from '../application/collapseDbConnections';
 import { SEQ_NODE_WIDTH, SEQ_SELF_LOOP_Y_OFFSET } from '../application/layoutSequenceDiagram';
 import type { SequenceLifelineData } from '../application/layoutSequenceDiagram';
 import { usePromqlQueries } from './PromqlQueriesContext';
 import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
-import { useSla } from './SlaContext';
-import { useDirections } from './DirectionContext';
+import { useSla, useSlaMap } from './SlaContext';
+import { useDirections, useDirectionMap } from './DirectionContext';
+import { CollapsedDbSection } from './CollapsedDbSection';
 import { PromQLModal } from './PromQLModal';
 import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
@@ -69,19 +69,22 @@ const seqHandleBase = {
   border: 'none !important',
   backgroundColor: '#94a3b8 !important',
   pointerEvents: 'auto !important' as 'auto',
-  opacity: '0 !important' as unknown as number,
   transition: 'opacity 150ms',
   // Center handle on the lifeline: override React Flow's right:-4px / left:-4px
-  left: 'calc(50% - 4px) !important' as string,
-  right: 'auto !important' as string,
   // Override React Flow's top:50% + translateY(-50%) so our pixel top is used
-  transform: 'none !important' as 'none',
-  '&:hover': {
-    opacity: '0.6 !important' as unknown as number,
-  },
 } as const;
 
-const seqHandleCls = css(seqHandleBase);
+// Emotion CSS overrides that need !important strings for React Flow handle styles.
+// Declared separately to avoid `as unknown as number` casts in the `as const` block.
+const seqHandleOverrides: Record<string, unknown> = {
+  opacity: '0 !important',
+  left: 'calc(50% - 4px) !important',
+  right: 'auto !important',
+  transform: 'none !important',
+  '&:hover': { opacity: '0.6 !important' },
+};
+
+const seqHandleCls = css({ ...seqHandleBase, ...seqHandleOverrides });
 
 const seqCollapsedDbHeaderCls = css({
   fontSize: '11px',
@@ -97,7 +100,7 @@ const seqCollapsedDbHeaderCls = css({
 
 function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifelineNodeType>): React.JSX.Element {
   const node: TopologyNode = data.domainNode;
-  const collapsedDb = (data as SequenceLifelineData & { collapsedDb?: CollapsedDbInfo }).collapsedDb;
+  const collapsedDb = data.collapsedDb;
   const { sourceOrders, targetOrders, selfLoopOrders, orderToY, nodeCardHeight, lifelineHeight } = data;
   const selfLoopSet = new Set(selfLoopOrders);
 
@@ -116,10 +119,12 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
   const { options: viewOptions } = useViewOptions();
   const sla = useSla(node.id);
   const directions = useDirections(node.id);
-  const dbEdgeSla = useSla(collapsedDb?.dbEdge.id ?? '');
-  const dbEdgeDirections = useDirections(collapsedDb?.dbEdge.id ?? '');
-  const dbNodeSla = useSla(collapsedDb?.dbNode.id ?? '');
-  const dbNodeDirections = useDirections(collapsedDb?.dbNode.id ?? '');
+  const slaMap = useSlaMap();
+  const dirMap = useDirectionMap();
+  const dbEdgeSla = collapsedDb !== undefined ? slaMap[collapsedDb.dbEdge.id] : undefined;
+  const dbEdgeDirections = collapsedDb !== undefined ? dirMap[collapsedDb.dbEdge.id] : undefined;
+  const dbNodeSla = collapsedDb !== undefined ? slaMap[collapsedDb.dbNode.id] : undefined;
+  const dbNodeDirections = collapsedDb !== undefined ? dirMap[collapsedDb.dbNode.id] : undefined;
   const allMetrics = nodeMetricRows(node, selectedDeployment || undefined, viewOptions.coloringMode, sla, directions);
 
   const dbConnectionRows: readonly MetricRow[] = collapsedDb !== undefined
@@ -295,72 +300,18 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
             })}
           </div>
 
-          {/* Collapsed DB Connection section */}
-          {collapsedDb !== undefined && dbConnMetricsFiltered.length > 0 && (
-            <>
-              <div className={styles.divider} />
-              <div className={seqCollapsedDbHeaderCls}>DB Connection</div>
-              <div className={styles.metricsWrapper}>
-                {dbConnMetricsFiltered.map((m) => {
-                  const key = m.metricKey;
-                  if (key !== undefined) {
-                    return (
-                      <button
-                        key={'dbc-' + m.label}
-                        type="button"
-                        className={'nodrag ' + styles.metricButton}
-                        onClick={(): void => {
-                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbEdge.id, entityType: 'edge', weekAgoValue: m.weekAgoValue, unit: m.unit });
-                        }}
-                      >
-                        <span className={styles.metricLabel}>{m.label}</span>
-                        <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                      </button>
-                    );
-                  }
-                  return (
-                    <div key={'dbc-' + m.label} className={styles.metricRow}>
-                      <span className={styles.metricLabel}>{m.label}</span>
-                      <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {/* Collapsed DB Instance section */}
-          {collapsedDb !== undefined && dbInstMetricsFiltered.length > 0 && (
-            <>
-              <div className={styles.divider} />
-              <div className={seqCollapsedDbHeaderCls}>{'DB Instance: ' + collapsedDb.dbNode.label}</div>
-              <div className={styles.metricsWrapper}>
-                {dbInstMetricsFiltered.map((m) => {
-                  const key = m.metricKey;
-                  if (key !== undefined) {
-                    return (
-                      <button
-                        key={'dbi-' + m.label}
-                        type="button"
-                        className={'nodrag ' + styles.metricButton}
-                        onClick={(): void => {
-                          setChartMetric({ key, label: m.label, description: undefined, entityId: collapsedDb.dbNode.id, entityType: 'node', weekAgoValue: m.weekAgoValue, unit: m.unit });
-                        }}
-                      >
-                        <span className={styles.metricLabel}>{m.label}</span>
-                        <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                      </button>
-                    );
-                  }
-                  return (
-                    <div key={'dbi-' + m.label} className={styles.metricRow}>
-                      <span className={styles.metricLabel}>{m.label}</span>
-                      <span className={styles.metricValue} style={{ color: m.color }}>{m.value}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+          {/* Collapsed DB sections (connection + instance) */}
+          {collapsedDb !== undefined && (
+            <CollapsedDbSection
+              dbConnMetrics={dbConnMetricsFiltered}
+              dbInstMetrics={dbInstMetricsFiltered}
+              dbEdgeId={collapsedDb.dbEdge.id}
+              dbNodeId={collapsedDb.dbNode.id}
+              dbNodeLabel={collapsedDb.dbNode.label}
+              headerClassName={seqCollapsedDbHeaderCls}
+              withTooltip={false}
+              onChartClick={setChartMetric}
+            />
           )}
         </div>
       )}

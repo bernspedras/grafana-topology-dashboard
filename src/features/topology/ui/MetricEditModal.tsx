@@ -205,7 +205,7 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
     if (edgeEntry === undefined) {
       return undefined;
     }
-    return (edgeEntry as unknown as Record<string, unknown>).sequenceOrder as number | undefined;
+    return 'sequenceOrder' in edgeEntry ? edgeEntry.sequenceOrder : undefined;
   }, [entityType, entityId, flowData]);
 
   useEffect((): void => {

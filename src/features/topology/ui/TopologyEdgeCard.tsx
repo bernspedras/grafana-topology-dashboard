@@ -37,6 +37,7 @@ import { css } from '@emotion/css';
 export interface TopologyEdgeCardData {
   readonly domainEdge: TopologyEdge;
   readonly isEditing?: boolean;
+  readonly seqSelfLoopLabelX?: number | undefined;
   [key: string]: unknown;
 }
 
@@ -438,7 +439,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   } else if (isSequenceEdge && isSelfLoop) {
     // Sequence self-loop: use pre-computed label X from layout (midpoint between
     // this lifeline and the next column) since handle X may not equal the lifeline center.
-    const precomputedX = (data as Record<string, unknown>).seqSelfLoopLabelX as number | undefined;
+    const precomputedX = data.seqSelfLoopLabelX;
     baseLabelX = precomputedX ?? sourceX + 200;
     baseLabelY = (sourceY + targetY) / 2;
   } else if (isSequenceEdge) {

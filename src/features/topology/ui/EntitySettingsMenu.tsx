@@ -39,7 +39,7 @@ export function EntitySettingsMenu({
       return;
     }
     const handler = (e: MouseEvent): void => {
-      if (wrapperRef.current !== null && !wrapperRef.current.contains(e.target as HTMLElement)) {
+      if (wrapperRef.current !== null && e.target instanceof Node && !wrapperRef.current.contains(e.target)) {
         setOpen(false);
       }
     };

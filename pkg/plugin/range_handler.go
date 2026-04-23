@@ -42,9 +42,9 @@ func validateRangeRequest(req MetricRangeRequest) error {
 	if len(req.Queries) > maxRangeQueriesPerCall {
 		return fmt.Errorf("too many queries: %d (max %d)", len(req.Queries), maxRangeQueriesPerCall)
 	}
-	for key, promql := range req.Queries {
+	for _, promql := range req.Queries {
 		if len(promql) > maxPromQLLen {
-			return fmt.Errorf("PromQL expression too long for key %q: %d chars (max %d)", key, len(promql), maxPromQLLen)
+			return fmt.Errorf("PromQL expression too long: %d chars (max %d)", len(promql), maxPromQLLen)
 		}
 	}
 	return nil
@@ -71,6 +71,7 @@ func (a *App) handleMetricRange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validateRangeRequest(req); err != nil {
+		a.logger.Warn("Range request validation failed", "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
