@@ -391,3 +391,38 @@ func TestExecuteRangeQueries_UsesRangeSem(t *testing.T) {
 		<-app.promSem
 	}
 }
+
+func TestQueryPrometheusRange_TruncatesExcessiveDataPoints(t *testing.T) {
+	// Generate a response with more data points than the derived limit.
+	totalPoints := maxRangeDataPoints + 500
+
+	var sb strings.Builder
+	sb.WriteString(`{"status":"success","data":{"resultType":"matrix","result":[{"values":[`)
+	for i := 0; i < totalPoints; i++ {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		fmt.Fprintf(&sb, `[%d,"%d"]`, 1000+i*15, i)
+	}
+	sb.WriteString(`]}]}}`)
+	body := sb.String()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	app := newTestApp()
+	result := app.queryPrometheusRange(context.Background(), server.URL, "Bearer test", "ds1", "avg(cpu)", 1000, 2_000_000, 15)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.Timestamps) != maxRangeDataPoints {
+		t.Errorf("expected %d data points (truncated to max), got %d", maxRangeDataPoints, len(result.Timestamps))
+	}
+	if len(result.Values) != maxRangeDataPoints {
+		t.Errorf("expected %d values (truncated to max), got %d", maxRangeDataPoints, len(result.Values))
+	}
+}

@@ -25,10 +25,11 @@ var (
 // execution via the CallResource interface and topology CRUD via the file store.
 type App struct {
 	backend.CallResourceHandler
-	httpClient    *http.Client
-	baselineCache *BaselineCache
-	topologyStore *TopologyStore
-	logger        log.Logger
+	httpClient      *http.Client
+	baselineCache   *BaselineCache
+	topologyStore   *TopologyStore
+	schemaValidator *SchemaValidator
+	logger          log.Logger
 	// promSem is a process-wide semaphore that limits how many concurrent
 	// instant queries can be in-flight to Prometheus at any time. This protects
 	// Prometheus from burst load when multiple users open the dashboard
@@ -88,13 +89,19 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 	}
 	logger.Info("Topology store initialised", "dataDir", dataDir)
 
+	sv, err := NewSchemaValidator()
+	if err != nil {
+		return nil, err
+	}
+
 	app := &App{
-		httpClient:    httpClient,
-		baselineCache: NewBaselineCache(5*time.Minute, logger),
-		topologyStore: store,
-		logger:        logger,
-		promSem:       make(chan struct{}, 15),
-		rangeSem:      make(chan struct{}, 4),
+		httpClient:      httpClient,
+		baselineCache:   NewBaselineCache(5*time.Minute, logger),
+		topologyStore:   store,
+		schemaValidator: sv,
+		logger:          logger,
+		promSem:         make(chan struct{}, 15),
+		rangeSem:        make(chan struct{}, 4),
 	}
 
 	mux := http.NewServeMux()

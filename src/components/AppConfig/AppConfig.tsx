@@ -15,16 +15,32 @@ import {
   deleteNodeTemplate,
   saveEdgeTemplate,
   deleteEdgeTemplate,
-  saveDatasources,
   saveSlaDefaults,
   deleteSlaDefaults,
-  createFlow,
+  importZip,
 } from '../../features/topology/application/topologyApi';
-import type { TopologyBundleResponse } from '../../features/topology/application/topologyApi';
-import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
-import { validateZipFileSize, validateZipEntries } from './validateZipUpload';
+import type { TopologyBundleResponse, ImportValidationError } from '../../features/topology/application/topologyApi';
+import { zipSync, strToU8 } from 'fflate';
+import { validateZipFileSize } from './validateZipUpload';
 
 export type AppConfigProps = PluginConfigPageProps<AppPluginMeta>;
+
+// ─── Validation error extraction ────────────────────────────────────────────
+
+/** Extract schema validation error message from a backend 400 response. */
+function extractValidationError(err: unknown): string | undefined {
+  const data = (err as { data?: { error?: string; details?: readonly string[] } } | undefined)?.data;
+  if (data?.error === undefined || data.details === undefined) return undefined;
+  return `${data.error}:\n${data.details.join('\n')}`;
+}
+
+/** Extract per-file validation errors from the ZIP import 400 response. */
+function extractImportValidationError(err: unknown): string | undefined {
+  const data = (err as { data?: { error?: string; files?: readonly ImportValidationError['files'][number][] } } | undefined)?.data;
+  if (data?.error === undefined || data.files === undefined) return undefined;
+  const lines = data.files.map((f) => `${f.path}:\n  ${f.details.join('\n  ')}`);
+  return `${data.error}:\n\n${lines.join('\n\n')}`;
+}
 
 // ─── Grafana datasource discovery ────────────────────────────────────────────
 
@@ -86,8 +102,13 @@ function JsonItemList({ items, label, labelFn, onSaveItem, onDeleteItem }: JsonI
       setStatus('Invalid JSON');
       return;
     }
-    await onSaveItem(parsed);
-    setStatus('Saved');
+    try {
+      await onSaveItem(parsed);
+      setStatus('Saved');
+    } catch (err: unknown) {
+      const message = extractValidationError(err);
+      setStatus(message ?? 'Failed to save');
+    }
   };
 
   const handleDelete = async (id: string): Promise<void> => {
@@ -129,7 +150,7 @@ function JsonItemList({ items, label, labelFn, onSaveItem, onDeleteItem }: JsonI
                 <div className={s.editorActions}>
                   <Button size="sm" onClick={() => void handleSave()}>Save Changes</Button>
                   <Button size="sm" variant="destructive" fill="outline" onClick={() => void handleDelete(item.id)}>Delete</Button>
-                  {status !== null && <span className={s.muted}>{status}</span>}
+                  {status !== null && <div className={status === 'Saved' ? s.muted : s.validationError}>{status}</div>}
                 </div>
               </div>
             )}
@@ -355,58 +376,24 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
       return;
     }
 
-    const buffer = await file.arrayBuffer();
-    const unzipped = unzipSync(new Uint8Array(buffer));
-
-    const entriesErr = validateZipEntries(unzipped);
-    if (entriesErr !== undefined) {
-      alert(entriesErr.message);
-      return;
-    }
-
-    const flows: ItemWithId[] = [];
-    const nodes: ItemWithId[] = [];
-    const edges: ItemWithId[] = [];
-    let datasourcesRaw: unknown[] | undefined;
-    let slaDefaultsRaw: unknown;
-
-    for (const [path, data] of Object.entries(unzipped)) {
-      if (!path.endsWith('.json')) continue;
-      try {
-        if (path.endsWith('datasources.json')) {
-          datasourcesRaw = JSON.parse(strFromU8(data)) as unknown[];
-        } else if (path.endsWith('sla-defaults.json')) {
-          slaDefaultsRaw = JSON.parse(strFromU8(data)) as unknown;
-        } else {
-          const parsed = JSON.parse(strFromU8(data)) as ItemWithId;
-          if (path.includes('/flows/') || (/^flows\//.exec(path))) {
-            flows.push(parsed);
-          } else if (path.includes('/templates/nodes/') || (/^templates\/nodes\//.exec(path))) {
-            nodes.push(parsed);
-          } else if (path.includes('/templates/edges/') || (/^templates\/edges\//.exec(path))) {
-            edges.push(parsed);
-          }
-        }
-      } catch {
-        // skip invalid JSON files
+    try {
+      const result = await importZip(file);
+      const parts: string[] = [];
+      if (result.flows > 0) parts.push(`${String(result.flows)} flows`);
+      if (result.nodeTemplates > 0) parts.push(`${String(result.nodeTemplates)} node templates`);
+      if (result.edgeTemplates > 0) parts.push(`${String(result.edgeTemplates)} edge templates`);
+      if (result.datasources > 0) parts.push('datasources');
+      if (result.slaDefaults > 0) parts.push('SLA defaults');
+      alert(`Import successful: ${parts.join(', ')}`);
+      reload();
+    } catch (err: unknown) {
+      const validationMsg = extractImportValidationError(err);
+      if (validationMsg !== undefined) {
+        alert(validationMsg);
+      } else {
+        alert('Failed to import ZIP file.');
       }
     }
-
-    if (flows.length === 0 && nodes.length === 0 && edges.length === 0 && datasourcesRaw === undefined && slaDefaultsRaw === undefined) {
-      alert('No valid topology files found in ZIP. Expected paths: flows/*.json, templates/nodes/*.json, templates/edges/*.json, datasources.json, sla-defaults.json');
-      return;
-    }
-
-    // Write each item to the Go backend.
-    const promises: Promise<unknown>[] = [];
-    if (datasourcesRaw !== undefined) { promises.push(saveDatasources(datasourcesRaw)); }
-    if (slaDefaultsRaw !== undefined) { promises.push(saveSlaDefaults(slaDefaultsRaw)); }
-    for (const f of flows) { promises.push(saveFlow(f.id, f).catch(() => createFlow(f))); }
-    for (const n of nodes) { promises.push(saveNodeTemplate(n.id, n)); }
-    for (const e of edges) { promises.push(saveEdgeTemplate(e.id, e)); }
-    await Promise.all(promises);
-
-    reload();
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -636,6 +623,13 @@ const getStyles = (theme: GrafanaTheme2): Record<string, string> => ({
   muted: css({
     color: theme.colors.text.secondary,
     fontSize: theme.typography.bodySmall.fontSize,
+  }),
+  validationError: css({
+    color: theme.colors.error.text,
+    fontSize: theme.typography.bodySmall.fontSize,
+    whiteSpace: 'pre-wrap',
+    maxHeight: '200px',
+    overflow: 'auto',
   }),
   badge: css({
     display: 'inline-block',
