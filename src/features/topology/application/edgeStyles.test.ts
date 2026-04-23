@@ -212,3 +212,148 @@ describe('edgeMarkerEnd', (): void => {
     expect(marker.color).toBe('#ef4444');
   });
 });
+
+// ─── Additional imports for remaining coverage ──────────────────────────────
+
+import {
+  AmqpEdge,
+  KafkaEdge,
+  GrpcEdge,
+  AmqpEdgeMetrics,
+  KafkaEdgeMetrics,
+} from '../domain/index';
+
+import {
+  edgeLabelStyle,
+  edgeLabelBgStyle,
+  lowPolyEdgeStrokeStyle,
+  lowPolyEdgeMarkerEnd,
+} from './edgeStyles';
+
+// ─── Additional factories ───────────────────────────────────────────────────
+
+function makeAmqpEdge(): AmqpEdge {
+  return new AmqpEdge({
+    id: 'e-amqp', source: 'a', target: 'b', exchange: 'orders',
+    metrics: new AmqpEdgeMetrics({ rps: 100, errorRate: 0, lastUpdatedAt: new Date() }),
+  });
+}
+
+function makeKafkaEdge(): KafkaEdge {
+  return new KafkaEdge({
+    id: 'e-kafka', source: 'a', target: 'b', topic: 'events',
+    metrics: new KafkaEdgeMetrics({ rps: 100, errorRate: 0, lastUpdatedAt: new Date() }),
+  });
+}
+
+function makeGrpcEdge(): GrpcEdge {
+  return new GrpcEdge({
+    id: 'e-grpc', source: 'a', target: 'b', grpcService: 'Svc', grpcMethod: 'Do',
+    metrics: new HttpEdgeMetrics({ rps: 100, errorRate: 0, lastUpdatedAt: new Date() }),
+  });
+}
+
+function makeJsonEdgeWithRps(rps: number | undefined): HttpJsonEdge {
+  return new HttpJsonEdge({
+    id: 'e-rps', source: 'a', target: 'b',
+    metrics: new HttpEdgeMetrics({ rps, errorRate: 0, lastUpdatedAt: new Date() }),
+  });
+}
+
+// ─── edgeStrokeStyle — remaining edge types ─────────────────────────────────
+
+describe('edgeStrokeStyle — remaining edge types', (): void => {
+  it('returns dashed stroke 6 2 2 2 width 2 for AmqpEdge', (): void => {
+    const style = edgeStrokeStyle(makeAmqpEdge(), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style).toEqual({ stroke: '#22c55e', strokeWidth: 2, strokeDasharray: '6 2 2 2' });
+  });
+
+  it('returns dashed stroke 8 4 width 2 for KafkaEdge', (): void => {
+    const style = edgeStrokeStyle(makeKafkaEdge(), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style).toEqual({ stroke: '#22c55e', strokeWidth: 2, strokeDasharray: '8 4' });
+  });
+
+  it('returns dashed stroke 2 2 width 2 for GrpcEdge', (): void => {
+    const style = edgeStrokeStyle(makeGrpcEdge(), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style).toEqual({ stroke: '#22c55e', strokeWidth: 2, strokeDasharray: '2 2' });
+  });
+});
+
+// ─── edgeLabelStyle ─────────────────────────────────────────────────────────
+
+describe('edgeLabelStyle', (): void => {
+  it('returns fontSize 11, fontWeight 600, fill matching health color', (): void => {
+    const style = edgeLabelStyle(makeJsonEdge(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style).toEqual({ fontSize: 11, fontWeight: 600, fill: '#22c55e' });
+  });
+
+  it('returns red fill for critical edge', (): void => {
+    const style = edgeLabelStyle(makeJsonEdge(5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.fill).toBe('#ef4444');
+  });
+});
+
+// ─── edgeLabelBgStyle ───────────────────────────────────────────────────────
+
+describe('edgeLabelBgStyle', (): void => {
+  it('returns fill #1e293b with fillOpacity 0.9', (): void => {
+    const style = edgeLabelBgStyle();
+    expect(style).toEqual({ fill: '#1e293b', fillOpacity: 0.9 });
+  });
+});
+
+// ─── lowPolyEdgeStrokeStyle ─────────────────────────────────────────────────
+
+describe('lowPolyEdgeStrokeStyle', (): void => {
+  it('returns strokeWidth 4 for rps=0', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(4);
+  });
+
+  it('returns strokeWidth 4 for rps=5 (< 10)', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(5), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(4);
+  });
+
+  it('returns strokeWidth 6 for rps=25 (< 50)', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(25), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(6);
+  });
+
+  it('returns strokeWidth 10 for rps=100 (< 200)', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(100), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(10);
+  });
+
+  it('returns strokeWidth 14 for rps=500 (< 1000)', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(500), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(14);
+  });
+
+  it('returns strokeWidth 20 for rps=2000 (>= 1000)', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(2000), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(20);
+  });
+
+  it('returns strokeWidth 4 for rps=undefined', (): void => {
+    const style = lowPolyEdgeStrokeStyle(makeJsonEdgeWithRps(undefined), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(style.strokeWidth).toBe(4);
+  });
+});
+
+// ─── lowPolyEdgeMarkerEnd ───────────────────────────────────────────────────
+
+describe('lowPolyEdgeMarkerEnd', (): void => {
+  it('returns large marker for low rps (48/4 = 12)', (): void => {
+    const marker = lowPolyEdgeMarkerEnd(makeJsonEdgeWithRps(0), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(marker.width).toBe(12);
+    expect(marker.height).toBe(12);
+    expect(marker.type).toBe(MarkerType.ArrowClosed);
+  });
+
+  it('returns small marker for high rps (48/20, clamped to 3)', (): void => {
+    const marker = lowPolyEdgeMarkerEnd(makeJsonEdgeWithRps(2000), 'sla', TEST_HTTP_SLA, TEST_HTTP_DIR);
+    expect(marker.width).toBe(3);
+    expect(marker.height).toBe(3);
+  });
+});

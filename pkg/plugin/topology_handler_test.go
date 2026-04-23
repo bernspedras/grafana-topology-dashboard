@@ -601,3 +601,505 @@ func TestWriteRawJSON_ValidValue_WritesBody(t *testing.T) {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }
+
+// ─── Node template handler tests ──────────────────────────────────────────
+
+func TestHandler_NodeTemplateLifecycle(t *testing.T) {
+	mux, dir := newHandlerTestApp(t)
+
+	nodeJSON := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Template Node","namespace":"prod"}`)
+
+	// 1. Create.
+	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d — %s", rec.Code, rec.Body.String())
+	}
+	var createResp struct{ ID string `json:"id"` }
+	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("create: unmarshal response: %v", err)
+	}
+	if createResp.ID != "node-tpl-1" {
+		t.Fatalf("create: unexpected id %q", createResp.ID)
+	}
+
+	// Verify file on disk.
+	nodePath := filepath.Join(dir, "templates", "nodes", "node-tpl-1.json")
+	if _, err := os.Stat(nodePath); err != nil {
+		t.Fatalf("create: node template file not found on disk: %v", err)
+	}
+
+	// 2. Get.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/nodes/node-tpl-1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d", rec.Code)
+	}
+	var got struct {
+		ID    string `json:"id"`
+		Kind  string `json:"kind"`
+		Label string `json:"label"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("get: unmarshal response: %v", err)
+	}
+	if got.ID != "node-tpl-1" || got.Kind != "eks-service" || got.Label != "Template Node" {
+		t.Fatalf("get: unexpected node template %+v", got)
+	}
+
+	// 3. List.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/nodes", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list: expected 200, got %d", rec.Code)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("list: unmarshal response: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("list: expected 1 item, got %d", len(items))
+	}
+
+	// 4. Update (PUT).
+	updated := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Updated Node","namespace":"staging"}`)
+	rec = do(mux, adminReq(http.MethodPut, "/templates/nodes/node-tpl-1", updated))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	// 5. Verify update.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/nodes/node-tpl-1", nil))
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("verify update: unmarshal: %v", err)
+	}
+	if got.Label != "Updated Node" {
+		t.Fatalf("update: expected 'Updated Node', got %q", got.Label)
+	}
+
+	// 6. Delete.
+	rec = do(mux, adminReq(http.MethodDelete, "/templates/nodes/node-tpl-1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete: expected 200, got %d", rec.Code)
+	}
+
+	// 7. File gone.
+	if _, err := os.Stat(nodePath); !os.IsNotExist(err) {
+		t.Fatalf("delete: node template file still exists on disk (err=%v)", err)
+	}
+
+	// 8. Get after delete → 404.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/nodes/node-tpl-1", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("get after delete: expected 404, got %d", rec.Code)
+	}
+}
+
+func TestHandler_GetNodeTemplate_NotFound(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodGet, "/templates/nodes/does-not-exist", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestHandler_CreateNodeTemplate_InvalidJSON(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", []byte(`not json`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestHandler_CreateNodeTemplate_MissingID(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", []byte(`{"kind":"eks-service","label":"No ID"}`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestHandler_NodeTemplates_AuthRequired(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	nodeJSON := []byte(`{"id":"auth-test","kind":"eks-service","label":"Auth Test"}`)
+
+	// Viewer cannot create.
+	rec := do(mux, viewerReq(http.MethodPost, "/templates/nodes", nodeJSON))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("create as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer cannot update.
+	rec = do(mux, viewerReq(http.MethodPut, "/templates/nodes/auth-test", nodeJSON))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("update as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer cannot delete.
+	rec = do(mux, viewerReq(http.MethodDelete, "/templates/nodes/auth-test", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("delete as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer CAN read (list and get).
+	// Seed a node template as admin first.
+	do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
+
+	rec = do(mux, viewerReq(http.MethodGet, "/templates/nodes", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list as viewer: expected 200, got %d", rec.Code)
+	}
+
+	rec = do(mux, viewerReq(http.MethodGet, "/templates/nodes/auth-test", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get as viewer: expected 200, got %d", rec.Code)
+	}
+}
+
+// ─── Edge template handler tests ──────────────────────────────────────────
+
+func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
+	mux, dir := newHandlerTestApp(t)
+
+	edgeJSON := []byte(`{"id":"edge-tpl-1","kind":"http-json","source":"a","target":"b"}`)
+
+	// 1. Create.
+	rec := do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d — %s", rec.Code, rec.Body.String())
+	}
+	var createResp struct{ ID string `json:"id"` }
+	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("create: unmarshal response: %v", err)
+	}
+	if createResp.ID != "edge-tpl-1" {
+		t.Fatalf("create: unexpected id %q", createResp.ID)
+	}
+
+	// Verify file on disk.
+	edgePath := filepath.Join(dir, "templates", "edges", "edge-tpl-1.json")
+	if _, err := os.Stat(edgePath); err != nil {
+		t.Fatalf("create: edge template file not found on disk: %v", err)
+	}
+
+	// 2. Get.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/edges/edge-tpl-1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d", rec.Code)
+	}
+	var got struct {
+		ID     string `json:"id"`
+		Kind   string `json:"kind"`
+		Source string `json:"source"`
+		Target string `json:"target"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("get: unmarshal response: %v", err)
+	}
+	if got.ID != "edge-tpl-1" || got.Kind != "http-json" || got.Source != "a" || got.Target != "b" {
+		t.Fatalf("get: unexpected edge template %+v", got)
+	}
+
+	// 3. List.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/edges", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list: expected 200, got %d", rec.Code)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("list: unmarshal response: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("list: expected 1 item, got %d", len(items))
+	}
+
+	// 4. Update (PUT).
+	updated := []byte(`{"id":"edge-tpl-1","kind":"http-xml","source":"a","target":"c"}`)
+	rec = do(mux, adminReq(http.MethodPut, "/templates/edges/edge-tpl-1", updated))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	// 5. Verify update.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/edges/edge-tpl-1", nil))
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("verify update: unmarshal: %v", err)
+	}
+	if got.Kind != "http-xml" || got.Target != "c" {
+		t.Fatalf("update: expected kind=http-xml target=c, got kind=%q target=%q", got.Kind, got.Target)
+	}
+
+	// 6. Delete.
+	rec = do(mux, adminReq(http.MethodDelete, "/templates/edges/edge-tpl-1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete: expected 200, got %d", rec.Code)
+	}
+
+	// 7. File gone.
+	if _, err := os.Stat(edgePath); !os.IsNotExist(err) {
+		t.Fatalf("delete: edge template file still exists on disk (err=%v)", err)
+	}
+
+	// 8. Get after delete → 404.
+	rec = do(mux, adminReq(http.MethodGet, "/templates/edges/edge-tpl-1", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("get after delete: expected 404, got %d", rec.Code)
+	}
+}
+
+func TestHandler_GetEdgeTemplate_NotFound(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodGet, "/templates/edges/does-not-exist", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestHandler_CreateEdgeTemplate_InvalidJSON(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodPost, "/templates/edges", []byte(`not json`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestHandler_EdgeTemplates_AuthRequired(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	edgeJSON := []byte(`{"id":"auth-edge","kind":"http-json","source":"a","target":"b"}`)
+
+	// Viewer cannot create.
+	rec := do(mux, viewerReq(http.MethodPost, "/templates/edges", edgeJSON))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("create as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer cannot update.
+	rec = do(mux, viewerReq(http.MethodPut, "/templates/edges/auth-edge", edgeJSON))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("update as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer cannot delete.
+	rec = do(mux, viewerReq(http.MethodDelete, "/templates/edges/auth-edge", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("delete as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer CAN read.
+	do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
+
+	rec = do(mux, viewerReq(http.MethodGet, "/templates/edges", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list as viewer: expected 200, got %d", rec.Code)
+	}
+
+	rec = do(mux, viewerReq(http.MethodGet, "/templates/edges/auth-edge", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get as viewer: expected 200, got %d", rec.Code)
+	}
+}
+
+// ─── Datasource handler tests ─────────────────────────────────────────────
+
+func TestHandler_PutDatasources(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	datasourcesJSON := []byte(`[{"name":"prometheus","uid":"ds-1"}]`)
+
+	rec := do(mux, adminReq(http.MethodPut, "/datasources", datasourcesJSON))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — %s", rec.Code, rec.Body.String())
+	}
+	var resp struct{ OK bool `json:"ok"` }
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !resp.OK {
+		t.Fatal("expected ok=true in response")
+	}
+}
+
+func TestHandler_PutDatasources_InvalidJSON(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodPut, "/datasources", []byte(`not json`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestHandler_PutDatasources_AuthRequired(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	datasourcesJSON := []byte(`[{"name":"prometheus","uid":"ds-1"}]`)
+
+	rec := do(mux, viewerReq(http.MethodPut, "/datasources", datasourcesJSON))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rec.Code)
+	}
+}
+
+// ─── SLA defaults handler tests ───────────────────────────────────────────
+
+func TestHandler_SlaDefaults_Lifecycle(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	slaJSON := []byte(`{"node":{"cpu":{"warning":80,"critical":95}}}`)
+
+	// PUT → 200.
+	rec := do(mux, adminReq(http.MethodPut, "/sla-defaults", slaJSON))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put: expected 200, got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify in bundle.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bundle: expected 200, got %d", rec.Code)
+	}
+	var bundle TopologyBundle
+	if err := json.Unmarshal(rec.Body.Bytes(), &bundle); err != nil {
+		t.Fatalf("bundle: unmarshal: %v", err)
+	}
+	if bundle.SlaDefaults == nil {
+		t.Fatal("expected slaDefaults in bundle, got nil")
+	}
+	var sla struct {
+		Node struct {
+			CPU struct {
+				Warning  int `json:"warning"`
+				Critical int `json:"critical"`
+			} `json:"cpu"`
+		} `json:"node"`
+	}
+	if err := json.Unmarshal(bundle.SlaDefaults, &sla); err != nil {
+		t.Fatalf("slaDefaults: unmarshal: %v", err)
+	}
+	if sla.Node.CPU.Warning != 80 || sla.Node.CPU.Critical != 95 {
+		t.Fatalf("unexpected SLA values: %+v", sla)
+	}
+
+	// DELETE → 200.
+	rec = do(mux, adminReq(http.MethodDelete, "/sla-defaults", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete: expected 200, got %d", rec.Code)
+	}
+
+	// Verify gone from bundle.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
+	var bundleAfterDelete TopologyBundle
+	if err := json.Unmarshal(rec.Body.Bytes(), &bundleAfterDelete); err != nil {
+		t.Fatalf("bundle after delete: unmarshal: %v", err)
+	}
+	if bundleAfterDelete.SlaDefaults != nil {
+		t.Fatalf("expected nil slaDefaults after delete, got %s", string(bundleAfterDelete.SlaDefaults))
+	}
+}
+
+func TestHandler_PutSlaDefaults_InvalidJSON(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	rec := do(mux, adminReq(http.MethodPut, "/sla-defaults", []byte(`not json`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestHandler_SlaDefaults_AuthRequired(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	slaJSON := []byte(`{"node":{"cpu":{"warning":80,"critical":95}}}`)
+
+	// Viewer cannot PUT.
+	rec := do(mux, viewerReq(http.MethodPut, "/sla-defaults", slaJSON))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("put as viewer: expected 403, got %d", rec.Code)
+	}
+
+	// Viewer cannot DELETE.
+	rec = do(mux, viewerReq(http.MethodDelete, "/sla-defaults", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("delete as viewer: expected 403, got %d", rec.Code)
+	}
+}
+
+// ─── Bundle includes templates and datasources ────────────────────────────
+
+func TestHandler_BundleIncludesTemplatesAndDatasources(t *testing.T) {
+	mux, _ := newHandlerTestApp(t)
+
+	// Create a node template, edge template, and datasources.
+	nodeJSON := []byte(`{"id":"bundle-node","kind":"eks-service","label":"Bundle Node"}`)
+	edgeJSON := []byte(`{"id":"bundle-edge","kind":"http-json","source":"a","target":"b"}`)
+	datasourcesJSON := []byte(`[{"name":"prometheus","uid":"ds-1"}]`)
+
+	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create node template: expected 201, got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create edge template: expected 201, got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(mux, adminReq(http.MethodPut, "/datasources", datasourcesJSON))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put datasources: expected 200, got %d — %s", rec.Code, rec.Body.String())
+	}
+
+	// Fetch the bundle.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bundle: expected 200, got %d", rec.Code)
+	}
+
+	var bundle TopologyBundle
+	if err := json.Unmarshal(rec.Body.Bytes(), &bundle); err != nil {
+		t.Fatalf("bundle: unmarshal: %v", err)
+	}
+
+	if len(bundle.NodeTemplates) != 1 {
+		t.Fatalf("expected 1 node template in bundle, got %d", len(bundle.NodeTemplates))
+	}
+	if len(bundle.EdgeTemplates) != 1 {
+		t.Fatalf("expected 1 edge template in bundle, got %d", len(bundle.EdgeTemplates))
+	}
+	if len(bundle.Datasources) != 1 {
+		t.Fatalf("expected 1 datasource in bundle, got %d", len(bundle.Datasources))
+	}
+
+	// Verify node template content.
+	var node struct{ ID string `json:"id"` }
+	if err := json.Unmarshal(bundle.NodeTemplates[0], &node); err != nil {
+		t.Fatalf("unmarshal node template: %v", err)
+	}
+	if node.ID != "bundle-node" {
+		t.Fatalf("expected node id 'bundle-node', got %q", node.ID)
+	}
+
+	// Verify edge template content.
+	var edge struct{ ID string `json:"id"` }
+	if err := json.Unmarshal(bundle.EdgeTemplates[0], &edge); err != nil {
+		t.Fatalf("unmarshal edge template: %v", err)
+	}
+	if edge.ID != "bundle-edge" {
+		t.Fatalf("expected edge id 'bundle-edge', got %q", edge.ID)
+	}
+
+	// Verify datasource content.
+	var ds struct {
+		Name string `json:"name"`
+		UID  string `json:"uid"`
+	}
+	if err := json.Unmarshal(bundle.Datasources[0], &ds); err != nil {
+		t.Fatalf("unmarshal datasource: %v", err)
+	}
+	if ds.Name != "prometheus" || ds.UID != "ds-1" {
+		t.Fatalf("unexpected datasource: %+v", ds)
+	}
+}

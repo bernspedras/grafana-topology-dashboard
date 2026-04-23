@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -190,5 +191,203 @@ func TestQueryPrometheus_ServerError(t *testing.T) {
 
 	if result != nil {
 		t.Errorf("expected nil for server error, got %v", *result)
+	}
+}
+
+// ─── Range query tests ─────────────────────────────────────────────────────
+
+// fakeRangePrometheusServer returns a test server that handles both
+// /api/v1/query_range and instant /api/v1/query requests.
+func fakeRangePrometheusServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "query_range") {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"success","data":{"resultType":"matrix","result":[{"values":[[1000,"10"],[1060,"20"],[1120,"30"]]}]}}`)
+			return
+		}
+		// Instant queries
+		promql := r.URL.Query().Get("query")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"%s"]}]}}`, promql)
+	}))
+}
+
+func TestQueryPrometheusRange_Success(t *testing.T) {
+	server := fakeRangePrometheusServer(t)
+	defer server.Close()
+
+	app := newTestApp()
+	result := app.queryPrometheusRange(context.Background(), server.URL, "Bearer test", "ds1", "avg(cpu)", 1000, 1120, 60)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.Timestamps) != 3 {
+		t.Fatalf("expected 3 timestamps, got %d", len(result.Timestamps))
+	}
+	if len(result.Values) != 3 {
+		t.Fatalf("expected 3 values, got %d", len(result.Values))
+	}
+	if result.Timestamps[0] != 1000 || result.Timestamps[1] != 1060 || result.Timestamps[2] != 1120 {
+		t.Errorf("unexpected timestamps: %v", result.Timestamps)
+	}
+	if result.Values[0] != 10 || result.Values[1] != 20 || result.Values[2] != 30 {
+		t.Errorf("unexpected values: %v", result.Values)
+	}
+}
+
+func TestQueryPrometheusRange_EmptyResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"matrix","result":[]}}`)
+	}))
+	defer server.Close()
+
+	app := newTestApp()
+	result := app.queryPrometheusRange(context.Background(), server.URL, "Bearer test", "ds1", "nonexistent", 1000, 2000, 60)
+
+	if result != nil {
+		t.Errorf("expected nil for empty result, got %+v", result)
+	}
+}
+
+func TestQueryPrometheusRange_NonOK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal error"))
+	}))
+	defer server.Close()
+
+	app := newTestApp()
+	result := app.queryPrometheusRange(context.Background(), server.URL, "Bearer test", "ds1", "avg(cpu)", 1000, 2000, 60)
+
+	if result != nil {
+		t.Errorf("expected nil for 500 response, got %+v", result)
+	}
+}
+
+func TestQueryPrometheusRange_MalformedJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{not valid json`)
+	}))
+	defer server.Close()
+
+	app := newTestApp()
+	result := app.queryPrometheusRange(context.Background(), server.URL, "Bearer test", "ds1", "avg(cpu)", 1000, 2000, 60)
+
+	if result != nil {
+		t.Errorf("expected nil for malformed JSON, got %+v", result)
+	}
+}
+
+func TestQueryPrometheusRange_NaNValues(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"matrix","result":[{"values":[[1000,"NaN"],[1060,"20"]]}]}}`)
+	}))
+	defer server.Close()
+
+	app := newTestApp()
+	result := app.queryPrometheusRange(context.Background(), server.URL, "Bearer test", "ds1", "avg(cpu)", 1000, 1120, 60)
+
+	if result == nil {
+		t.Fatal("expected non-nil result (NaN values should be skipped, not fail entirely)")
+	}
+	// Only the non-NaN value should be present.
+	if len(result.Values) != 1 {
+		t.Fatalf("expected 1 value (NaN skipped), got %d", len(result.Values))
+	}
+	if result.Values[0] != 20 {
+		t.Errorf("expected value 20, got %v", result.Values[0])
+	}
+}
+
+func TestExecuteRangeQueries_Concurrent(t *testing.T) {
+	server := fakeRangePrometheusServer(t)
+	defer server.Close()
+
+	app := newTestApp()
+	tasks := []RangeQueryTask{
+		{Key: "key-a", DsUID: "ds1", PromQL: "avg(cpu)", Start: 1000, End: 1120, Step: 60},
+		{Key: "key-b", DsUID: "ds1", PromQL: "avg(memory)", Start: 1000, End: 1120, Step: 60},
+		{Key: "key-c", DsUID: "ds2", PromQL: "avg(disk)", Start: 1000, End: 1120, Step: 60},
+	}
+
+	results := app.executeRangeQueries(context.Background(), tasks, server.URL, "Bearer test")
+
+	for _, task := range tasks {
+		r, ok := results[task.Key]
+		if !ok {
+			t.Errorf("missing result for key %q", task.Key)
+			continue
+		}
+		if r == nil {
+			t.Errorf("expected non-nil result for key %q", task.Key)
+			continue
+		}
+		if len(r.Timestamps) != 3 {
+			t.Errorf("key %q: expected 3 timestamps, got %d", task.Key, len(r.Timestamps))
+		}
+	}
+}
+
+func TestExecuteRangeQueries_ContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(5 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	app := newTestApp()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	tasks := []RangeQueryTask{
+		{Key: "key-a", DsUID: "ds1", PromQL: "avg(cpu)", Start: 1000, End: 2000, Step: 60},
+	}
+
+	results := app.executeRangeQueries(ctx, tasks, server.URL, "Bearer test")
+
+	if results["key-a"] != nil {
+		t.Errorf("expected nil due to context cancellation, got %+v", results["key-a"])
+	}
+}
+
+func TestExecuteRangeQueries_UsesRangeSem(t *testing.T) {
+	server := fakeRangePrometheusServer(t)
+	defer server.Close()
+
+	app := newTestApp()
+
+	// Fill promSem completely — range queries must still succeed because they
+	// use the separate rangeSem.
+	for i := 0; i < cap(app.promSem); i++ {
+		app.promSem <- struct{}{}
+	}
+
+	tasks := []RangeQueryTask{
+		{Key: "key-a", DsUID: "ds1", PromQL: "avg(cpu)", Start: 1000, End: 1120, Step: 60},
+		{Key: "key-b", DsUID: "ds1", PromQL: "avg(memory)", Start: 1000, End: 1120, Step: 60},
+	}
+
+	// Use a timeout to avoid hanging forever if range queries incorrectly
+	// wait on the full promSem.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	results := app.executeRangeQueries(ctx, tasks, server.URL, "Bearer test")
+
+	if results["key-a"] == nil {
+		t.Error("expected non-nil result for key-a (range queries should use rangeSem, not promSem)")
+	}
+	if results["key-b"] == nil {
+		t.Error("expected non-nil result for key-b (range queries should use rangeSem, not promSem)")
+	}
+
+	// Drain promSem to avoid leaking.
+	for i := 0; i < cap(app.promSem); i++ {
+		<-app.promSem
 	}
 }
