@@ -3,6 +3,11 @@ import { TextEncoder, TextDecoder } from 'util';
 
 Object.assign(global, { TextDecoder, TextEncoder });
 
+// structuredClone is available in Node 17+ but not exposed by jest-environment-jsdom.
+if (typeof global.structuredClone === 'undefined') {
+  global.structuredClone = (val) => JSON.parse(JSON.stringify(val));
+}
+
 Object.defineProperty(global, 'matchMedia', {
   writable: true,
   value: (query) => ({

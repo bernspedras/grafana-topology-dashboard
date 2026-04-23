@@ -23,6 +23,7 @@ import { useEditMode } from './EditModeContext';
 import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { useDirections } from './DirectionContext';
+import { SEQ_SELF_LOOP_LABEL_X_OFFSET } from '../application/layoutSequenceDiagram';
 import { PromQLModal } from './PromQLModal';
 import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
@@ -440,7 +441,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     // Sequence self-loop: use pre-computed label X from layout (midpoint between
     // this lifeline and the next column) since handle X may not equal the lifeline center.
     const precomputedX = data.seqSelfLoopLabelX;
-    baseLabelX = precomputedX ?? sourceX + 200;
+    baseLabelX = precomputedX ?? sourceX + SEQ_SELF_LOOP_LABEL_X_OFFSET;
     baseLabelY = (sourceY + targetY) / 2;
   } else if (isSequenceEdge) {
     // Sequence mode: straight horizontal line — label at midpoint

@@ -23,10 +23,6 @@ export interface FlowOverridePatch {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
-function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj)) as T;
-}
-
 /**
  * Resolve the actual storage key for a metric.
  * Consumer-section metrics use display keys like "consumerRps" but are stored as "rps" in the section.
@@ -207,7 +203,7 @@ export function applyFlowOverridePatch(
   entityType: 'node' | 'edge',
   patch: FlowOverridePatch,
 ): TopologyDefinitionRefs {
-  const cloned = deepClone(flowRefs);
+  const cloned = structuredClone(flowRefs);
 
   if (entityType === 'node') {
     const mutableNodes = cloned.nodes as TopologyNodeEntry[];

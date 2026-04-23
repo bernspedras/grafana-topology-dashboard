@@ -9,10 +9,6 @@ function stripDangerousKeys(patch: Record<string, unknown>): Record<string, unkn
   return Object.fromEntries(Object.entries(patch).filter(([k]) => !DANGEROUS_KEYS.has(k)));
 }
 
-function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj)) as T;
-}
-
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -31,7 +27,7 @@ export function applyPropertyPatchToFlowRefs(
   entityType: 'node' | 'edge',
   patch: Record<string, unknown>,
 ): TopologyDefinitionRefs {
-  const cloned = deepClone(flowRefs);
+  const cloned = structuredClone(flowRefs);
 
   if (entityType === 'node') {
     const mutableNodes = cloned.nodes as TopologyNodeEntry[];

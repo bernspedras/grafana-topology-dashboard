@@ -1,4 +1,4 @@
-import { metricTooltipText } from './metricTooltip';
+import { metricTooltipText, slaTooltipText } from './metricTooltip';
 
 describe('metricTooltipText', () => {
   // ── Baseline mode ──────────────────────────────────────────────────────
@@ -35,5 +35,33 @@ describe('metricTooltipText', () => {
     const result = metricTooltipText(0, 0, 'percent', 'baseline', undefined, undefined);
     expect(result).toBeDefined();
     expect(result).toContain('Last week:');
+  });
+});
+
+describe('slaTooltipText', () => {
+  it('returns undefined when threshold is undefined', () => {
+    expect(slaTooltipText(undefined, 'percent', undefined)).toBeUndefined();
+  });
+
+  it('shows warning and critical thresholds with lower-is-better operator', () => {
+    const result = slaTooltipText({ warning: 80, critical: 95 }, 'ms', undefined);
+    expect(result).toBeDefined();
+    expect(result).toContain('Warning');
+    expect(result).toContain('Critical');
+    // Default direction (undefined) uses ≥
+    expect(result).toContain('\u2265');
+  });
+
+  it('uses ≤ operator for higher-is-better direction', () => {
+    const result = slaTooltipText({ warning: 99, critical: 95 }, 'percent', 'higher-is-better');
+    expect(result).toBeDefined();
+    expect(result).toContain('\u2264');
+  });
+
+  it('matches metricTooltipText SLA output without needing a dummy value', () => {
+    const threshold = { warning: 80, critical: 95 };
+    const viaSlaTooltip = slaTooltipText(threshold, 'ms', undefined);
+    const viaMetricTooltip = metricTooltipText(1, undefined, 'ms', 'sla', threshold, undefined);
+    expect(viaSlaTooltip).toBe(viaMetricTooltip);
   });
 });

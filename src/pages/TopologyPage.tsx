@@ -185,8 +185,8 @@ function TopologyPage(): React.JSX.Element {
       if (flowRefs === undefined || entry === undefined) {
         return;
       }
-      const clonedRefs = JSON.parse(JSON.stringify(flowRefs)) as Record<string, unknown>;
-      const mutableEdges = clonedRefs.edges as Record<string, unknown>[];
+      const clonedRefs = structuredClone(flowRefs);
+      const mutableEdges = (clonedRefs as unknown as Record<string, unknown>).edges as Record<string, unknown>[];
       const idx = mutableEdges.findIndex((e) => {
         const hasEdgeId = typeof e.edgeId === 'string';
         return hasEdgeId ? e.edgeId === edgeId : e.id === edgeId;
@@ -200,7 +200,7 @@ function TopologyPage(): React.JSX.Element {
         delete mutableEdges[idx].sequenceOrder;
       }
       const rawFlow = entry.raw as Record<string, unknown>;
-      const updatedFlow = { ...rawFlow, definition: clonedRefs as unknown as TopologyDefinitionRefs };
+      const updatedFlow = { ...rawFlow, definition: clonedRefs };
       await saveFlow(effectiveId, updatedFlow);
       reload();
     },
@@ -705,7 +705,7 @@ function TopologyPage(): React.JSX.Element {
     void (async (): Promise<void> => {
       try {
         const deepClone = (obj: unknown): Record<string, unknown> =>
-          JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
+          structuredClone(obj) as Record<string, unknown>;
 
         const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
         if (nodeTemplate !== undefined) {
@@ -814,7 +814,7 @@ function TopologyPage(): React.JSX.Element {
     try {
       // Deep-clone to get mutable plain objects from readonly template types
       const deepClone = (obj: unknown): Record<string, unknown> =>
-        JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
+        structuredClone(obj) as Record<string, unknown>;
 
       // Determine if entityId matches a node template or edge template
       const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
@@ -938,7 +938,7 @@ function TopologyPage(): React.JSX.Element {
     // 3. Template patch — save structural fields to the shared template
     if (save.templatePatch !== undefined) {
       const deepClone = (obj: unknown): Record<string, unknown> =>
-        JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
+        structuredClone(obj) as Record<string, unknown>;
 
       if (save.entityType === 'node') {
         const template = nodeTemplates.find((t) => t.id === save.entityId);

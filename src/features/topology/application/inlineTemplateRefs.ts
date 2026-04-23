@@ -47,7 +47,7 @@ export function inlineTemplateRefsInRawFlow(
   template: NodeTemplate | EdgeTemplate,
 ): InlineResult {
   // Deep clone so the caller's input is never mutated.
-  const clone = JSON.parse(JSON.stringify(rawFlow)) as Record<string, unknown>;
+  const clone = structuredClone(rawFlow) as Record<string, unknown>;
   const definition = clone.definition as Record<string, unknown> | undefined;
   if (definition === undefined) {
     return { updatedFlow: clone, refCount: 0 };

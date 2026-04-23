@@ -11,6 +11,14 @@ import type { CollapseDbMap, CollapsedDbInfo } from './collapseDbConnections';
 
 export const SEQ_NODE_WIDTH = 260;
 const COLUMN_SPACING = 400;
+
+/** Extra vertical space (px) added to a self-loop edge card's effective height
+ *  to account for the loop arc extending above and below the card. */
+export const SEQ_SELF_LOOP_EXTRA_HEIGHT = 40;
+
+/** Horizontal offset (px) for the self-loop edge label — positions it midway
+ *  between the owning lifeline and the next column. Derived from COLUMN_SPACING. */
+export const SEQ_SELF_LOOP_LABEL_X_OFFSET = COLUMN_SPACING / 2;
 const HEADER_GAP = 40;          // breathing room below tallest node card
 const LIFELINE_PADDING = 80;
 
@@ -227,7 +235,7 @@ export function layoutSequenceDiagram(
       // Self-loop cards are positioned beside the lifeline, not between two.
       // The card center is at handleY, and the loop path adds vertical offset
       // above and below, so we must account for that extra height.
-      const effectiveH = isSelf ? cardH + 40 : cardH;
+      const effectiveH = isSelf ? cardH + SEQ_SELF_LOOP_EXTRA_HEIGHT : cardH;
       // Handle is at center of card, card top is at (handleY - effectiveH/2)
       // So handleY = nextCardTop + effectiveH/2
       const handleY = nextCardTop + effectiveH / 2;
