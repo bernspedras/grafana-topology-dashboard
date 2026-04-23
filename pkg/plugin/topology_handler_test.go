@@ -25,9 +25,14 @@ func newHandlerTestApp(t *testing.T) (*http.ServeMux, string) {
 	if err != nil {
 		t.Fatalf("NewTopologyStore: %v", err)
 	}
+	sv, err := NewSchemaValidator()
+	if err != nil {
+		t.Fatalf("NewSchemaValidator: %v", err)
+	}
 	app := &App{
-		topologyStore: store,
-		logger:        log.DefaultLogger,
+		topologyStore:   store,
+		schemaValidator: sv,
+		logger:          log.DefaultLogger,
 	}
 	mux := http.NewServeMux()
 	app.registerTopologyRoutes(mux)
@@ -162,7 +167,7 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 
 func TestHandler_CreateFlow_Success(t *testing.T) {
 	mux, dir := newHandlerTestApp(t)
-	body := []byte(`{"id":"svc-a","name":"Service A","definition":{}}`)
+	body := []byte(`{"id":"svc-a","name":"Service A","definition":{"nodes":[],"edges":[]}}`)
 
 	rec := do(mux, adminReq(http.MethodPost, "/topologies", body))
 	if rec.Code != http.StatusCreated {
@@ -238,11 +243,11 @@ func TestHandler_PutFlow_Rename(t *testing.T) {
 	mux, dir := newHandlerTestApp(t)
 
 	// Create.
-	body := []byte(`{"id":"rn","name":"Original","definition":{}}`)
+	body := []byte(`{"id":"rn","name":"Original","definition":{"nodes":[],"edges":[]}}`)
 	do(mux, adminReq(http.MethodPost, "/topologies", body))
 
 	// Rename via PUT.
-	updated := []byte(`{"id":"rn","name":"Updated Name","definition":{}}`)
+	updated := []byte(`{"id":"rn","name":"Updated Name","definition":{"nodes":[],"edges":[]}}`)
 	rec := do(mux, adminReq(http.MethodPut, "/topologies/rn", updated))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("put: expected 200, got %d — %s", rec.Code, rec.Body.String())
@@ -287,7 +292,7 @@ func TestHandler_DeleteFlow_Success(t *testing.T) {
 	mux, dir := newHandlerTestApp(t)
 
 	// Create.
-	body := []byte(`{"id":"del-me","name":"Delete Me","definition":{}}`)
+	body := []byte(`{"id":"del-me","name":"Delete Me","definition":{"nodes":[],"edges":[]}}`)
 	do(mux, adminReq(http.MethodPost, "/topologies", body))
 
 	flowPath := filepath.Join(dir, "flows", "del-me.json")
@@ -338,8 +343,8 @@ func TestHandler_ListFlows_Empty(t *testing.T) {
 func TestHandler_ListFlows_Multiple(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
-	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"b","name":"B Flow","definition":{}}`)))
-	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"a","name":"A Flow","definition":{}}`)))
+	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"b","name":"B Flow","definition":{"nodes":[],"edges":[]}}`)))
+	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"a","name":"A Flow","definition":{"nodes":[],"edges":[]}}`)))
 
 	rec := do(mux, adminReq(http.MethodGet, "/topologies", nil))
 	var items []FlowListItem
@@ -360,7 +365,7 @@ func TestHandler_ListFlows_Multiple(t *testing.T) {
 func TestHandler_GetBundle_IncludesFlow(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
-	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"bundled","name":"Bundled","definition":{}}`)))
+	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"bundled","name":"Bundled","definition":{"nodes":[],"edges":[]}}`)))
 
 	rec := do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
 	if rec.Code != http.StatusOK {
@@ -379,7 +384,7 @@ func TestHandler_GetBundle_IncludesFlow(t *testing.T) {
 
 func TestHandler_CreateFlow_Forbidden(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
-	body := []byte(`{"id":"x","name":"X","definition":{}}`)
+	body := []byte(`{"id":"x","name":"X","definition":{"nodes":[],"edges":[]}}`)
 
 	rec := do(mux, viewerReq(http.MethodPost, "/topologies", body))
 	if rec.Code != http.StatusForbidden {
@@ -389,7 +394,7 @@ func TestHandler_CreateFlow_Forbidden(t *testing.T) {
 
 func TestHandler_PutFlow_Forbidden(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
-	body := []byte(`{"id":"x","name":"X","definition":{}}`)
+	body := []byte(`{"id":"x","name":"X","definition":{"nodes":[],"edges":[]}}`)
 
 	rec := do(mux, viewerReq(http.MethodPut, "/topologies/x", body))
 	if rec.Code != http.StatusForbidden {
@@ -412,7 +417,7 @@ func TestHandler_ReadEndpoints_NoAuthRequired(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
 	// Seed a flow as admin first.
-	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"pub","name":"Public","definition":{}}`)))
+	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"pub","name":"Public","definition":{"nodes":[],"edges":[]}}`)))
 
 	// Read as viewer.
 	rec := do(mux, viewerReq(http.MethodGet, "/topologies", nil))
@@ -435,7 +440,7 @@ func TestHandler_ReadEndpoints_NoAuthRequired(t *testing.T) {
 
 func TestHandler_EditorInAllowList_CanCreate(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
-	body := []byte(`{"id":"editor-flow","name":"Editor Flow","definition":{}}`)
+	body := []byte(`{"id":"editor-flow","name":"Editor Flow","definition":{"nodes":[],"edges":[]}}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/topologies", bytes.NewReader(body))
 	req = withAuthContext(req, "Editor", "alice@example.com", []string{"alice@example.com"})
@@ -448,7 +453,7 @@ func TestHandler_EditorInAllowList_CanCreate(t *testing.T) {
 
 func TestHandler_EditorNotInAllowList_Forbidden(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
-	body := []byte(`{"id":"x","name":"X","definition":{}}`)
+	body := []byte(`{"id":"x","name":"X","definition":{"nodes":[],"edges":[]}}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/topologies", bytes.NewReader(body))
 	req = withAuthContext(req, "Editor", "eve@example.com", []string{"alice@example.com"})
@@ -466,7 +471,7 @@ func TestHandler_CreateThenDelete_FileSystemState(t *testing.T) {
 
 	// Create three flows.
 	for _, id := range []string{"alpha", "beta", "gamma"} {
-		body := []byte(`{"id":"` + id + `","name":"` + id + `","definition":{}}`)
+		body := []byte(`{"id":"` + id + `","name":"` + id + `","definition":{"nodes":[],"edges":[]}}`)
 		rec := do(mux, adminReq(http.MethodPost, "/topologies", body))
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create %s: expected 201, got %d", id, rec.Code)
@@ -607,7 +612,7 @@ func TestWriteRawJSON_ValidValue_WritesBody(t *testing.T) {
 func TestHandler_NodeTemplateLifecycle(t *testing.T) {
 	mux, dir := newHandlerTestApp(t)
 
-	nodeJSON := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Template Node","namespace":"prod"}`)
+	nodeJSON := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Template Node","dataSource":"prom","namespace":"prod","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
 	// 1. Create.
 	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
@@ -659,7 +664,7 @@ func TestHandler_NodeTemplateLifecycle(t *testing.T) {
 	}
 
 	// 4. Update (PUT).
-	updated := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Updated Node","namespace":"staging"}`)
+	updated := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Updated Node","dataSource":"prom","namespace":"staging","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 	rec = do(mux, adminReq(http.MethodPut, "/templates/nodes/node-tpl-1", updated))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update: expected 200, got %d — %s", rec.Code, rec.Body.String())
@@ -722,7 +727,7 @@ func TestHandler_CreateNodeTemplate_MissingID(t *testing.T) {
 func TestHandler_NodeTemplates_AuthRequired(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
-	nodeJSON := []byte(`{"id":"auth-test","kind":"eks-service","label":"Auth Test"}`)
+	nodeJSON := []byte(`{"id":"auth-test","kind":"eks-service","label":"Auth Test","dataSource":"prom","namespace":"ns","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
 	// Viewer cannot create.
 	rec := do(mux, viewerReq(http.MethodPost, "/templates/nodes", nodeJSON))
@@ -762,7 +767,7 @@ func TestHandler_NodeTemplates_AuthRequired(t *testing.T) {
 func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
 	mux, dir := newHandlerTestApp(t)
 
-	edgeJSON := []byte(`{"id":"edge-tpl-1","kind":"http-json","source":"a","target":"b"}`)
+	edgeJSON := []byte(`{"id":"edge-tpl-1","kind":"http-json","source":"a","target":"b","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
 	// 1. Create.
 	rec := do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
@@ -815,7 +820,7 @@ func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
 	}
 
 	// 4. Update (PUT).
-	updated := []byte(`{"id":"edge-tpl-1","kind":"http-xml","source":"a","target":"c"}`)
+	updated := []byte(`{"id":"edge-tpl-1","kind":"http-xml","source":"a","target":"c","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 	rec = do(mux, adminReq(http.MethodPut, "/templates/edges/edge-tpl-1", updated))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update: expected 200, got %d — %s", rec.Code, rec.Body.String())
@@ -869,7 +874,7 @@ func TestHandler_CreateEdgeTemplate_InvalidJSON(t *testing.T) {
 func TestHandler_EdgeTemplates_AuthRequired(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
-	edgeJSON := []byte(`{"id":"auth-edge","kind":"http-json","source":"a","target":"b"}`)
+	edgeJSON := []byte(`{"id":"auth-edge","kind":"http-json","source":"a","target":"b","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
 	// Viewer cannot create.
 	rec := do(mux, viewerReq(http.MethodPost, "/templates/edges", edgeJSON))
@@ -908,7 +913,7 @@ func TestHandler_EdgeTemplates_AuthRequired(t *testing.T) {
 func TestHandler_PutDatasources(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
-	datasourcesJSON := []byte(`[{"name":"prometheus","uid":"ds-1"}]`)
+	datasourcesJSON := []byte(`[{"name":"prometheus","type":"prometheus"}]`)
 
 	rec := do(mux, adminReq(http.MethodPut, "/datasources", datasourcesJSON))
 	if rec.Code != http.StatusOK {
@@ -935,7 +940,7 @@ func TestHandler_PutDatasources_InvalidJSON(t *testing.T) {
 func TestHandler_PutDatasources_AuthRequired(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
-	datasourcesJSON := []byte(`[{"name":"prometheus","uid":"ds-1"}]`)
+	datasourcesJSON := []byte(`[{"name":"prometheus","type":"prometheus"}]`)
 
 	rec := do(mux, viewerReq(http.MethodPut, "/datasources", datasourcesJSON))
 	if rec.Code != http.StatusForbidden {
@@ -1033,9 +1038,9 @@ func TestHandler_BundleIncludesTemplatesAndDatasources(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 
 	// Create a node template, edge template, and datasources.
-	nodeJSON := []byte(`{"id":"bundle-node","kind":"eks-service","label":"Bundle Node"}`)
-	edgeJSON := []byte(`{"id":"bundle-edge","kind":"http-json","source":"a","target":"b"}`)
-	datasourcesJSON := []byte(`[{"name":"prometheus","uid":"ds-1"}]`)
+	nodeJSON := []byte(`{"id":"bundle-node","kind":"eks-service","label":"Bundle Node","dataSource":"prom","namespace":"prod","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
+	edgeJSON := []byte(`{"id":"bundle-edge","kind":"http-json","source":"a","target":"b","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
+	datasourcesJSON := []byte(`[{"name":"prometheus","type":"prometheus"}]`)
 
 	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
 	if rec.Code != http.StatusCreated {
@@ -1094,12 +1099,12 @@ func TestHandler_BundleIncludesTemplatesAndDatasources(t *testing.T) {
 	// Verify datasource content.
 	var ds struct {
 		Name string `json:"name"`
-		UID  string `json:"uid"`
+		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(bundle.Datasources[0], &ds); err != nil {
 		t.Fatalf("unmarshal datasource: %v", err)
 	}
-	if ds.Name != "prometheus" || ds.UID != "ds-1" {
+	if ds.Name != "prometheus" || ds.Type != "prometheus" {
 		t.Fatalf("unexpected datasource: %+v", ds)
 	}
 }

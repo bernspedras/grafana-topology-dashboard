@@ -194,6 +194,11 @@ type RangeQueryResult struct {
 	Values     []float64 `json:"values"`
 }
 
+// maxRangeDataPoints is the upper bound on data points accepted from a single
+// Prometheus range query response. Derived from request validation limits so it
+// stays in sync automatically: maxRangeWindowSeconds / minRangeStepSeconds + 1.
+const maxRangeDataPoints = maxRangeWindowSeconds/minRangeStepSeconds + 1
+
 // prometheusRangeResponse is the Prometheus HTTP API range query response shape.
 type prometheusRangeResponse struct {
 	Status string `json:"status"`
@@ -295,12 +300,21 @@ func (a *App) queryPrometheusRange(
 		return nil
 	}
 
+	capacity := len(values)
+	if capacity > maxRangeDataPoints {
+		capacity = maxRangeDataPoints
+	}
 	result := &RangeQueryResult{
-		Timestamps: make([]float64, 0, len(values)),
-		Values:     make([]float64, 0, len(values)),
+		Timestamps: make([]float64, 0, capacity),
+		Values:     make([]float64, 0, capacity),
 	}
 
 	for _, pair := range values {
+		if len(result.Timestamps) >= maxRangeDataPoints {
+			a.logger.Warn("Range query exceeded max data points, truncating",
+				"max", maxRangeDataPoints, "total", len(values), "dsUID", dsUID)
+			break
+		}
 		if len(pair) != 2 {
 			continue
 		}

@@ -178,7 +178,14 @@ function toCustomMetrics(dtos: readonly CustomMetricValueDto[] | undefined): rea
 
 // ─── Node deserialization ─────────────────────────────────────────────────────
 
-function deserializeNode(dto: TopologyNodeDto): TopologyNode {
+const KNOWN_NODE_TYPES = new Set(['EKSServiceNode', 'EC2ServiceNode', 'DatabaseNode', 'ExternalNode', 'FlowSummaryNode']);
+
+function deserializeNode(dto: TopologyNodeDto): TopologyNode | undefined {
+  if (!KNOWN_NODE_TYPES.has(dto._type)) {
+    console.warn(`Unknown node _type "${(dto as { _type: string })._type}", skipping`);
+    return undefined;
+  }
+
   const metrics = toNodeMetrics(dto.metrics);
   const status = toNodeStatus(dto.status);
   const baselineStatus = dto.baselineStatus !== undefined ? toNodeStatus(dto.baselineStatus) : 'unknown' as const;
@@ -263,7 +270,14 @@ function deserializeNode(dto: TopologyNodeDto): TopologyNode {
 
 // ─── Edge deserialization ─────────────────────────────────────────────────────
 
-function deserializeEdge(dto: TopologyEdgeDto): TopologyEdge {
+const KNOWN_EDGE_TYPES = new Set(['HttpJsonEdge', 'HttpXmlEdge', 'TcpDbConnectionEdge', 'AmqpEdge', 'KafkaEdge', 'GrpcEdge']);
+
+function deserializeEdge(dto: TopologyEdgeDto): TopologyEdge | undefined {
+  if (!KNOWN_EDGE_TYPES.has(dto._type)) {
+    console.warn(`Unknown edge _type "${(dto as { _type: string })._type}", skipping`);
+    return undefined;
+  }
+
   switch (dto._type) {
     case 'HttpJsonEdge': {
       const method = toStringOrUndefined(dto.method);
@@ -398,8 +412,8 @@ function deserializeFlowStep(dto: FlowStepDto): FlowStepNode {
 
 export function deserializeGraph(dto: TopologyGraphDto): TopologyGraph {
   return new TopologyGraph({
-    nodes: dto.nodes.map(deserializeNode),
-    edges: dto.edges.map(deserializeEdge),
+    nodes: dto.nodes.map(deserializeNode).filter((n): n is TopologyNode => n !== undefined),
+    edges: dto.edges.map(deserializeEdge).filter((e): e is TopologyEdge => e !== undefined),
     flowSteps: (dto.flowSteps ?? []).map(deserializeFlowStep),
     updatedAt: new Date(dto.updatedAt),
   });

@@ -947,3 +947,92 @@ describe('deserializeGraph — full graph round-trip', (): void => {
     expect(graph.getEdgesOf('service-a')).toHaveLength(2);
   });
 });
+
+// ─── Unknown _type graceful handling ──────────────────────────────────────────
+
+describe('deserializeGraph — unknown types', (): void => {
+  it('skips nodes with unknown _type and keeps valid ones', (): void => {
+    const dto: TopologyGraphDto = {
+      nodes: [
+        {
+          _type: 'FutureNodeType' as never,
+          id: 'future-1',
+          label: 'Unknown',
+          status: 'healthy',
+          metrics: makeNodeMetricsDto(),
+        } as never,
+        {
+          _type: 'DatabaseNode',
+          id: 'db-1',
+          label: 'DB',
+          status: 'healthy',
+          metrics: makeNodeMetricsDto(),
+          engine: 'postgres',
+          isReadReplica: false,
+        } as DatabaseNodeDto,
+      ],
+      edges: [],
+      metricQueries: {},
+      pollIntervalMs: 15000,
+      updatedAt: NOW,
+    };
+
+    const spy = jest.spyOn(console, 'warn').mockImplementation();
+    const graph = deserializeGraph(dto);
+    expect(graph.nodes).toHaveLength(1);
+    expect(graph.nodes[0]).toBeInstanceOf(DatabaseNode);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('FutureNodeType'));
+    spy.mockRestore();
+  });
+
+  it('skips edges with unknown _type and keeps valid ones', (): void => {
+    const dto: TopologyGraphDto = {
+      nodes: [],
+      edges: [
+        {
+          _type: 'LaserBeamEdge' as never,
+          id: 'laser-1',
+          source: 'a',
+          target: 'b',
+        } as never,
+        {
+          _type: 'GrpcEdge',
+          id: 'grpc-1',
+          source: 'a',
+          target: 'b',
+          animated: true,
+          metrics: makeBaseEdgeMetricsDto(),
+          grpcService: 'svc',
+          grpcMethod: 'Call',
+        } as GrpcEdgeDto,
+      ],
+      metricQueries: {},
+      pollIntervalMs: 15000,
+      updatedAt: NOW,
+    };
+
+    const spy = jest.spyOn(console, 'warn').mockImplementation();
+    const graph = deserializeGraph(dto);
+    expect(graph.edges).toHaveLength(1);
+    expect(graph.edges[0]).toBeInstanceOf(GrpcEdge);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('LaserBeamEdge'));
+    spy.mockRestore();
+  });
+
+  it('returns empty graph when all types are unknown', (): void => {
+    const dto: TopologyGraphDto = {
+      nodes: [{ _type: 'Alien' as never, id: 'x' } as never],
+      edges: [{ _type: 'Wormhole' as never, id: 'y', source: 'a', target: 'b' } as never],
+      metricQueries: {},
+      pollIntervalMs: 15000,
+      updatedAt: NOW,
+    };
+
+    const spy = jest.spyOn(console, 'warn').mockImplementation();
+    const graph = deserializeGraph(dto);
+    expect(graph.nodes).toHaveLength(0);
+    expect(graph.edges).toHaveLength(0);
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+  });
+});

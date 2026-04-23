@@ -183,6 +183,8 @@ function constructNode(
       return constructDatabaseNode(def, base);
     case 'external':
       return constructExternalNode(def, base);
+    default:
+      throw new Error(`Unknown node kind: ${(def as { kind: string }).kind}`);
   }
 }
 
@@ -268,6 +270,8 @@ function constructEdge(
       return constructKafkaEdge(def, results, weekAgoResults, now);
     case 'grpc':
       return constructGrpcEdge(def, results, weekAgoResults, now);
+    default:
+      throw new Error(`Unknown edge kind: ${(def as { kind: string }).kind}`);
   }
 }
 

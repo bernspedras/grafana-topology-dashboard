@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bernspedras.dev/topology-dashboard/schemas/node-template.schema.json",
+  "title": "Topology Node Template",
+  "description": "Reusable node template for a topology. Discriminated by the 'kind' field.",
+  "oneOf": [
+    { "$ref": "#/$defs/eksServiceNodeTemplate" },
+    { "$ref": "#/$defs/ec2ServiceNodeTemplate" },
+    { "$ref": "#/$defs/databaseNodeTemplate" },
+    { "$ref": "#/$defs/externalNodeTemplate" }
+  ],
+  "$defs": {
+    "metricDefinition": {
+      "description": "A metric definition with query, unit, direction, and optional datasource/SLA — or null if not configured.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["query", "unit", "direction"],
+          "additionalProperties": false,
+          "properties": {
+            "query": { "type": "string" },
+            "unit": { "type": "string" },
+            "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+            "dataSource": { "type": "string" },
+            "sla": {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "nodeMetricQueries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "$ref": "#/$defs/metricDefinition" },
+        "memory": { "$ref": "#/$defs/metricDefinition" },
+        "readyReplicas": { "$ref": "#/$defs/metricDefinition" },
+        "desiredReplicas": { "$ref": "#/$defs/metricDefinition" }
+      }
+    },
+    "customMetricDefinition": {
+      "type": "object",
+      "required": ["key", "label", "query", "unit", "direction"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "query": { "type": "string" },
+        "unit": { "type": "string" },
+        "direction": { "type": "string", "enum": ["lower-is-better", "higher-is-better"] },
+        "dataSource": { "type": ["string", "null"] },
+        "sla": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["warning", "critical"],
+              "additionalProperties": false,
+              "properties": {
+                "warning": { "type": "number" },
+                "critical": { "type": "number" }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "description": { "type": ["string", "null"] }
+      }
+    },
+    "eksServiceNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "namespace", "metrics"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "eks-service" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "namespace": { "type": "string" },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
+        "deploymentNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "ec2ServiceNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "instanceId", "instanceType", "availabilityZone", "metrics"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "ec2-service" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "instanceId": { "type": "string" },
+        "instanceType": { "type": "string" },
+        "availabilityZone": { "type": "string" },
+        "amiId": { "type": ["string", "null"] },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "databaseNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "engine", "isReadReplica", "metrics"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "database" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "engine": { "type": "string" },
+        "isReadReplica": { "type": "boolean" },
+        "storageGb": { "type": ["number", "null"] },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    },
+    "externalNodeTemplate": {
+      "type": "object",
+      "required": ["kind", "id", "label", "dataSource", "provider", "metrics"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "external" },
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "dataSource": { "type": "string" },
+        "provider": { "type": "string" },
+        "contactEmail": { "type": ["string", "null"] },
+        "slaPercent": { "type": ["number", "null"] },
+        "metrics": { "$ref": "#/$defs/nodeMetricQueries" },
+        "customMetrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customMetricDefinition" }
+        }
+      }
+    }
+  }
+}

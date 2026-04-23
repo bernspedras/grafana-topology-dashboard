@@ -183,3 +183,37 @@ export async function deleteSlaDefaults(): Promise<void> {
   );
 }
 
+// ─── Atomic ZIP import ──────────────────────────────────────────────────────
+
+export interface ImportResult {
+  readonly flows: number;
+  readonly nodeTemplates: number;
+  readonly edgeTemplates: number;
+  readonly datasources: number;
+  readonly slaDefaults: number;
+}
+
+export interface ImportFileError {
+  readonly path: string;
+  readonly details: readonly string[];
+}
+
+export interface ImportValidationError {
+  readonly error: string;
+  readonly files: readonly ImportFileError[];
+}
+
+export async function importZip(file: File): Promise<ImportResult> {
+  const buffer = await file.arrayBuffer();
+  const res = await firstValueFrom(
+    getBackendSrv().fetch<ImportResult>({
+      url: `${BASE}/topologies/import`,
+      method: 'POST',
+      data: buffer,
+      headers: { 'Content-Type': 'application/zip' },
+      showErrorAlert: false,
+    }),
+  );
+  return res.data;
+}
+

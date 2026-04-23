@@ -13,6 +13,9 @@ func (a *App) registerTopologyRoutes(mux *http.ServeMux) {
 	// Bundle (all-in-one for the frontend) — read-only.
 	mux.HandleFunc("GET /topologies/bundle", a.handleGetBundle)
 
+	// Atomic ZIP import — validates all files before writing any.
+	mux.HandleFunc("POST /topologies/import", requireEdit(a.handleImportZip))
+
 	// Flows — read-only.
 	mux.HandleFunc("GET /topologies", a.handleListFlows)
 	mux.HandleFunc("GET /topologies/{id}", a.handleGetFlow)
@@ -93,6 +96,10 @@ func (a *App) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if vErr := a.schemaValidator.ValidateFlow(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
+		return
+	}
 	if putErr := a.topologyStore.PutFlow(id, raw); putErr != nil {
 		a.logger.Error("Failed to create flow", "id", id, "error", putErr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -106,6 +113,10 @@ func (a *App) handlePutFlow(w http.ResponseWriter, r *http.Request) {
 	raw, err := readBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if vErr := a.schemaValidator.ValidateFlow(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
 		return
 	}
 	if putErr := a.topologyStore.PutFlow(id, raw); putErr != nil {
@@ -159,6 +170,10 @@ func (a *App) handleCreateNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if vErr := a.schemaValidator.ValidateNodeTemplate(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
+		return
+	}
 	if putErr := a.topologyStore.PutNodeTemplate(id, raw); putErr != nil {
 		a.logger.Error("Failed to create node template", "id", id, "error", putErr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -172,6 +187,10 @@ func (a *App) handlePutNodeTemplate(w http.ResponseWriter, r *http.Request) {
 	raw, err := readBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if vErr := a.schemaValidator.ValidateNodeTemplate(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
 		return
 	}
 	if putErr := a.topologyStore.PutNodeTemplate(id, raw); putErr != nil {
@@ -225,6 +244,10 @@ func (a *App) handleCreateEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if vErr := a.schemaValidator.ValidateEdgeTemplate(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
+		return
+	}
 	if putErr := a.topologyStore.PutEdgeTemplate(id, raw); putErr != nil {
 		a.logger.Error("Failed to create edge template", "id", id, "error", putErr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -238,6 +261,10 @@ func (a *App) handlePutEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 	raw, err := readBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if vErr := a.schemaValidator.ValidateEdgeTemplate(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
 		return
 	}
 	if putErr := a.topologyStore.PutEdgeTemplate(id, raw); putErr != nil {
@@ -266,6 +293,10 @@ func (a *App) handlePutDatasources(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if vErr := a.schemaValidator.ValidateDatasources(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
+		return
+	}
 	if err := a.topologyStore.WriteDatasources(raw); err != nil {
 		a.logger.Error("Failed to write datasources", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -280,6 +311,10 @@ func (a *App) handlePutSlaDefaults(w http.ResponseWriter, r *http.Request) {
 	raw, err := readBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if vErr := a.schemaValidator.ValidateSlaDefaults(raw); vErr != nil {
+		a.writeValidationError(w, vErr)
 		return
 	}
 	if err := a.topologyStore.WriteSlaDefaults(raw); err != nil {
@@ -351,3 +386,18 @@ const (
 	errInvalidJSON httpError = "invalid JSON body"
 	errMissingID   httpError = "missing or empty \"id\" field in JSON body"
 )
+
+// validationErrorResponse is the JSON body returned on schema validation failure.
+type validationErrorResponse struct {
+	Error   string   `json:"error"`
+	Details []string `json:"details"`
+}
+
+// writeValidationError sends a 400 response with schema validation error details.
+func (a *App) writeValidationError(w http.ResponseWriter, err error) {
+	resp := validationErrorResponse{
+		Error:   "Schema validation failed",
+		Details: FormatValidationError(err),
+	}
+	a.writeJSON(w, http.StatusBadRequest, resp)
+}

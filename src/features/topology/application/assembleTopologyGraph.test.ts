@@ -1443,4 +1443,20 @@ describe('assembleTopologyGraph', () => {
     expect(typeof graph.structuralId).toBe('string');
     expect(graph.structuralId.length).toBeGreaterThan(0);
   });
+
+  // ─── Unknown kinds ────────────────────────────────────────────────────────
+
+  it('throws on unknown node kind', () => {
+    const bogusNode = { kind: 'alien-ship', id: 'x', label: 'X', dataSource: 'p', metrics: { cpu: undefined, memory: undefined } } as unknown as NodeDefinition;
+    const def: TopologyDefinition = { nodes: [bogusNode], edges: [], flowSteps: undefined };
+
+    expect(() => assembleTopologyGraph(def, emptyResults(), emptyResults())).toThrow(/unknown node kind.*alien-ship/i);
+  });
+
+  it('throws on unknown edge kind', () => {
+    const bogusEdge = { kind: 'quantum-tunnel', id: 'e', source: 'a', target: 'b' } as unknown as EdgeDefinition;
+    const def: TopologyDefinition = { nodes: [], edges: [bogusEdge], flowSteps: undefined };
+
+    expect(() => assembleTopologyGraph(def, emptyResults(), emptyResults())).toThrow(/unknown edge kind.*quantum-tunnel/i);
+  });
 });
