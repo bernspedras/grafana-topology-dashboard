@@ -106,6 +106,42 @@ func TestBaselineCache_EvictsEntryClosestToExpiry(t *testing.T) {
 	}
 }
 
+func TestBaselineCache_GetReturnsDefensiveCopy(t *testing.T) {
+	// SEC-11: Get() must return a shallow copy of the cached map so that
+	// callers cannot corrupt the data visible to subsequent readers.
+	cache := NewBaselineCache(1*time.Minute, log.DefaultLogger)
+
+	val := 42.5
+	cache.Set("key", map[string]*float64{
+		"node:a:cpu":    &val,
+		"node:a:memory": &val,
+	})
+
+	// First Get: mutate the returned map.
+	first, ok := cache.Get("key")
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+	delete(first, "node:a:cpu")
+	extra := 99.0
+	first["injected"] = &extra
+
+	// Second Get: must see the original, unmodified data.
+	second, ok := cache.Get("key")
+	if !ok {
+		t.Fatal("expected cache hit on second read")
+	}
+	if second["node:a:cpu"] == nil {
+		t.Fatal("cached 'node:a:cpu' was deleted by a previous caller — Get() returns a mutable reference")
+	}
+	if _, exists := second["injected"]; exists {
+		t.Fatal("cached map contains 'injected' key written by a previous caller — Get() returns a mutable reference")
+	}
+	if len(second) != 2 {
+		t.Fatalf("expected 2 entries in cached map, got %d", len(second))
+	}
+}
+
 func TestBaselineCache_EvictsExpiredOnSet(t *testing.T) {
 	cache := NewBaselineCache(1*time.Millisecond, log.DefaultLogger)
 

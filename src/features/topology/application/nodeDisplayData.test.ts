@@ -1,5 +1,6 @@
 
 import { nodeTypeTag, nodeMetricRows } from './nodeDisplayData';
+import type { MetricRow } from './nodeDisplayData';
 import type { MetricDirectionMap } from './directionMap';
 import {
   EKSServiceNode,
@@ -9,6 +10,7 @@ import {
   FlowSummaryNode,
   NodeMetrics,
   DeploymentMetrics,
+  CustomMetricValue,
 } from '../domain/index';
 
 // ─── Factories ──────────────────────────────────────────────────────────────
@@ -339,6 +341,43 @@ describe('nodeMetricRows', (): void => {
       expect(rows[3]?.metricKey).toBeUndefined();
       expect(rows[3]?.tooltip).toBeUndefined();
       expect(rows[3]?.weekAgoValue).toBeUndefined();
+    });
+  });
+
+  // ─── BUG-11: React key uniqueness ─────────────────────────────────────────
+
+  describe('React key uniqueness (metricKey ?? label)', (): void => {
+    function reactKeys(rows: readonly MetricRow[]): readonly string[] {
+      return rows.map((m) => m.metricKey ?? m.label);
+    }
+
+    it('produces unique keys for EC2 node with custom metric labeled "CPU"', (): void => {
+      const node = new EC2ServiceNode({
+        id: 'ec2-dup', label: 'ec2', status: 'healthy', baselineStatus: 'healthy',
+        metrics: makeMetrics({ cpu: 80, memory: 50 }),
+        instanceId: 'i-1', instanceType: 't3.micro', availabilityZone: 'us-east-1a',
+        customMetrics: [
+          new CustomMetricValue({ key: 'my-cpu', label: 'CPU', value: 99 }),
+        ],
+      });
+      const keys = reactKeys(nodeMetricRows(node));
+      expect(keys).toEqual([...new Set(keys)]);
+    });
+
+    it('produces unique keys for EKS node with custom metric labeled "Memory"', (): void => {
+      const node = new EKSServiceNode({
+        id: 'eks-dup', label: 'eks', status: 'healthy', baselineStatus: 'healthy',
+        metrics: makeMetrics({ cpu: 50, memory: 70 }),
+        namespace: 'ns',
+        deployments: [
+          new DeploymentMetrics({ name: 'api', readyReplicas: 1, desiredReplicas: 1, cpu: 50, memory: 70 }),
+        ],
+        customMetrics: [
+          new CustomMetricValue({ key: 'extra-mem', label: 'Memory', value: 88 }),
+        ],
+      });
+      const keys = reactKeys(nodeMetricRows(node));
+      expect(keys).toEqual([...new Set(keys)]);
     });
   });
 

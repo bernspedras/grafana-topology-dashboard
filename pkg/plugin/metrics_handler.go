@@ -124,7 +124,7 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		if cached, ok := a.baselineCache.Get(cacheKey); ok {
 			baselineResults = cached
 		} else {
-			result, _, _ := a.baselineFlight.Do(cacheKey, func() (interface{}, error) {
+			result, err, _ := a.baselineFlight.Do(cacheKey, func() (interface{}, error) {
 				// Double-check cache: another goroutine in this flight group
 				// may have populated it just before we acquired the slot.
 				if cached, ok := a.baselineCache.Get(cacheKey); ok {
@@ -149,10 +149,17 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				results := a.executeQueries(ctx, baselineTasks, grafanaURL, authHeader)
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
 				a.baselineCache.Set(cacheKey, results)
 				return results, nil
 			})
-			baselineResults = result.(map[string]*float64)
+			if err != nil {
+				a.logger.Error("Baseline query failed", "error", err)
+			} else if m, ok := result.(map[string]*float64); ok {
+				baselineResults = m
+			}
 		}
 	}
 
@@ -183,6 +190,7 @@ func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string
 	}
 	if grafanaURL == "" {
 		grafanaURL = "http://localhost:3000"
+		a.logger.Warn("Grafana URL not configured — falling back to http://localhost:3000")
 	}
 
 	// Strip trailing slash.
@@ -256,8 +264,7 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string)
 		sort.Strings(keys)
 		for _, k := range keys {
 			h.Write([]byte(k))
-			// PromQL content omitted: it is deterministically derived from the
-			// query key for a given topology, so it adds no discriminating value.
+			h.Write([]byte(req.Queries[dsName][k]))
 		}
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))

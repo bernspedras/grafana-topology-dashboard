@@ -6,6 +6,7 @@ import {
   edgeEndpointLabel,
   edgeMetricRows,
 } from './edgeDisplayData';
+import type { MetricRow } from '../application/nodeDisplayData';
 import type { MetricDirectionMap } from './directionMap';
 import {
   HttpJsonEdge,
@@ -18,6 +19,7 @@ import {
   DbConnectionMetrics,
   AmqpEdgeMetrics,
   KafkaEdgeMetrics,
+  CustomMetricValue,
 } from '../domain/index';
 
 // ─── Factories ──────────────────────────────────────────────────────────────
@@ -524,6 +526,38 @@ describe('edgeMetricRows', (): void => {
       const rows = edgeMetricRows(edge);
       expect(rows[0]?.tooltip).toBeUndefined();
       expect(rows[0]?.weekAgoValue).toBeUndefined();
+    });
+  });
+
+  // ─── BUG-11: React key uniqueness ────────────────────────────────────────
+
+  describe('React key uniqueness (metricKey ?? label)', (): void => {
+    function reactKeys(rows: readonly MetricRow[]): readonly string[] {
+      return rows.map((m) => m.metricKey ?? m.label);
+    }
+
+    it('produces unique keys for HTTP edge with custom metric labeled "Error rate"', (): void => {
+      const edge = new HttpJsonEdge({
+        id: 'e-dup', source: 'a', target: 'b',
+        metrics: makeHttpMetrics({ rps: 100, errorRate: 1 }),
+        customMetrics: [
+          new CustomMetricValue({ key: 'biz-errors', label: 'Error rate', value: 5 }),
+        ],
+      });
+      const keys = reactKeys(edgeMetricRows(edge));
+      expect(keys).toEqual([...new Set(keys)]);
+    });
+
+    it('produces unique keys for DB edge with custom metric labeled "RPS"', (): void => {
+      const edge = new TcpDbConnectionEdge({
+        id: 'e-db-dup', source: 'a', target: 'b',
+        metrics: makeDbMetrics({ rps: 200 }),
+        customMetrics: [
+          new CustomMetricValue({ key: 'read-rps', label: 'RPS', value: 50 }),
+        ],
+      });
+      const keys = reactKeys(edgeMetricRows(edge));
+      expect(keys).toEqual([...new Set(keys)]);
     });
   });
 
