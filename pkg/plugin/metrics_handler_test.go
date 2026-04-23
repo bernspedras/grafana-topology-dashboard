@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -368,6 +369,146 @@ func TestHandleMetrics_BaselineSingleflight(t *testing.T) {
 	hits := baselineHits.Load()
 	if hits > 3 {
 		t.Errorf("expected at most 3 baseline Prometheus calls (singleflight dedup), got %d (stampede)", hits)
+	}
+}
+
+func TestHandleMetrics_BaselineCancelledContext_NotCached(t *testing.T) {
+	// BUG-14: If the first caller's context is cancelled during baseline
+	// execution, the partial results must NOT be cached. Otherwise all
+	// subsequent requests serve stale partial baseline data until TTL expiry.
+
+	var queryCount atomic.Int32
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queryCount.Add(1)
+		// Slow down responses so the context cancellation fires mid-query.
+		time.Sleep(200 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"42"]}]}}`)
+	}))
+	defer promServer.Close()
+
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
+		logger:        log.DefaultLogger,
+		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
+	}
+
+	reqBody := MetricsBatchRequest{
+		Queries:         map[string]map[string]string{"ds1": {"k": "up"}},
+		IncludeBaseline: true,
+	}
+	dsMap := map[string]string{"ds1": "uid1"}
+
+	// First request: cancel its context quickly so baseline queries are aborted.
+	body1, _ := json.Marshal(reqBody)
+	req1 := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body1))
+	req1 = withPluginContext(req1, promServer.URL, dsMap)
+	ctx1, cancel1 := context.WithTimeout(req1.Context(), 50*time.Millisecond)
+	defer cancel1()
+	req1 = req1.WithContext(ctx1)
+	rec1 := httptest.NewRecorder()
+	app.handleMetrics(rec1, req1)
+
+	// Wait for singleflight to settle.
+	time.Sleep(300 * time.Millisecond)
+
+	// Second request: full context, should NOT see cached partial data.
+	// If the cancelled result was cached, baseline queries won't hit Prometheus.
+	queryCount.Store(0)
+	body2, _ := json.Marshal(reqBody)
+	req2 := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body2))
+	req2 = withPluginContext(req2, promServer.URL, dsMap)
+	rec2 := httptest.NewRecorder()
+	app.handleMetrics(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// The second request must have hit Prometheus for baseline (not served from cache).
+	// Current queries (1) + baseline queries (1) = at least 2 Prometheus calls.
+	if queryCount.Load() < 2 {
+		t.Errorf("expected second request to re-fetch baseline from Prometheus (not cache), but got only %d calls", queryCount.Load())
+	}
+
+	var resp MetricsBatchResponse
+	json.NewDecoder(rec2.Body).Decode(&resp)
+	if resp.BaselineResults == nil || resp.BaselineResults["k"] == nil {
+		t.Error("expected complete baseline result on second request")
+	}
+}
+
+func TestHandleMetrics_BaselineSingleflightError_NoPanic(t *testing.T) {
+	// Regression test for CRIT-10: if the singleflight callback returns an
+	// error (e.g. from a concurrent request that failed), the handler must
+	// degrade gracefully — return current results without baseline — instead
+	// of panicking on an unchecked type assertion of a nil result.
+
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"10"]}]}}`)
+	}))
+	defer promServer.Close()
+
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
+		logger:        log.DefaultLogger,
+		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
+	}
+
+	reqBody := MetricsBatchRequest{
+		Queries:         map[string]map[string]string{"ds1": {"k": "up"}},
+		IncludeBaseline: true,
+	}
+	dsMap := map[string]string{"ds1": "uid1"}
+
+	// Pre-compute the cache key that handleMetrics will use.
+	cacheKey := app.baselineCacheKey(reqBody, dsMap)
+
+	// Occupy the singleflight slot with a callback that returns an error.
+	// When handleMetrics joins this in-flight group, it receives (nil, error).
+	started := make(chan struct{})
+	go func() {
+		app.baselineFlight.Do(cacheKey, func() (interface{}, error) {
+			close(started) // signal: we're inside the singleflight slot
+			time.Sleep(500 * time.Millisecond)
+			return nil, fmt.Errorf("simulated baseline failure")
+		})
+	}()
+	<-started // wait until the goroutine holds the singleflight slot
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+	req = withPluginContext(req, promServer.URL, dsMap)
+	rec := httptest.NewRecorder()
+
+	// Catch the panic from the unchecked type assertion on nil result.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("handleMetrics panicked on singleflight error: %v — must handle gracefully", r)
+		}
+	}()
+
+	app.handleMetrics(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (graceful degradation), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp MetricsBatchResponse
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	// Current results should still be present.
+	if resp.Results["k"] == nil {
+		t.Error("expected current result even when baseline fails")
+	}
+	// Baseline should be absent (graceful degradation, not a panic).
+	if resp.BaselineResults != nil {
+		t.Error("expected nil baselineResults when singleflight returned error")
 	}
 }
 
@@ -754,5 +895,31 @@ func TestBaselineCacheKey_DifferentQueryKeys(t *testing.T) {
 
 	if key1 == key2 {
 		t.Errorf("expected different cache keys for different query keys, both got %q", key1)
+	}
+}
+
+func TestBaselineCacheKey_DifferentPromQL(t *testing.T) {
+	// PERF-10: Same query keys but different PromQL expressions must produce
+	// different cache keys. Otherwise editing a topology's queries serves
+	// stale baseline data until the cache entry expires.
+	app := newTestApp()
+	dsMap := map[string]string{"ds1": "uid1"}
+
+	req1 := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"node:a:cpu": "avg(rate(cpu_usage[5m]))"},
+		},
+	}
+	req2 := MetricsBatchRequest{
+		Queries: map[string]map[string]string{
+			"ds1": {"node:a:cpu": "max(rate(cpu_usage[1m]))"},
+		},
+	}
+
+	key1 := app.baselineCacheKey(req1, dsMap)
+	key2 := app.baselineCacheKey(req2, dsMap)
+
+	if key1 == key2 {
+		t.Errorf("expected different cache keys when PromQL differs, both got %q", key1)
 	}
 }

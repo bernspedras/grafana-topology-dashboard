@@ -678,7 +678,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
                 if (key !== undefined) {
                   const btn = (
                     <button
-                      key={m.label}
+                      key={m.metricKey ?? m.label}
                       type="button"
                       className={styles.metricButton}
                       onClick={(): void => {
@@ -695,12 +695,12 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
                     </button>
                   );
                   if (m.tooltip !== undefined) {
-                    return <Tooltip key={m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+                    return <Tooltip key={m.metricKey ?? m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
                   }
                   return btn;
                 }
                 return (
-                  <div key={m.label} className={styles.metricRow}>
+                  <div key={m.metricKey ?? m.label} className={styles.metricRow}>
                     <span className={styles.metricLabel}>{m.label}</span>
                     <span className={styles.metricValue} style={{ color: m.color }}>
                       {m.value}

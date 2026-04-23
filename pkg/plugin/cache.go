@@ -34,6 +34,7 @@ func NewBaselineCache(ttl time.Duration, logger log.Logger) *BaselineCache {
 }
 
 // Get returns cached baseline results if the entry exists and has not expired.
+// Returns a shallow copy so callers cannot corrupt the cached data.
 func (c *BaselineCache) Get(key string) (map[string]*float64, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -42,7 +43,11 @@ func (c *BaselineCache) Get(key string) (map[string]*float64, bool) {
 	if !ok || time.Now().After(entry.expiresAt) {
 		return nil, false
 	}
-	return entry.results, true
+	result := make(map[string]*float64, len(entry.results))
+	for k, v := range entry.results {
+		result[k] = v
+	}
+	return result, true
 }
 
 // Set stores baseline results with the configured TTL.

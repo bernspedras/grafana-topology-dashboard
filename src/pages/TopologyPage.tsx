@@ -170,7 +170,7 @@ function TopologyPage(): React.JSX.Element {
 
   const handleSaveFlowOverride = useCallback(
     async (entityId: string, entityType: 'node' | 'edge', patch: FlowOverridePatch): Promise<void> => {
-      if (flowRefs === undefined || entry === undefined) {
+      if (!canEdit || flowRefs === undefined || entry === undefined) {
         return;
       }
       const updatedRefs = applyFlowOverridePatch(flowRefs, entityId, entityType, patch);
@@ -179,12 +179,12 @@ function TopologyPage(): React.JSX.Element {
       await saveFlow(effectiveId, updatedFlow);
       reload();
     },
-    [flowRefs, entry, effectiveId, reload],
+    [canEdit, flowRefs, entry, effectiveId, reload],
   );
 
   const handleSaveEdgeSequenceOrder = useCallback(
     async (edgeId: string, sequenceOrder: number | undefined): Promise<void> => {
-      if (flowRefs === undefined || entry === undefined) {
+      if (!canEdit || flowRefs === undefined || entry === undefined) {
         return;
       }
       const clonedRefs = structuredClone(flowRefs);
@@ -198,7 +198,7 @@ function TopologyPage(): React.JSX.Element {
       await saveFlow(effectiveId, updatedFlow);
       reload();
     },
-    [flowRefs, entry, effectiveId, reload],
+    [canEdit, flowRefs, entry, effectiveId, reload],
   );
 
   const dataSourceNames = useMemo(
