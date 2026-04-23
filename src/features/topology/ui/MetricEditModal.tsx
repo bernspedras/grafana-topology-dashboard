@@ -13,6 +13,7 @@ import type { LayeredMetricRow, LayeredMetricData, MetricSection } from '../appl
 import type { MetricDefinition } from '../application/topologyDefinition';
 import { isNodeRef, isEdgeRef } from '../application/topologyDefinition';
 import type { FlowOverridePatch } from '../application/flowOverridePatch';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -246,27 +247,18 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
   [datasourceDefs]);
 
   // ── Keyboard & backdrop ──
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        if (editingKey !== undefined) {
-          setEditingKey(undefined);
-        } else if (confirmingDelete) {
-          setConfirmingDelete(false);
-        } else {
-          onClose();
-        }
-      }
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => { document.removeEventListener('keydown', handleEsc); };
-  }, [onClose, editingKey, confirmingDelete]);
-
-  const handleBackdropClick = (e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) {
+  const handleEscape = useCallback((): void => {
+    if (editingKey !== undefined) {
+      setEditingKey(undefined);
+    } else if (confirmingDelete) {
+      setConfirmingDelete(false);
+    } else {
       onClose();
     }
-  };
+  }, [onClose, editingKey, confirmingDelete]);
+  useEscapeKey(handleEscape);
+
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   // ── Override actions ──
   const handleStartOverride = useCallback((row: LayeredMetricRow): void => {

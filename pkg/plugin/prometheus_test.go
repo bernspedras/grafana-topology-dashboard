@@ -15,7 +15,7 @@ import (
 func newTestApp() *App {
 	return &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),

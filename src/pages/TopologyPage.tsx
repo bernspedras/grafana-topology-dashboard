@@ -125,7 +125,7 @@ function TopologyPage(): React.JSX.Element {
   const canEdit = canEditTopology(editAllowList);
 
   const [selectedId, setSelectedId] = useState((): string => {
-    try { return localStorage.getItem(SELECTED_TOPOLOGY_KEY) ?? ''; } catch { return ''; }
+    try { return localStorage.getItem(SELECTED_TOPOLOGY_KEY) ?? ''; } catch { console.warn('localStorage unavailable — topology selection will not persist'); return ''; }
   });
   const [isEditing, setIsEditing] = useState(false);
   const toggleEditMode = useCallback((): void => {

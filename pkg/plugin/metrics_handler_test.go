@@ -2,11 +2,13 @@ package plugin
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -116,7 +118,7 @@ func TestValidateQueries_AcceptsValidRequest(t *testing.T) {
 func TestHandleMetrics_EmptyQueries(t *testing.T) {
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),
@@ -148,7 +150,7 @@ func TestHandleMetrics_EmptyQueries(t *testing.T) {
 func TestHandleMetrics_MethodNotAllowed(t *testing.T) {
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),
@@ -181,7 +183,7 @@ func TestHandleMetrics_WithPrometheus(t *testing.T) {
 
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),
@@ -233,7 +235,7 @@ func TestHandleMetrics_WithBaseline(t *testing.T) {
 
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),
@@ -277,7 +279,7 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),
@@ -312,10 +314,67 @@ func TestHandleMetrics_BaselineCaching(t *testing.T) {
 	}
 }
 
+func TestHandleMetrics_BaselineSingleflight(t *testing.T) {
+	// Baseline queries include a "time" parameter; current queries do not.
+	var baselineHits atomic.Int32
+	promServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("time") != "" {
+			baselineHits.Add(1)
+			// Slow down baseline responses to widen the stampede window.
+			time.Sleep(100 * time.Millisecond)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[{"value":[1234567890,"5"]}]}}`)
+	}))
+	defer promServer.Close()
+
+	app := &App{
+		httpClient:    http.DefaultClient,
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
+		logger:        log.DefaultLogger,
+		promSem:       make(chan struct{}, 15),
+		rangeSem:      make(chan struct{}, 4),
+	}
+
+	reqBody := MetricsBatchRequest{
+		Queries:         map[string]map[string]string{"ds1": {"k1": "q1", "k2": "q2", "k3": "q3"}},
+		IncludeBaseline: true,
+	}
+	dsMap := map[string]string{"ds1": "uid1"}
+
+	const concurrency = 5
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			body, _ := json.Marshal(reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/metrics", bytes.NewReader(body))
+			req = withPluginContext(req, promServer.URL, dsMap)
+			rec := httptest.NewRecorder()
+			app.handleMetrics(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Without singleflight: 5 concurrent requests × 3 baseline queries = 15 baseline hits.
+	// With singleflight: only 1 request executes the baseline queries = 3 baseline hits.
+	hits := baselineHits.Load()
+	if hits > 3 {
+		t.Errorf("expected at most 3 baseline Prometheus calls (singleflight dedup), got %d (stampede)", hits)
+	}
+}
+
 func TestHandleMetrics_DoesNotEchoUserDataInResponse(t *testing.T) {
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),
@@ -371,4 +430,28 @@ func TestHandleMetrics_DoesNotEchoUserDataInResponse(t *testing.T) {
 			t.Fatalf("HTTP response must not echo datasource name, got: %s", respBody)
 		}
 	})
+}
+
+func TestBasicAuth(t *testing.T) {
+	tests := []struct {
+		name     string
+		user     string
+		password string
+	}{
+		{"simple credentials", "admin", "admin"},
+		{"special characters", "user@domain.com", "p@ss:w0rd!"},
+		{"empty password", "admin", ""},
+		{"empty user", "", "password"},
+		{"unicode", "ユーザー", "パスワード"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := basicAuth(tt.user, tt.password)
+			want := base64.StdEncoding.EncodeToString([]byte(tt.user + ":" + tt.password))
+			if got != want {
+				t.Errorf("basicAuth(%q, %q) = %q, want %q", tt.user, tt.password, got, want)
+			}
+		})
+	}
 }

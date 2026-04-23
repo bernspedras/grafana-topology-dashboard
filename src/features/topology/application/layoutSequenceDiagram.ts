@@ -68,13 +68,14 @@ function estimateNodeCardHeight(node: TopologyNode, hasCollapsedDb?: boolean): n
 // ─── Per-edge card height estimation ────────────────────────────────────────
 
 /** Approximate pixel heights for the fixed parts of an edge card. */
-const CARD_HEADER = 36;        // protocol tag + health dot + padding
+const CARD_HEADER = 40;        // protocol tag + health dot + padding (12+8 vert pad + ~18 line + border)
 const CARD_ENDPOINT_SELECTOR = 50;  // endpoint/routing-key dropdown
 const CARD_TOPIC_LABEL = 28;   // static topic/routing-key label
 const CARD_DIVIDER = 1;
 const CARD_METRICS_PAD = 20;   // top + bottom padding of metrics section
 const METRIC_ROW_H = 24;       // single metric row (font 13px + flex)
 const METRIC_ROW_GAP = 4;
+const CARD_BORDER_OVERHEAD = 10; // border, border-radius, box-shadow bleed
 const CARD_VERTICAL_MARGIN = 40; // breathing room between consecutive cards
 
 /** Number of built-in metric rows per edge type (before custom metrics). */
@@ -86,12 +87,11 @@ function baseMetricCount(edge: TopologyEdge): number {
   return 4;
 }
 
-/** Whether the edge card shows an endpoint / routing-key dropdown. */
+/** Whether the edge card shows an endpoint / routing-key dropdown.
+ *  Must match the `showEndpointSelect` condition in TopologyEdgeCard.tsx. */
 function hasSelector(edge: TopologyEdge): boolean {
-  if (edge instanceof HttpJsonEdge || edge instanceof HttpXmlEdge) {
-    return edge.endpointPaths.length > 0;
-  }
-  if (edge instanceof AmqpEdge) return edge.routingKeyFilters.length > 0;
+  if (edge instanceof HttpJsonEdge || edge instanceof HttpXmlEdge) return true;
+  if (edge instanceof AmqpEdge) return edge.routingKeyFilters.length > 1;
   return false;
 }
 
@@ -113,6 +113,7 @@ function estimateEdgeCardHeight(edge: TopologyEdge): number {
     + CARD_METRICS_PAD
     + metricCount * METRIC_ROW_H
     + Math.max(0, metricCount - 1) * METRIC_ROW_GAP
+    + CARD_BORDER_OVERHEAD
     + CARD_VERTICAL_MARGIN
   );
 }

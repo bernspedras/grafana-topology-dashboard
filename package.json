@@ -31,7 +31,7 @@
     "@types/dompurify": "^3.0.5",
     "@xyflow/react": "^12.10.1",
     "dagre": "^0.8.5",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.1",
     "fflate": "^0.8.2",
     "marked": "^15.0.6",
     "react": "^18.3.0",
@@ -84,6 +84,9 @@
     "node": ">=20"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.5"
+    "serialize-javascript": "^7.0.5",
+    "dompurify": "^3.4.1",
+    "immutable": "^5.1.5",
+    "uuid": "^14.0.0"
   }
 }

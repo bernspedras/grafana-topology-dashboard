@@ -3,6 +3,8 @@ package plugin
 import (
 	"sync"
 	"time"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 const maxCacheEntries = 500
@@ -14,6 +16,7 @@ type BaselineCache struct {
 	mu      sync.RWMutex
 	entries map[string]cacheEntry
 	ttl     time.Duration
+	logger  log.Logger
 }
 
 type cacheEntry struct {
@@ -22,10 +25,11 @@ type cacheEntry struct {
 }
 
 // NewBaselineCache creates a cache with the given TTL.
-func NewBaselineCache(ttl time.Duration) *BaselineCache {
+func NewBaselineCache(ttl time.Duration, logger log.Logger) *BaselineCache {
 	return &BaselineCache{
 		entries: make(map[string]cacheEntry),
 		ttl:     ttl,
+		logger:  logger,
 	}
 }
 
@@ -55,7 +59,17 @@ func (c *BaselineCache) Set(key string, results map[string]*float64) {
 	}
 
 	if len(c.entries) >= maxCacheEntries {
-		return
+		// Evict the entry closest to expiry (oldest).
+		var oldestKey string
+		var oldestExpiry time.Time
+		for k, e := range c.entries {
+			if oldestKey == "" || e.expiresAt.Before(oldestExpiry) {
+				oldestKey = k
+				oldestExpiry = e.expiresAt
+			}
+		}
+		delete(c.entries, oldestKey)
+		c.logger.Warn("Baseline cache at capacity, evicted oldest entry", "evictedKey", oldestKey, "capacity", maxCacheEntries)
 	}
 
 	c.entries[key] = cacheEntry{

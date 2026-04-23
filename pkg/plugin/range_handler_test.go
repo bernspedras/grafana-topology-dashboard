@@ -163,7 +163,7 @@ func TestValidateRangeRequest_AcceptsMaxBoundaries(t *testing.T) {
 func TestHandleMetricRange_DoesNotEchoUserKeyInResponse(t *testing.T) {
 	app := &App{
 		httpClient:    http.DefaultClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, log.DefaultLogger),
 		logger:        log.DefaultLogger,
 		promSem:       make(chan struct{}, 15),
 		rangeSem:      make(chan struct{}, 4),

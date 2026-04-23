@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 import type { FlowStepNode } from '../domain';
 import { useFlowStepEditor } from '../application/useFlowStepEditor';
 import type { FlowStepDraft } from '../application/useFlowStepEditor';
@@ -53,19 +54,8 @@ export function FlowStepEditModal({ topologyId, flowSteps, onClose, onSaved }: F
   const { saving, error, save } = useFlowStepEditor(topologyId);
 
   // Escape key to close
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  }, [onClose]);
+  useEscapeKey(onClose);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const handleStepChange = useCallback((key: string, value: number): void => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, step: value } : r)));

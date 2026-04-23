@@ -57,7 +57,7 @@ func (a *App) handleGetBundle(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, bundle)
+	a.writeJSON(w, http.StatusOK, bundle)
 }
 
 // ─── Flows ──────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ func (a *App) handleListFlows(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	a.writeJSON(w, http.StatusOK, items)
 }
 
 func (a *App) handleGetFlow(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func (a *App) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeRawJSON(w, http.StatusOK, raw)
+	a.writeRawJSON(w, http.StatusOK, raw)
 }
 
 func (a *App) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +98,7 @@ func (a *App) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	a.writeJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func (a *App) handlePutFlow(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +113,7 @@ func (a *App) handlePutFlow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +123,7 @@ func (a *App) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // ─── Node templates ─────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ func (a *App) handleListNodeTemplates(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	a.writeJSON(w, http.StatusOK, items)
 }
 
 func (a *App) handleGetNodeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +150,7 @@ func (a *App) handleGetNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeRawJSON(w, http.StatusOK, raw)
+	a.writeRawJSON(w, http.StatusOK, raw)
 }
 
 func (a *App) handleCreateNodeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,7 @@ func (a *App) handleCreateNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	a.writeJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func (a *App) handlePutNodeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +179,7 @@ func (a *App) handlePutNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleDeleteNodeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +189,7 @@ func (a *App) handleDeleteNodeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // ─── Edge templates ─────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ func (a *App) handleListEdgeTemplates(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	a.writeJSON(w, http.StatusOK, items)
 }
 
 func (a *App) handleGetEdgeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +216,7 @@ func (a *App) handleGetEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeRawJSON(w, http.StatusOK, raw)
+	a.writeRawJSON(w, http.StatusOK, raw)
 }
 
 func (a *App) handleCreateEdgeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -230,7 +230,7 @@ func (a *App) handleCreateEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	a.writeJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
 func (a *App) handlePutEdgeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +245,7 @@ func (a *App) handlePutEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleDeleteEdgeTemplate(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +255,7 @@ func (a *App) handleDeleteEdgeTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // ─── Datasources ────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ func (a *App) handlePutDatasources(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // ─── SLA defaults ────────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ func (a *App) handlePutSlaDefaults(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleDeleteSlaDefaults(w http.ResponseWriter, _ *http.Request) {
@@ -296,7 +296,7 @@ func (a *App) handleDeleteSlaDefaults(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	a.writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -327,16 +327,20 @@ func readBodyWithID(r *http.Request) (json.RawMessage, string, error) {
 	return raw, peek.ID, nil
 }
 
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func (a *App) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		a.logger.Error("Failed to encode JSON response", "error", err)
+	}
 }
 
-func writeRawJSON(w http.ResponseWriter, status int, raw json.RawMessage) {
+func (a *App) writeRawJSON(w http.ResponseWriter, status int, raw json.RawMessage) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = w.Write(raw)
+	if _, err := w.Write(raw); err != nil {
+		a.logger.Error("Failed to write raw JSON response", "error", err)
+	}
 }
 
 type httpError string

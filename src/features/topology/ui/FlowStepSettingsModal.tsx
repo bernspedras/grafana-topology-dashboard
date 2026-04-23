@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { FlowStepNode } from '../domain';
@@ -24,19 +25,8 @@ export function FlowStepSettingsModal({ flowStep, onClose, onSave, onDelete, sav
   const [moreDetails, setMoreDetails] = useState(flowStep.moreDetails ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  }, [onClose]);
+  useEscapeKey(onClose);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const handleSave = useCallback((): void => {
     const details = moreDetails.trim() === '' ? undefined : moreDetails;

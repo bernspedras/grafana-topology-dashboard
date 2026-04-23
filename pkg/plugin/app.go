@@ -12,6 +12,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/resource/httpadapter"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -38,6 +39,10 @@ type App struct {
 	// so they get their own pool to prevent chart modals from starving the
 	// dashboard polling path that uses promSem.
 	rangeSem chan struct{}
+	// baselineFlight deduplicates concurrent baseline fetches for the same
+	// cache key. Prevents cache stampedes when multiple users/tabs poll the
+	// same topology simultaneously and the baseline cache has expired.
+	baselineFlight singleflight.Group
 }
 
 // resolveDataDir determines where topology JSON files are stored on disk.
@@ -85,7 +90,7 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 
 	app := &App{
 		httpClient:    httpClient,
-		baselineCache: NewBaselineCache(5 * time.Minute),
+		baselineCache: NewBaselineCache(5*time.Minute, logger),
 		topologyStore: store,
 		logger:        logger,
 		promSem:       make(chan struct{}, 15),

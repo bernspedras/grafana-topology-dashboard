@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { Select } from '@grafana/ui';
@@ -9,6 +9,7 @@ import { useEntityMetricDatasources } from './MetricDatasourceContext';
 import { useDatasourceDefs } from './DatasourceDefsContext';
 import { useSaveAllMetricQueries } from './SaveAllMetricQueriesContext';
 import { useDeleteCard } from './DeleteCardContext';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -74,23 +75,16 @@ export function PromQLModal({ title, entityId, queries, onClose }: PromQLModalPr
   });
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        if (confirmingDelete) {
-          setConfirmingDelete(false);
-        } else {
-          onClose();
-        }
-      }
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => { document.removeEventListener('keydown', handleEsc); };
+  const handleEscape = useCallback((): void => {
+    if (confirmingDelete) {
+      setConfirmingDelete(false);
+    } else {
+      onClose();
+    }
   }, [onClose, confirmingDelete]);
+  useEscapeKey(handleEscape);
 
-  const handleBackdropClick = (e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  };
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const handleQueryChange = (key: string, value: string): void => {
     setDrafts((prev) => ({ ...prev, [key]: { ...prev[key], query: value } }));

@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { FlowStepNode } from '../domain';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,19 +18,9 @@ interface FlowStepDetailsModalProps {
 export function FlowStepDetailsModal({ flowStep, onClose }: FlowStepDetailsModalProps): React.JSX.Element {
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
+  useEscapeKey(onClose);
 
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  }, [onClose]);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   const renderedHtml = useMemo((): string => {
     if (flowStep.moreDetails === undefined || flowStep.moreDetails.trim() === '') {

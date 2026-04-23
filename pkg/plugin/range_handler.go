@@ -39,6 +39,9 @@ func validateRangeRequest(req MetricRangeRequest) error {
 	if req.Step < minRangeStepSeconds {
 		return fmt.Errorf("step too small (min %d seconds)", minRangeStepSeconds)
 	}
+	if req.Step > req.End-req.Start {
+		return fmt.Errorf("step larger than time range")
+	}
 	if len(req.Queries) > maxRangeQueriesPerCall {
 		return fmt.Errorf("too many queries: %d (max %d)", len(req.Queries), maxRangeQueriesPerCall)
 	}

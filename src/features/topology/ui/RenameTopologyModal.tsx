@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
+import { useEscapeKey, useBackdropClick } from './useModalClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,24 +21,13 @@ export function RenameTopologyModal({ currentName, existingNames, onClose, onCon
   const inputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(currentName);
 
-  useEffect((): (() => void) => {
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEsc);
-    return (): void => {
-      document.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
+  useEscapeKey(onClose);
+  const handleBackdropClick = useBackdropClick(backdropRef, onClose);
 
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, []);
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent): void => {
-    if (e.target === backdropRef.current) onClose();
-  }, [onClose]);
 
   const trimmed = name.trim();
   const unchanged = trimmed === currentName;
