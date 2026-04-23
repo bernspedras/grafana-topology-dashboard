@@ -107,10 +107,6 @@ function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj)) as T;
-}
-
 function scaffoldNode(kind: NodeKind, dataSource: string): Draft {
   const base = { id: '', label: '', dataSource, metrics: { ...EMPTY_NODE_METRICS }, customMetrics: undefined };
   switch (kind) {
@@ -399,7 +395,7 @@ export function TemplatesManagerModal(props: TemplatesManagerModalProps): React.
     if (tmpl === undefined) return;
     setSelectionKind(kind);
     setSelectionTemplateId(templateId);
-    setDraft(deepClone(tmpl as unknown as Draft));
+    setDraft(structuredClone(tmpl as unknown as Draft));
     setDirty(false);
     setError(undefined);
     setView('detail');

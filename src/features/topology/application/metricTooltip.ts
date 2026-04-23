@@ -25,7 +25,7 @@ export function metricTooltipText(
   if (mode === 'baseline') {
     return baselineTooltip(value, weekAgo, unit);
   }
-  return slaTooltip(slaThreshold, unit, explicitDirection);
+  return slaTooltipText(slaThreshold, unit, explicitDirection);
 }
 
 // ─── Baseline tooltip ──────────────────────────────────────────────────────
@@ -51,7 +51,11 @@ function baselineTooltip(
 
 // ─── SLA tooltip ───────────────────────────────────────────────────────────
 
-function slaTooltip(
+/**
+ * Builds the SLA threshold tooltip string directly, without requiring a metric value.
+ * Use this instead of `metricTooltipText` when only the threshold display is needed.
+ */
+export function slaTooltipText(
   threshold: MetricSlaThreshold | undefined,
   unit: MetricUnit,
   direction: MetricDirection | undefined,

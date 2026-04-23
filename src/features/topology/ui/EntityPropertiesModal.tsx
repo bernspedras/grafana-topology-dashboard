@@ -20,13 +20,16 @@ interface EntityPropertiesModalProps {
 // Fields that can be overridden per-topology on a flow ref (the rest require template save).
 const NODE_REF_FIELDS: ReadonlySet<string> = new Set(['label', 'dataSource', 'usedDeployment']);
 
+/** Fallback ref fields for unknown edge kinds. */
+const DEFAULT_EDGE_REF_FIELDS: ReadonlySet<string> = new Set(['label', 'dataSource']);
+
 const EDGE_REF_FIELDS: Readonly<Record<string, ReadonlySet<string>>> = {
   'http-json': new Set(['label', 'dataSource', 'method', 'endpointPath', 'endpointPaths']),
   'http-xml': new Set(['label', 'dataSource', 'method', 'endpointPath', 'soapAction']),
-  'tcp-db': new Set(['label', 'dataSource']),
+  'tcp-db': DEFAULT_EDGE_REF_FIELDS,
   'amqp': new Set(['label', 'dataSource', 'routingKeyFilter']),
   'kafka': new Set(['label', 'dataSource', 'consumerGroup']),
-  'grpc': new Set(['label', 'dataSource']),
+  'grpc': DEFAULT_EDGE_REF_FIELDS,
 };
 
 // ─── Draft state ────────────────────────────────────────────────────────────
@@ -155,7 +158,7 @@ function draftFromRaw(raw: Record<string, unknown>, kind: string): PropertyDraft
 
 /** Merge ref overrides on top of template draft (only for ref-overridable fields). */
 function applyRefOverrides(base: PropertyDraft, refEntry: Record<string, unknown>, kind: string, entityType: 'node' | 'edge'): PropertyDraft {
-  const overridable = entityType === 'node' ? NODE_REF_FIELDS : (EDGE_REF_FIELDS[kind] ?? new Set(['label', 'dataSource']));
+  const overridable = entityType === 'node' ? NODE_REF_FIELDS : (EDGE_REF_FIELDS[kind] ?? DEFAULT_EDGE_REF_FIELDS);
   const result = { ...base };
   for (const key of overridable) {
     if (Object.hasOwn(refEntry, key)) {
@@ -351,7 +354,7 @@ export function EntityPropertiesModal({
         } else {
           // Template ref: split into ref-overridable vs template-only
           const allFields = buildPatchFromDraft(draft, kind, entityType);
-          const refFields = entityType === 'node' ? NODE_REF_FIELDS : (EDGE_REF_FIELDS[kind] ?? new Set(['label', 'dataSource']));
+          const refFields = entityType === 'node' ? NODE_REF_FIELDS : (EDGE_REF_FIELDS[kind] ?? DEFAULT_EDGE_REF_FIELDS);
 
           const refPatch: Record<string, unknown> = {};
           const templatePatch: Record<string, unknown> = {};
@@ -390,7 +393,7 @@ export function EntityPropertiesModal({
   const kind = entityInfo.kind;
   const kindLabel = entityType === 'node' ? (NODE_KIND_LABELS[kind] ?? kind) : (EDGE_KIND_LABELS[kind] ?? kind);
   const kindColor = entityType === 'node' ? (NODE_KIND_COLORS[kind] ?? '#6b7280') : (EDGE_KIND_COLORS[kind] ?? '#6b7280');
-  const refFields = entityType === 'node' ? NODE_REF_FIELDS : (EDGE_REF_FIELDS[kind] ?? new Set(['label', 'dataSource']));
+  const refFields = entityType === 'node' ? NODE_REF_FIELDS : (EDGE_REF_FIELDS[kind] ?? DEFAULT_EDGE_REF_FIELDS);
 
   return createPortal(
     <div ref={backdropRef} onClick={handleBackdropClick} className={styles.backdrop}>

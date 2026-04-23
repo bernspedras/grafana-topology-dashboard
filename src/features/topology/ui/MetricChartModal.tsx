@@ -28,7 +28,7 @@ import type { MetricDefinition } from '../application/topologyDefinition';
 import { isNodeRef, isEdgeRef } from '../application/topologyDefinition';
 import type { FlowOverridePatch } from '../application/flowOverridePatch';
 import { metricDescription } from '../application/metricDescriptions';
-import { metricTooltipText } from '../application/metricTooltip';
+import { slaTooltipText } from '../application/metricTooltip';
 import { formatMetricValue } from '../application/formatMetricValue';
 import { PLUGIN_ID } from '../application/pluginConstants';
 
@@ -337,8 +337,8 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
       if (weekAgoValue === undefined) return undefined;
       return 'Last week: ' + formatMetricValue(weekAgoValue, unit);
     }
-    // SLA mode — reuse tooltip logic (it only needs threshold + direction, not value)
-    return metricTooltipText(1, undefined, unit, 'sla', slaThresholds?.[metricKey], directions?.[metricKey]);
+    // SLA mode — show threshold tooltip directly (no metric value needed)
+    return slaTooltipText(slaThresholds?.[metricKey], unit, directions?.[metricKey]);
   }, [isEditing, weekAgoValue, unit, viewOptions.coloringMode, slaThresholds, directions, metricKey]);
 
   // ── Layered metric row for override UI ──

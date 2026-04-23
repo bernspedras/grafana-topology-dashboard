@@ -81,6 +81,7 @@ func NewTopologyStore(dataDir string, logger log.Logger) (*TopologyStore, error)
 func (s *TopologyStore) dedupeStaleByID(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		s.logger.Warn("Failed to read directory for deduplication", "dir", dir, "error", err)
 		return
 	}
 	type fileInfo struct {

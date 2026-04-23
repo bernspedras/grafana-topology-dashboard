@@ -5,6 +5,8 @@
     "build": "go run github.com/magefile/mage -v build:linux build:linuxARM64 && webpack -c ./.config/webpack/webpack.config.ts --env production",
     "build:frontend": "webpack -c ./.config/webpack/webpack.config.ts --env production",
     "build:backend": "go run github.com/magefile/mage -v build:linux build:linuxARM64",
+    "build:backend:amd64": "go run github.com/magefile/mage -v build:linux",
+    "build:backend:arm64": "go run github.com/magefile/mage -v build:linuxARM64",
     "dev:backend": "go run github.com/magefile/mage -v build:backend",
     "dev": "webpack -w -c ./.config/webpack/webpack.config.ts --env development",
     "test": "jest",

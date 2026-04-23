@@ -2,6 +2,7 @@ import React, { memo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { css } from '@emotion/css';
+import { Tooltip } from '@grafana/ui';
 import type { TopologyNode } from '../domain';
 import { nodeColor } from '../application/nodeStyles';
 import { nodeTypeTag, nodeMetricRows } from '../application/nodeDisplayData';
@@ -98,7 +99,7 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
         {metrics.map((m) => {
           const key = m.metricKey;
           if (key !== undefined) {
-            return (
+            const btn = (
               <button
                 key={m.label}
                 type="button"
@@ -116,6 +117,10 @@ function TopologyFlowCardInner({ data }: NodeProps<TopologyFlowCardType>): React
                 </span>
               </button>
             );
+            if (m.tooltip !== undefined) {
+              return <Tooltip key={m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+            }
+            return btn;
           }
           return (
             <div key={m.label} className={styles.metricRow}>

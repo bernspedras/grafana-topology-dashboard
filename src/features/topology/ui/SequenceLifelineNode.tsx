@@ -3,7 +3,7 @@ import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { css } from '@emotion/css';
 
-import { Select } from '@grafana/ui';
+import { Select, Tooltip } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import type { TopologyNode } from '../domain';
 import { EKSServiceNode } from '../domain';
@@ -270,7 +270,7 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
             {metrics.map((m) => {
               const key = m.metricKey;
               if (key !== undefined) {
-                return (
+                const btn = (
                   <button
                     key={m.label}
                     type="button"
@@ -288,6 +288,10 @@ function SequenceLifelineNodeInner({ id: nodeId, data }: NodeProps<SequenceLifel
                     </span>
                   </button>
                 );
+                if (m.tooltip !== undefined) {
+                  return <Tooltip key={m.label} content={m.tooltip} placement="top">{btn}</Tooltip>;
+                }
+                return btn;
               }
               return (
                 <div key={m.label} className={styles.metricRow}>

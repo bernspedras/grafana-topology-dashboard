@@ -71,7 +71,9 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 		t.Fatalf("create: expected 201, got %d — %s", rec.Code, rec.Body.String())
 	}
 	var createResp struct{ ID string `json:"id"` }
-	json.Unmarshal(rec.Body.Bytes(), &createResp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("create: unmarshal response: %v", err)
+	}
 	if createResp.ID != "lifecycle-flow" {
 		t.Fatalf("create: unexpected id %q", createResp.ID)
 	}
@@ -91,7 +93,9 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
-	json.Unmarshal(rec.Body.Bytes(), &got)
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("get: unmarshal response: %v", err)
+	}
 	if got.ID != "lifecycle-flow" || got.Name != "Lifecycle Flow" {
 		t.Fatalf("get: unexpected flow %+v", got)
 	}
@@ -102,7 +106,9 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 		t.Fatalf("list: expected 200, got %d", rec.Code)
 	}
 	var items []FlowListItem
-	json.Unmarshal(rec.Body.Bytes(), &items)
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("list: unmarshal response: %v", err)
+	}
 	if len(items) != 1 || items[0].ID != "lifecycle-flow" {
 		t.Fatalf("list: unexpected items %+v", items)
 	}
@@ -116,7 +122,9 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 
 	// 5. Verify rename.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies/lifecycle-flow", nil))
-	json.Unmarshal(rec.Body.Bytes(), &got)
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("rename verify: unmarshal response: %v", err)
+	}
 	if got.Name != "Renamed Flow" {
 		t.Fatalf("rename: expected 'Renamed Flow', got %q", got.Name)
 	}
@@ -140,7 +148,9 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 
 	// 9. List after delete is empty.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies", nil))
-	json.Unmarshal(rec.Body.Bytes(), &items)
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("list after delete: unmarshal response: %v", err)
+	}
 	if len(items) != 0 {
 		t.Fatalf("list after delete: expected 0 items, got %d", len(items))
 	}
@@ -158,7 +168,9 @@ func TestHandler_CreateFlow_Success(t *testing.T) {
 	}
 
 	var resp struct{ ID string `json:"id"` }
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	if resp.ID != "svc-a" {
 		t.Fatalf("expected id 'svc-a', got %q", resp.ID)
 	}
@@ -170,7 +182,9 @@ func TestHandler_CreateFlow_Success(t *testing.T) {
 		t.Fatalf("file not created: %v", err)
 	}
 	var parsed struct{ Name string `json:"name"` }
-	json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("unmarshal file content: %v", err)
+	}
 	if parsed.Name != "Service A" {
 		t.Fatalf("file content mismatch: name=%q", parsed.Name)
 	}
@@ -233,9 +247,14 @@ func TestHandler_PutFlow_Rename(t *testing.T) {
 	}
 
 	// Verify on disk.
-	data, _ := os.ReadFile(filepath.Join(dir, "flows", "rn.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "flows", "rn.json"))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
 	var parsed struct{ Name string `json:"name"` }
-	json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("unmarshal file content: %v", err)
+	}
 	if parsed.Name != "Updated Name" {
 		t.Fatalf("expected 'Updated Name' on disk, got %q", parsed.Name)
 	}
@@ -243,7 +262,9 @@ func TestHandler_PutFlow_Rename(t *testing.T) {
 	// Verify via GET.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies/rn", nil))
 	var got struct{ Name string `json:"name"` }
-	json.Unmarshal(rec.Body.Bytes(), &got)
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal GET response: %v", err)
+	}
 	if got.Name != "Updated Name" {
 		t.Fatalf("expected 'Updated Name' via GET, got %q", got.Name)
 	}
@@ -304,7 +325,9 @@ func TestHandler_ListFlows_Empty(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var items []FlowListItem
-	json.Unmarshal(rec.Body.Bytes(), &items)
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	if len(items) != 0 {
 		t.Fatalf("expected empty list, got %d items", len(items))
 	}
@@ -318,7 +341,9 @@ func TestHandler_ListFlows_Multiple(t *testing.T) {
 
 	rec := do(mux, adminReq(http.MethodGet, "/topologies", nil))
 	var items []FlowListItem
-	json.Unmarshal(rec.Body.Bytes(), &items)
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	if len(items) != 2 {
 		t.Fatalf("expected 2 items, got %d", len(items))
 	}
@@ -340,7 +365,9 @@ func TestHandler_GetBundle_IncludesFlow(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var bundle TopologyBundle
-	json.Unmarshal(rec.Body.Bytes(), &bundle)
+	if err := json.Unmarshal(rec.Body.Bytes(), &bundle); err != nil {
+		t.Fatalf("unmarshal bundle response: %v", err)
+	}
 	if len(bundle.Flows) != 1 {
 		t.Fatalf("expected 1 flow in bundle, got %d", len(bundle.Flows))
 	}
@@ -478,7 +505,9 @@ func TestHandler_CreateThenDelete_FileSystemState(t *testing.T) {
 	// List returns only alpha and gamma.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies", nil))
 	var items []FlowListItem
-	json.Unmarshal(rec.Body.Bytes(), &items)
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	if len(items) != 2 {
 		t.Fatalf("expected 2 items in list, got %d", len(items))
 	}
