@@ -491,11 +491,7 @@ function ViewportRestorer(): null {
     const saved = useTopologyPositionStore.getState().viewports[topologyId];
     if (saved === undefined) return; // fitView prop handles the default
 
-    // Run after fitView's frame to override it
-    const frame = requestAnimationFrame(() => {
-      void setViewport(saved);
-    });
-    return (): void => { cancelAnimationFrame(frame); };
+    void setViewport(saved);
   }, [topologyId, nodesReady, setViewport]);
 
   return null;
@@ -521,6 +517,7 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
     useTopologyFlow(effectiveGraph, bundledLayout, viewOpts.coloringMode, slaMap, viewOpts.lowPolyMode, dirMap, sequenceMode && canShowSequence, collapseMap);
 
   const topologyId = useTopologyId();
+  const hasSavedViewport = useTopologyPositionStore.getState().viewports[topologyId] !== undefined;
   const toast = useToast();
 
   const editingFlowStep = useMemo((): FlowStepNode | undefined => {
@@ -559,7 +556,8 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
     onAddEdge?.(connection.source, connection.target);
   }, [onAddEdge]);
 
-  const handleMoveEnd = useCallback((_event: MouseEvent | TouchEvent | null, viewport: Viewport): void => {
+  const handleMoveEnd = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport): void => {
+    if (event === null) return; // skip programmatic viewport changes (fitView, setViewport)
     useTopologyPositionStore.getState().setViewportForTopology(topologyId, viewport);
   }, [topologyId]);
 
@@ -619,7 +617,7 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
         edgesReconnectable={isEditing === true && !activeSequenceMode}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        fitView
+        fitView={!hasSavedViewport}
         minZoom={0.1}
         onMoveEnd={handleMoveEnd}
         proOptions={{ hideAttribution: true }}

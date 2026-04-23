@@ -189,6 +189,21 @@ describe('computeCollapseDbMap', (): void => {
     expect(map.get('svc1')?.dbNode).toBe(db1);
     expect(map.get('svc2')?.dbNode).toBe(db2);
   });
+
+  it('does NOT collapse when one service connects to two separate DBs (each with 1 edge)', (): void => {
+    const svc = eksNode('svc');
+    const db1 = dbNode('db1');
+    const db2 = dbNode('db2');
+    const graph = new TopologyGraph({
+      nodes: [svc, db1, db2],
+      edges: [dbEdge('svc', 'db1'), dbEdge('svc', 'db2')],
+      updatedAt: NOW,
+    });
+
+    const map = computeCollapseDbMap(graph);
+    // Neither DB should be collapsed — ambiguous which one to show
+    expect(map.size).toBe(0);
+  });
 });
 
 describe('applyDbCollapse', (): void => {

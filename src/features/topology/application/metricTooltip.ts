@@ -35,7 +35,12 @@ function baselineTooltip(
   weekAgo: number | undefined,
   unit: MetricUnit,
 ): string | undefined {
-  if (weekAgo === undefined || weekAgo === 0) return undefined;
+  if (weekAgo === undefined) return undefined;
+
+  if (weekAgo === 0) {
+    const label = 'Last week: ' + formatMetricValue(0, unit);
+    return current === 0 ? label + ' (no change)' : label + ' (was zero)';
+  }
 
   const ratio = (current - weekAgo) / weekAgo;
   const sign = ratio >= 0 ? '+' : '';

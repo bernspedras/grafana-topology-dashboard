@@ -99,6 +99,30 @@ func TestValidateRangeRequest_AcceptsValidRequest(t *testing.T) {
 	}
 }
 
+func TestValidateRangeRequest_RejectsInvalidFieldsEvenWithEmptyQueries(t *testing.T) {
+	req := MetricRangeRequest{
+		Queries: map[string]string{},
+		Start:   99999,
+		End:     0,
+		Step:    -1,
+	}
+	if err := validateRangeRequest(req); err == nil {
+		t.Fatal("expected validation error for empty queries with invalid fields")
+	}
+}
+
+func TestValidateRangeRequest_AcceptsEmptyQueriesWithValidFields(t *testing.T) {
+	req := MetricRangeRequest{
+		Queries: map[string]string{},
+		Start:   0,
+		End:     3600,
+		Step:    60,
+	}
+	if err := validateRangeRequest(req); err != nil {
+		t.Fatalf("expected no error for valid empty-queries request, got: %v", err)
+	}
+}
+
 func TestValidateRangeRequest_AcceptsMaxBoundaries(t *testing.T) {
 	req := MetricRangeRequest{
 		Queries: map[string]string{"k": "up"},

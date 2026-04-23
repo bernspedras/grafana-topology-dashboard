@@ -194,7 +194,7 @@ export function layoutSequenceDiagram(
     .filter((n): n is TopologyNode => n !== undefined);
   const tallestNodeCard = lowPolyMode === true
     ? LOW_POLY_NODE_HEIGHT
-    : Math.max(...participantNodes.map((n) => estimateNodeCardHeight(n, collapseMap?.has(n.id))), 150);
+    : participantNodes.reduce((max, n) => Math.max(max, estimateNodeCardHeight(n, collapseMap?.has(n.id))), 150);
 
   // 5. Compute cumulative y-offset for each sequenceOrder.
   //    The edge card is centered on the handle (translate -50% -50%), so

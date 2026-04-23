@@ -151,6 +151,7 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sequenceOrderDraft, setSequenceOrderDraft] = useState('');
+  const [sequenceOrderError, setSequenceOrderError] = useState<string | undefined>(undefined);
 
   // ── Compute layered data ──
   // Resolve the flow entry first so inline definitions (which only live in
@@ -215,13 +216,15 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
     if (flowData === undefined) {
       return;
     }
+    const trimmed = sequenceOrderDraft.trim();
+    const value = trimmed === '' ? undefined : Number(trimmed);
+    if (value !== undefined && (!Number.isInteger(value) || value < 1)) {
+      setSequenceOrderError('Must be a positive whole number');
+      return;
+    }
+    setSequenceOrderError(undefined);
     setSaving(true);
     try {
-      const trimmed = sequenceOrderDraft.trim();
-      const value = trimmed === '' ? undefined : Number(trimmed);
-      if (value !== undefined && isNaN(value)) {
-        return;
-      }
       await flowData.saveEdgeSequenceOrder(entityId, value);
     } finally {
       setSaving(false);
@@ -415,6 +418,7 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
                   value={sequenceOrderDraft}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
                     setSequenceOrderDraft(e.target.value);
+                    setSequenceOrderError(undefined);
                   }}
                   placeholder="Not set"
                 />
@@ -427,6 +431,9 @@ export function MetricEditModal({ title, entityId, entityType, onClose }: Metric
                   Save
                 </button>
               </div>
+              {sequenceOrderError !== undefined && (
+                <span className={s.sequenceOrderValidationError}>{sequenceOrderError}</span>
+              )}
             </div>
           )}
 
@@ -942,6 +949,11 @@ const s = {
     outline: 'none',
     boxSizing: 'border-box' as const,
     '&:focus': { borderColor: '#60a5fa' },
+  }),
+  sequenceOrderValidationError: css({
+    fontSize: '12px',
+    color: '#f87171',
+    marginTop: '4px',
   }),
   sectionGroup: css({
     display: 'flex',
