@@ -24,6 +24,7 @@ import { useViewOptions } from './ViewOptionsContext';
 import { useSla } from './SlaContext';
 import { useDirections } from './DirectionContext';
 import { SEQ_SELF_LOOP_LABEL_X_OFFSET } from '../application/layoutSequenceDiagram';
+import { sequenceSelfLoopPath } from '../application/sequenceSelfLoopPath';
 import { PromQLModal } from './PromQLModal';
 import { MetricEditModal } from './MetricEditModal';
 import { MetricChartModal } from './MetricChartModal';
@@ -301,31 +302,7 @@ function selfLoopEdgePath(
   );
 }
 
-// ─── Sequence diagram self-loop path ────────────────────────────────────────
-//
-// Draws a rectangular-ish loop to the right:
-//   source → right → down → left → target
-// Mimics UML sequence diagram self-call notation.
-
-function sequenceSelfLoopPath(
-  sx: number, sy: number,
-  tx: number, ty: number,
-  labelX: number,
-  isLowPoly: boolean,
-): string {
-  // Vertical segment of the loop. For full cards it sits just before the card's
-  // left edge; for low-poly tags it extends slightly past the tag.
-  const rx = isLowPoly ? labelX + 35 : labelX - 125;
-  const cornerR = Math.min(8, Math.abs(ty - sy) / 2);
-  return (
-    `M ${String(sx)},${String(sy)} ` +
-    `L ${String(rx - cornerR)},${String(sy)} ` +
-    `Q ${String(rx)},${String(sy)} ${String(rx)},${String(sy + cornerR)} ` +
-    `L ${String(rx)},${String(ty - cornerR)} ` +
-    `Q ${String(rx)},${String(ty)} ${String(rx - cornerR)},${String(ty)} ` +
-    `L ${String(tx)},${String(ty)}`
-  );
-}
+// sequenceSelfLoopPath extracted to ../application/sequenceSelfLoopPath.ts
 
 // ─── Normal edge path through label (quadratic bezier) ──────────────────────
 

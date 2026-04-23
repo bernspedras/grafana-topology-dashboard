@@ -57,4 +57,52 @@ describe('healthFromMetricRows', (): void => {
     ];
     expect(healthFromMetricRows(rows)).toBe('warning');
   });
+
+  it('returns critical when collapsed DB connection metrics include a critical row', (): void => {
+    // Simulates the scenario where a collapsed DB's edge metrics are merged
+    // into the parent service node's display rows. The service itself is healthy,
+    // but the DB connection edge has a critical error rate.
+    const serviceRows: MetricRow[] = [
+      metricRow('healthy', 'pods'),        // Pods: 2/2
+      metricRow('healthy', 'cpu'),         // CPU: 45%
+      metricRow('healthy', 'memory'),      // Memory: 62%
+    ];
+    const collapsedDbEdgeRows: MetricRow[] = [
+      metricRow('healthy', 'activeConnections'),    // Pool conns
+      metricRow('healthy', 'poolHitRatePercent'),   // Pool hit rate
+      metricRow('healthy', 'rps'),                  // RPS
+      metricRow('healthy', 'avgQueryTimeMs'),       // Query P50
+      metricRow('critical', 'errorRate'),            // Error rate — critical
+    ];
+    const combined = [...serviceRows, ...collapsedDbEdgeRows];
+    expect(healthFromMetricRows(combined)).toBe('critical');
+  });
+
+  it('returns healthy when collapsed DB metrics are all healthy', (): void => {
+    const serviceRows: MetricRow[] = [
+      metricRow('healthy', 'cpu'),
+      metricRow('healthy', 'memory'),
+    ];
+    const collapsedDbEdgeRows: MetricRow[] = [
+      metricRow('healthy', 'activeConnections'),
+      metricRow('healthy', 'rps'),
+      metricRow('healthy', 'errorRate'),
+    ];
+    const combined = [...serviceRows, ...collapsedDbEdgeRows];
+    expect(healthFromMetricRows(combined)).toBe('healthy');
+  });
+
+  it('returns warning when collapsed DB has warning metrics alongside healthy service', (): void => {
+    const serviceRows: MetricRow[] = [
+      metricRow('healthy', 'cpu'),
+      metricRow('healthy', 'memory'),
+    ];
+    const collapsedDbEdgeRows: MetricRow[] = [
+      metricRow('healthy', 'activeConnections'),
+      metricRow('warning', 'poolTimeoutsPerMin'),   // Pool timeouts elevated
+      metricRow('healthy', 'errorRate'),
+    ];
+    const combined = [...serviceRows, ...collapsedDbEdgeRows];
+    expect(healthFromMetricRows(combined)).toBe('warning');
+  });
 });

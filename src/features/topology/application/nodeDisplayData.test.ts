@@ -6,6 +6,7 @@ import {
   EC2ServiceNode,
   DatabaseNode,
   ExternalNode,
+  FlowSummaryNode,
   NodeMetrics,
   DeploymentMetrics,
 } from '../domain/index';
@@ -226,6 +227,156 @@ describe('nodeMetricRows', (): void => {
     it('returns neutral color when current is within ±20% of weekAgo', (): void => {
       const rows = nodeMetricRows(makeEksNode({ cpu: 52, cpuWeekAgo: 50 }), undefined, undefined, undefined, dirs);
       expect(rows[1]?.color).toBe('#e2e8f0');
+    });
+  });
+
+  // ─── FlowSummaryNode ──────────────────────────────────────────────────────
+
+  describe('FlowSummaryNode', (): void => {
+    it('returns empty rows (no built-in metrics)', (): void => {
+      const node = new FlowSummaryNode({
+        id: 'flow-1',
+        label: 'My Flow',
+        status: 'healthy',
+        baselineStatus: 'healthy',
+        metrics: new NodeMetrics({ lastUpdatedAt: new Date() }),
+      });
+      const rows = nodeMetricRows(node);
+      expect(rows).toHaveLength(0);
+    });
+
+    it('returns FLOW type tag', (): void => {
+      const node = new FlowSummaryNode({
+        id: 'flow-1',
+        label: 'My Flow',
+        status: 'healthy',
+        baselineStatus: 'healthy',
+        metrics: new NodeMetrics({ lastUpdatedAt: new Date() }),
+      });
+      expect(nodeTypeTag(node)).toBe('FLOW');
+    });
+  });
+
+  // ─── EKS pods critical / healthy ──────────────────────────────────────────
+
+  describe('EKS pods status', (): void => {
+    it('shows critical (red) when readyReplicas=0', (): void => {
+      const deployments = [
+        new DeploymentMetrics({ name: 'api', readyReplicas: 0, desiredReplicas: 3, cpu: 0, memory: 0 }),
+      ];
+      const rows = nodeMetricRows(makeEksNode({ cpu: 0, memory: 0, deployments }));
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: '0 / 3' });
+      expect(rows[0]?.color).toBe('#ef4444');
+      expect(rows[0]?.status).toBe('critical');
+    });
+
+    it('shows healthy (green) when ready === desired', (): void => {
+      const deployments = [
+        new DeploymentMetrics({ name: 'api', readyReplicas: 3, desiredReplicas: 3, cpu: 40, memory: 50 }),
+      ];
+      const rows = nodeMetricRows(makeEksNode({ cpu: 40, memory: 50, deployments }));
+      expect(rows[0]).toMatchObject({ label: 'Pods', value: '3 / 3' });
+      expect(rows[0]?.color).toBe('#22c55e');
+      expect(rows[0]?.status).toBe('healthy');
+    });
+  });
+
+  // ─── Database with storageGb format ───────────────────────────────────────
+
+  describe('DatabaseNode storage format', (): void => {
+    it('shows Storage row with correct format "100 GB"', (): void => {
+      const rows = nodeMetricRows(makeDbNode({ storageGb: 100 }));
+      const storageRow = rows.find((r) => r.label === 'Storage');
+      expect(storageRow).toBeDefined();
+      expect(storageRow?.value).toBe('100 GB');
+    });
+  });
+
+  // ─── External with slaPercent format ──────────────────────────────────────
+
+  describe('ExternalNode SLA format', (): void => {
+    it('shows SLA row with format "99.9%"', (): void => {
+      const rows = nodeMetricRows(makeExternalNode({ slaPercent: 99.9 }));
+      const slaRow = rows.find((r) => r.label === 'SLA');
+      expect(slaRow).toBeDefined();
+      expect(slaRow?.value).toBe('99.9%');
+    });
+  });
+
+  // ─── Tooltip, weekAgoValue, and unit fields ───────────────────────────────
+
+  describe('tooltip, weekAgoValue, and unit fields', (): void => {
+    it('populates tooltip, weekAgoValue, and unit for EKS CPU row with weekAgo data', (): void => {
+      const dirs: MetricDirectionMap = { cpu: 'lower-is-better' };
+      const rows = nodeMetricRows(makeEksNode({ cpu: 60, cpuWeekAgo: 40 }), undefined, undefined, undefined, dirs);
+      expect(rows[1].tooltip).toBeDefined();
+      expect(rows[1].tooltip).toContain('Last week:');
+      expect(rows[1].tooltip).toContain('%');
+      expect(rows[1].weekAgoValue).toBe(40);
+      expect(rows[1].unit).toBe('percent');
+    });
+
+    it('has undefined tooltip when weekAgo is absent', (): void => {
+      const rows = nodeMetricRows(makeEksNode({ cpu: 60 }));
+      expect(rows[1].tooltip).toBeUndefined();
+      expect(rows[1].weekAgoValue).toBeUndefined();
+      expect(rows[1].unit).toBe('percent');
+    });
+
+    it('has correct unit on EC2 CPU and Memory rows', (): void => {
+      const rows = nodeMetricRows(makeEc2Node({ cpu: 85, memory: 55 }));
+      expect(rows[0]?.unit).toBe('percent');
+      expect(rows[1]?.unit).toBe('percent');
+    });
+
+    it('has undefined metricKey, tooltip, and weekAgoValue on static info rows', (): void => {
+      const rows = nodeMetricRows(makeEc2Node({ cpu: 85, memory: 55 }));
+      // Instance row
+      expect(rows[2]?.metricKey).toBeUndefined();
+      expect(rows[2]?.tooltip).toBeUndefined();
+      expect(rows[2]?.weekAgoValue).toBeUndefined();
+      // AZ row
+      expect(rows[3]?.metricKey).toBeUndefined();
+      expect(rows[3]?.tooltip).toBeUndefined();
+      expect(rows[3]?.weekAgoValue).toBeUndefined();
+    });
+  });
+
+  // ─── Explicit assertions for existing toMatchObject tests ─────────────────
+
+  describe('explicit tooltip/weekAgoValue/unit on existing assertions', (): void => {
+    it('EKS aggregate rows have correct metricKey, tooltip, weekAgoValue, and unit', (): void => {
+      const deployments = [
+        new DeploymentMetrics({ name: 'api', readyReplicas: 2, desiredReplicas: 3, cpu: 40, memory: 50 }),
+        new DeploymentMetrics({ name: 'worker', readyReplicas: 1, desiredReplicas: 1, cpu: 20, memory: 30 }),
+      ];
+      const rows = nodeMetricRows(makeEksNode({ cpu: 40, memory: 70, deployments }));
+      // Pods row
+      expect(rows[0]?.tooltip).toBeUndefined();
+      expect(rows[0]?.weekAgoValue).toBeUndefined();
+      expect(rows[0]?.unit).toBe('count');
+      // CPU row
+      expect(rows[1]?.tooltip).toBeUndefined(); // no weekAgo
+      expect(rows[1]?.weekAgoValue).toBeUndefined();
+      expect(rows[1]?.unit).toBe('percent');
+      // Memory row
+      expect(rows[2]?.tooltip).toBeUndefined();
+      expect(rows[2]?.weekAgoValue).toBeUndefined();
+      expect(rows[2]?.unit).toBe('percent');
+    });
+
+    it('DB rows have correct unit fields', (): void => {
+      const rows = nodeMetricRows(makeDbNode({ cpu: 60, memory: 79 }));
+      expect(rows[0]?.unit).toBe('percent');
+      expect(rows[1]?.unit).toBe('percent');
+      expect(rows[2]?.unit).toBe('');
+    });
+
+    it('External rows have correct unit fields', (): void => {
+      const rows = nodeMetricRows(makeExternalNode({ cpu: 80, memory: 30 }));
+      expect(rows[0]?.unit).toBe('percent');
+      expect(rows[1]?.unit).toBe('percent');
+      expect(rows[2]?.unit).toBe('');
     });
   });
 });
