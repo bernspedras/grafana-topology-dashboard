@@ -149,12 +149,13 @@ func (a *App) queryPrometheus(
 
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		_, _ = io.Copy(io.Discard, resp.Body) // drain remaining for connection reuse
 		a.logger.Warn("Prometheus returned non-200", "status", resp.StatusCode, "body", string(body), "readErr", readErr, "dsUID", dsUID)
 		return nil
 	}
 
 	var promResp prometheusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&promResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&promResp); err != nil {
 		a.logger.Warn("Failed to decode Prometheus response", "error", err, "dsUID", dsUID)
 		return nil
 	}
@@ -281,12 +282,13 @@ func (a *App) queryPrometheusRange(
 
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+		_, _ = io.Copy(io.Discard, resp.Body) // drain remaining for connection reuse
 		a.logger.Warn("Prometheus range query returned non-200", "status", resp.StatusCode, "body", string(body), "readErr", readErr, "dsUID", dsUID)
 		return nil
 	}
 
 	var promResp prometheusRangeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&promResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&promResp); err != nil {
 		a.logger.Warn("Failed to decode Prometheus range response", "error", err, "dsUID", dsUID)
 		return nil
 	}

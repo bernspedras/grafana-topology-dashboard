@@ -395,6 +395,68 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     endpointSelections.set(selectionKey, value);
   };
 
+  // ── All hooks must be called unconditionally (React Rules of Hooks). ──
+  // Edge label dragging state
+  const setEdgeLabelOffset = useTopologyPositionStore((s) => s.setEdgeLabelOffset);
+  const savedOffset = useTopologyPositionStore(
+    useCallback((s) => s.perTopology[s.currentTopologyId]?.edgeLabelOffsets[edgeId], [edgeId])
+  );
+  const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
+  const listenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | undefined>(undefined);
+
+  // Clean up document listeners if the component unmounts mid-drag.
+  useEffect(() => {
+    return (): void => {
+      if (listenersRef.current) {
+        document.removeEventListener('mousemove', listenersRef.current.move);
+        document.removeEventListener('mouseup', listenersRef.current.up);
+        listenersRef.current = null;
+      }
+    };
+  }, []);
+
+  const onDragStart = useCallback((e: React.MouseEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const baseX = savedOffset?.x ?? 0;
+    const baseY = savedOffset?.y ?? 0;
+    dragRef.current = { startX, startY, offsetX: baseX, offsetY: baseY };
+
+    const onMouseMove = (ev: MouseEvent): void => {
+      if (dragRef.current === null) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      setDragOffset({ x: dragRef.current.offsetX + dx, y: dragRef.current.offsetY + dy });
+    };
+
+    const onMouseUp = (ev: MouseEvent): void => {
+      if (dragRef.current !== null) {
+        const dx = ev.clientX - dragRef.current.startX;
+        const dy = ev.clientY - dragRef.current.startY;
+        const finalOffset = { x: dragRef.current.offsetX + dx, y: dragRef.current.offsetY + dy };
+        setEdgeLabelOffset(edgeId, finalOffset);
+        setDragOffset(undefined);
+        dragRef.current = null;
+      }
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      listenersRef.current = null;
+    };
+
+    listenersRef.current = { move: onMouseMove, up: onMouseUp };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [edgeId, savedOffset, setEdgeLabelOffset]);
+
+  const editMode = useEditMode();
+  const resolvedQueries = usePromqlQueries(data?.domainEdge.id ?? '');
+  const sla = useSla(data?.domainEdge.id ?? '');
+  const directions = useDirections(data?.domainEdge.id ?? '');
+  // ── End of hooks ──────────────────────────────────────────────────────
+
   const isSelfLoop = data !== undefined && data.domainEdge.source === data.domainEdge.target;
   const isSequenceEdge = sourceHandleId?.startsWith('seq-') === true;
 
@@ -434,26 +496,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     baseLabelY = by;
   }
 
-  // 2. Edge label dragging offset
-  const setEdgeLabelOffset = useTopologyPositionStore((s) => s.setEdgeLabelOffset);
-  const savedOffset = useTopologyPositionStore(
-    useCallback((s) => s.perTopology[s.currentTopologyId]?.edgeLabelOffsets[edgeId], [edgeId])
-  );
-  const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
-  const listenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | undefined>(undefined);
-
-  // Clean up document listeners if the component unmounts mid-drag.
-  useEffect(() => {
-    return (): void => {
-      if (listenersRef.current) {
-        document.removeEventListener('mousemove', listenersRef.current.move);
-        document.removeEventListener('mouseup', listenersRef.current.up);
-        listenersRef.current = null;
-      }
-    };
-  }, []);
-
+  // 2. Edge label dragging offset application
   // Low-poly mode and sequence self-loops use absolute positions — skip saved offsets.
   const applyOffset = !viewOptions.lowPolyMode && !(isSequenceEdge && isSelfLoop);
   const labelX = baseLabelX + (applyOffset ? (dragOffset?.x ?? savedOffset?.x ?? 0) : 0);
@@ -475,44 +518,6 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     edgePath = normalEdgePath(sourceX, sourceY, targetX, targetY, labelX, labelY);
   }
 
-  const onDragStart = useCallback((e: React.MouseEvent): void => {
-    e.preventDefault();
-    e.stopPropagation();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const baseX = savedOffset?.x ?? 0;
-    const baseY = savedOffset?.y ?? 0;
-    dragRef.current = { startX, startY, offsetX: baseX, offsetY: baseY };
-
-    const onMouseMove = (ev: MouseEvent): void => {
-      if (dragRef.current === null) return;
-      const dx = ev.clientX - dragRef.current.startX;
-      const dy = ev.clientY - dragRef.current.startY;
-      setDragOffset({ x: dragRef.current.offsetX + dx, y: dragRef.current.offsetY + dy });
-    };
-
-    const onMouseUp = (ev: MouseEvent): void => {
-      if (dragRef.current !== null) {
-        const dx = ev.clientX - dragRef.current.startX;
-        const dy = ev.clientY - dragRef.current.startY;
-        const finalOffset = { x: dragRef.current.offsetX + dx, y: dragRef.current.offsetY + dy };
-        setEdgeLabelOffset(edgeId, finalOffset);
-        setDragOffset(undefined);
-        dragRef.current = null;
-      }
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      listenersRef.current = null;
-    };
-
-    listenersRef.current = { move: onMouseMove, up: onMouseUp };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }, [edgeId, savedOffset, setEdgeLabelOffset]);
-
-  const editMode = useEditMode();
-  const resolvedQueries = usePromqlQueries(data?.domainEdge.id ?? '');
-
   if (data === undefined) {
     return <path id={id} className="react-flow__edge-path" d={edgePath} />;
   }
@@ -520,8 +525,6 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
   const edge = data.domainEdge;
   const tag = edgeProtocolTag(edge);
   const protocolColor = edgeProtocolColor(edge);
-  const sla = useSla(edge.id);
-  const directions = useDirections(edge.id);
   const health = edgeHealth(edge, viewOptions.coloringMode, sla, directions);
   const dotColor = HEALTH_DOT[health];
   const endpoint = edgeEndpointLabel(edge);
