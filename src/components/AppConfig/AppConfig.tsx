@@ -351,11 +351,11 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
       files[filename] = strToU8(JSON.stringify(t, null, 2));
     }
     for (const n of nodeTemplates) {
-      const filename = `topologies/templates/nodes/${n.id}.json`;
+      const filename = `topologies/templates/nodes/${n.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
       files[filename] = strToU8(JSON.stringify(n, null, 2));
     }
     for (const e of edgeTemplates) {
-      const filename = `topologies/templates/edges/${e.id}.json`;
+      const filename = `topologies/templates/edges/${e.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
       files[filename] = strToU8(JSON.stringify(e, null, 2));
     }
 

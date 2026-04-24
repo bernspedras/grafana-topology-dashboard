@@ -102,21 +102,22 @@ func (a *App) handleImportZip(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		totalSize += int64(f.UncompressedSize64)
-		if totalSize > maxImportDecompressed {
-			http.Error(w, fmt.Sprintf("Decompressed content too large (max %d MB)", maxImportDecompressed>>20), http.StatusBadRequest)
-			return
-		}
-
 		rc, err := f.Open()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read ZIP entry %q", f.Name), http.StatusBadRequest)
 			return
 		}
-		data, err := io.ReadAll(io.LimitReader(rc, maxImportDecompressed))
+		// Use remaining budget (not global max) to enforce cumulative limit on actual
+		// bytes read — the ZIP header's UncompressedSize64 can be spoofed.
+		data, err := io.ReadAll(io.LimitReader(rc, maxImportDecompressed-totalSize+1))
 		rc.Close()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read ZIP entry %q", f.Name), http.StatusBadRequest)
+			return
+		}
+		totalSize += int64(len(data))
+		if totalSize > maxImportDecompressed {
+			http.Error(w, fmt.Sprintf("Decompressed content too large (max %d MB)", maxImportDecompressed>>20), http.StatusBadRequest)
 			return
 		}
 		if !json.Valid(data) {

@@ -48,11 +48,13 @@ function mergeMetrics<T extends object>(
       continue;
     }
     const override = over[key];
-    if (override === undefined) {
+    // Use loose equality — JSON deserialization can produce `null` for disabled
+    // metric slots, and `null === undefined` is false.  See CLAUDE.local.md §null-vs-undefined.
+    if (override == null) {
       result[key] = undefined;
     } else {
       const existing = result[key];
-      result[key] = existing !== undefined ? { ...existing, ...override } : override;
+      result[key] = existing != null ? { ...existing, ...override } : override;
     }
   }
   return result as T;

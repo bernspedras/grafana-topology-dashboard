@@ -119,6 +119,74 @@ function patchMetricQuery(
   }
 }
 
+// ─── Metric query section routing (shared by single-edit and batch-edit handlers) ─
+
+const AMQP_QUEUE_KEYS = ['queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'e2eLatencyP95', 'e2eLatencyAvg'];
+const KAFKA_TOPIC_KEYS = ['consumerLag', 'e2eLatencyP95', 'e2eLatencyAvg'];
+const CONSUMER_KEYS = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
+const CONSUMER_KEY_MAP: Readonly<Record<string, string>> = {
+  consumerRps: 'rps', consumerErrorRate: 'errorRate',
+  consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
+};
+
+/**
+ * Apply a single metric query edit to a cloned template object.
+ * Routes the edit to the correct metrics section based on template kind and metric key.
+ * Works for both node and edge templates — node kinds fall through to the flat-metrics default.
+ */
+function applyMetricQueryToTemplate(
+  updated: Record<string, unknown>,
+  kind: string,
+  metricKey: string,
+  query: string,
+  dataSource: string,
+  defaultDataSource: string,
+): void {
+  if (metricKey.startsWith('custom:')) {
+    const customKey = metricKey.slice('custom:'.length);
+    const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
+    if (customs !== undefined) {
+      const idx = customs.findIndex((cm) => cm.key === customKey);
+      if (idx >= 0) {
+        customs[idx] = { ...customs[idx], query, dataSource: dataSource !== defaultDataSource ? dataSource : undefined };
+      }
+    }
+    return;
+  }
+
+  if (kind === 'amqp') {
+    if (AMQP_QUEUE_KEYS.includes(metricKey)) {
+      const queue = (updated.queue ?? { metrics: {} }) as Record<string, unknown>;
+      updated.queue = queue;
+      patchMetricQuery(queue.metrics as Record<string, unknown>, metricKey, query, dataSource, defaultDataSource);
+    } else if (CONSUMER_KEYS.includes(metricKey)) {
+      const consumer = updated.consumer as Record<string, unknown> | undefined;
+      if (consumer != null) {
+        patchMetricQuery(consumer.metrics as Record<string, unknown>, CONSUMER_KEY_MAP[metricKey] ?? metricKey, query, dataSource, defaultDataSource);
+      }
+    } else {
+      const publish = updated.publish as Record<string, unknown>;
+      patchMetricQuery(publish.metrics as Record<string, unknown>, metricKey, query, dataSource, defaultDataSource);
+    }
+  } else if (kind === 'kafka') {
+    if (KAFKA_TOPIC_KEYS.includes(metricKey)) {
+      const topicMetrics = (updated.topicMetrics ?? { metrics: {} }) as Record<string, unknown>;
+      updated.topicMetrics = topicMetrics;
+      patchMetricQuery(topicMetrics.metrics as Record<string, unknown>, metricKey, query, dataSource, defaultDataSource);
+    } else if (CONSUMER_KEYS.includes(metricKey)) {
+      const consumer = updated.consumer as Record<string, unknown> | undefined;
+      if (consumer != null) {
+        patchMetricQuery(consumer.metrics as Record<string, unknown>, CONSUMER_KEY_MAP[metricKey] ?? metricKey, query, dataSource, defaultDataSource);
+      }
+    } else {
+      const publish = updated.publish as Record<string, unknown>;
+      patchMetricQuery(publish.metrics as Record<string, unknown>, metricKey, query, dataSource, defaultDataSource);
+    }
+  } else {
+    patchMetricQuery(updated.metrics as Record<string, unknown>, metricKey, query, dataSource, defaultDataSource);
+  }
+}
+
 function TopologyPage(): React.JSX.Element {
   const styles = useStyles2(getStyles);
   const { loading: topologyLoading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, slaDefaultsRaw, saveTopologyLayout, reload } = useTopologyData();
@@ -663,6 +731,7 @@ function TopologyPage(): React.JSX.Element {
 
   /** Remove a card (node or edge) ref from the current flow, leaving the template intact. */
   const handleDeleteCard = useCallback((entityId: string): void => {
+    if (!canEdit) return;
     void (async (): Promise<void> => {
       try {
         const currentEntry = topologies.find((t) => t.id === effectiveId);
@@ -685,36 +754,18 @@ function TopologyPage(): React.JSX.Element {
         console.error('[topology] Failed to remove card from flow', err);
       }
     })();
-  }, [topologies, effectiveId, reload]);
+  }, [canEdit, topologies, effectiveId, reload]);
 
   /** Save all edited metric queries for an entity in a single template write. */
   const handleSaveAllMetricQueries = useCallback((entityId: string, changes: readonly MetricChange[]): void => {
+    if (!canEdit) return;
     void (async (): Promise<void> => {
       try {
-        const deepClone = (obj: unknown): Record<string, unknown> =>
-          structuredClone(obj) as Record<string, unknown>;
-
         const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
         if (nodeTemplate !== undefined) {
-          const updated = deepClone(nodeTemplate);
-          for (const { metricKey, query, dataSource } of changes) {
-            if (metricKey.startsWith('custom:')) {
-              const customKey = metricKey.slice('custom:'.length);
-              const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
-              if (customs !== undefined) {
-                const idx = customs.findIndex((cm) => cm.key === customKey);
-                if (idx >= 0) {
-                  customs[idx] = {
-                    ...customs[idx],
-                    query,
-                    dataSource: dataSource !== nodeTemplate.dataSource ? dataSource : undefined,
-                  };
-                }
-              }
-            } else {
-              const metrics = updated.metrics as Record<string, unknown>;
-              patchMetricQuery(metrics, metricKey, query, dataSource, nodeTemplate.dataSource);
-            }
+          const updated = structuredClone(nodeTemplate) as unknown as Record<string, unknown>;
+          for (const c of changes) {
+            applyMetricQueryToTemplate(updated, nodeTemplate.kind, c.metricKey, c.query, c.dataSource, nodeTemplate.dataSource);
           }
           await saveNodeTemplate(entityId, updated);
           reload();
@@ -723,66 +774,9 @@ function TopologyPage(): React.JSX.Element {
 
         const edgeTemplate = edgeTemplates.find((t) => t.id === entityId);
         if (edgeTemplate !== undefined) {
-          const updated = deepClone(edgeTemplate);
-          const queueKeys = ['queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'e2eLatencyP95', 'e2eLatencyAvg'];
-          const consumerKeys = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
-          const consumerKeyMap: Record<string, string> = {
-            consumerRps: 'rps', consumerErrorRate: 'errorRate',
-            consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
-          };
-          const topicKeys = ['consumerLag', 'e2eLatencyP95', 'e2eLatencyAvg'];
-          for (const { metricKey, query, dataSource } of changes) {
-            if (metricKey.startsWith('custom:')) {
-              const customKey = metricKey.slice('custom:'.length);
-              const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
-              if (customs !== undefined) {
-                const idx = customs.findIndex((cm) => cm.key === customKey);
-                if (idx >= 0) {
-                  customs[idx] = {
-                    ...customs[idx],
-                    query,
-                    dataSource: dataSource !== edgeTemplate.dataSource ? dataSource : undefined,
-                  };
-                }
-              }
-            } else if (edgeTemplate.kind === 'amqp') {
-              if (queueKeys.includes(metricKey)) {
-                const queue = (updated.queue ?? { metrics: {} }) as Record<string, unknown>;
-                updated.queue = queue;
-                const queueMetrics = queue.metrics as Record<string, unknown>;
-                patchMetricQuery(queueMetrics, metricKey, query, dataSource, edgeTemplate.dataSource);
-              } else if (consumerKeys.includes(metricKey)) {
-                const consumer = updated.consumer as Record<string, unknown> | undefined;
-                if (consumer != null) {
-                  const conMetrics = consumer.metrics as Record<string, unknown>;
-                  patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, query, dataSource, edgeTemplate.dataSource);
-                }
-              } else {
-                const publish = updated.publish as Record<string, unknown>;
-                const publishMetrics = publish.metrics as Record<string, unknown>;
-                patchMetricQuery(publishMetrics, metricKey, query, dataSource, edgeTemplate.dataSource);
-              }
-            } else if (edgeTemplate.kind === 'kafka') {
-              if (topicKeys.includes(metricKey)) {
-                const topicMetrics = (updated.topicMetrics ?? { metrics: {} }) as Record<string, unknown>;
-                updated.topicMetrics = topicMetrics;
-                const tm = topicMetrics.metrics as Record<string, unknown>;
-                patchMetricQuery(tm, metricKey, query, dataSource, edgeTemplate.dataSource);
-              } else if (consumerKeys.includes(metricKey)) {
-                const consumer = updated.consumer as Record<string, unknown> | undefined;
-                if (consumer != null) {
-                  const conMetrics = consumer.metrics as Record<string, unknown>;
-                  patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, query, dataSource, edgeTemplate.dataSource);
-                }
-              } else {
-                const publish = updated.publish as Record<string, unknown>;
-                const publishMetrics = publish.metrics as Record<string, unknown>;
-                patchMetricQuery(publishMetrics, metricKey, query, dataSource, edgeTemplate.dataSource);
-              }
-            } else {
-              const metrics = updated.metrics as Record<string, unknown>;
-              patchMetricQuery(metrics, metricKey, query, dataSource, edgeTemplate.dataSource);
-            }
+          const updated = structuredClone(edgeTemplate) as unknown as Record<string, unknown>;
+          for (const c of changes) {
+            applyMetricQueryToTemplate(updated, edgeTemplate.kind, c.metricKey, c.query, c.dataSource, edgeTemplate.dataSource);
           }
           await saveEdgeTemplate(entityId, updated);
           reload();
@@ -794,33 +788,16 @@ function TopologyPage(): React.JSX.Element {
         console.error('[topology] Failed to save metric queries', err);
       }
     })();
-  }, [nodeTemplates, edgeTemplates, reload]);
+  }, [canEdit, nodeTemplates, edgeTemplates, reload]);
 
   /** Save an edited metric query to the node or edge template, then reload. */
   const handleSaveMetricQuery = useCallback(async (entityId: string, metricKey: string, newQuery: string, newDataSource: string): Promise<void> => {
+    if (!canEdit) return;
     try {
-      // Deep-clone to get mutable plain objects from readonly template types
-      const deepClone = (obj: unknown): Record<string, unknown> =>
-        structuredClone(obj) as Record<string, unknown>;
-
-      // Determine if entityId matches a node template or edge template
       const nodeTemplate = nodeTemplates.find((t) => t.id === entityId);
       if (nodeTemplate !== undefined) {
-        const updated = deepClone(nodeTemplate);
-
-        if (metricKey.startsWith('custom:')) {
-          const customKey = metricKey.slice('custom:'.length);
-          const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
-          if (customs !== undefined) {
-            const idx = customs.findIndex((cm) => cm.key === customKey);
-            if (idx >= 0) {
-              customs[idx] = { ...customs[idx], query: newQuery, dataSource: newDataSource !== nodeTemplate.dataSource ? newDataSource : undefined };
-            }
-          }
-        } else {
-          const metrics = updated.metrics as Record<string, unknown>;
-          patchMetricQuery(metrics, metricKey, newQuery, newDataSource, nodeTemplate.dataSource);
-        }
+        const updated = structuredClone(nodeTemplate) as unknown as Record<string, unknown>;
+        applyMetricQueryToTemplate(updated, nodeTemplate.kind, metricKey, newQuery, newDataSource, nodeTemplate.dataSource);
         await saveNodeTemplate(entityId, updated);
         reload();
         return;
@@ -828,67 +805,8 @@ function TopologyPage(): React.JSX.Element {
 
       const edgeTemplate = edgeTemplates.find((t) => t.id === entityId);
       if (edgeTemplate !== undefined) {
-        const updated = deepClone(edgeTemplate);
-
-        if (metricKey.startsWith('custom:')) {
-          const customKey = metricKey.slice('custom:'.length);
-          const customs = updated.customMetrics as Record<string, unknown>[] | undefined;
-          if (customs !== undefined) {
-            const idx = customs.findIndex((cm) => cm.key === customKey);
-            if (idx >= 0) {
-              customs[idx] = { ...customs[idx], query: newQuery, dataSource: newDataSource !== edgeTemplate.dataSource ? newDataSource : undefined };
-            }
-          }
-        } else if (edgeTemplate.kind === 'amqp') {
-          const queueKeys = ['queueDepth', 'queueResidenceTimeP95', 'queueResidenceTimeAvg', 'e2eLatencyP95', 'e2eLatencyAvg'];
-          const consumerKeys = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
-          const consumerKeyMap: Record<string, string> = {
-            consumerRps: 'rps', consumerErrorRate: 'errorRate',
-            consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
-          };
-          if (queueKeys.includes(metricKey)) {
-            const queue = (updated.queue ?? { metrics: {} }) as Record<string, unknown>;
-            updated.queue = queue;
-            const queueMetrics = queue.metrics as Record<string, unknown>;
-            patchMetricQuery(queueMetrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-          } else if (consumerKeys.includes(metricKey)) {
-            const consumer = updated.consumer as Record<string, unknown> | undefined;
-            if (consumer != null) {
-              const conMetrics = consumer.metrics as Record<string, unknown>;
-              patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-            }
-          } else {
-            const publish = updated.publish as Record<string, unknown>;
-            const publishMetrics = publish.metrics as Record<string, unknown>;
-            patchMetricQuery(publishMetrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-          }
-        } else if (edgeTemplate.kind === 'kafka') {
-          const topicKeys = ['consumerLag', 'e2eLatencyP95', 'e2eLatencyAvg'];
-          const consumerKeys = ['consumerRps', 'consumerErrorRate', 'consumerProcessingTimeP95', 'consumerProcessingTimeAvg'];
-          const consumerKeyMap: Record<string, string> = {
-            consumerRps: 'rps', consumerErrorRate: 'errorRate',
-            consumerProcessingTimeP95: 'processingTimeP95', consumerProcessingTimeAvg: 'processingTimeAvg',
-          };
-          if (topicKeys.includes(metricKey)) {
-            const topicMetrics = (updated.topicMetrics ?? { metrics: {} }) as Record<string, unknown>;
-            updated.topicMetrics = topicMetrics;
-            const tm = topicMetrics.metrics as Record<string, unknown>;
-            patchMetricQuery(tm, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-          } else if (consumerKeys.includes(metricKey)) {
-            const consumer = updated.consumer as Record<string, unknown> | undefined;
-            if (consumer != null) {
-              const conMetrics = consumer.metrics as Record<string, unknown>;
-              patchMetricQuery(conMetrics, consumerKeyMap[metricKey] ?? metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-            }
-          } else {
-            const publish = updated.publish as Record<string, unknown>;
-            const publishMetrics = publish.metrics as Record<string, unknown>;
-            patchMetricQuery(publishMetrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-          }
-        } else {
-          const metrics = updated.metrics as Record<string, unknown>;
-          patchMetricQuery(metrics, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
-        }
+        const updated = structuredClone(edgeTemplate) as unknown as Record<string, unknown>;
+        applyMetricQueryToTemplate(updated, edgeTemplate.kind, metricKey, newQuery, newDataSource, edgeTemplate.dataSource);
         await saveEdgeTemplate(entityId, updated);
         reload();
         return;
@@ -898,10 +816,11 @@ function TopologyPage(): React.JSX.Element {
     } catch (err) {
       console.error('[topology] Failed to save metric query', err);
     }
-  }, [nodeTemplates, edgeTemplates, reload]);
+  }, [canEdit, nodeTemplates, edgeTemplates, reload]);
 
   /** Save entity property edits (ref overrides + template updates + inline patches). */
   const handleSaveEntityProperties = useCallback(async (save: EntityPropertySave): Promise<void> => {
+    if (!canEdit) return;
     if (flowRefs === undefined || entry === undefined) {
       return;
     }
@@ -943,7 +862,7 @@ function TopologyPage(): React.JSX.Element {
     }
 
     reload();
-  }, [flowRefs, entry, effectiveId, nodeTemplates, edgeTemplates, reload]);
+  }, [canEdit, flowRefs, entry, effectiveId, nodeTemplates, edgeTemplates, reload]);
 
   if (topologyLoading) {
     return (
