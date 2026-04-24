@@ -36,9 +36,11 @@ jobs:
         run: go run github.com/magefile/mage -v buildAll
 
       - name: Sign plugin
+        if: env.GRAFANA_ACCESS_POLICY_TOKEN != ''
         run: npx --yes @grafana/sign-plugin@latest
 
       - name: Validate plugin
+        if: env.GRAFANA_ACCESS_POLICY_TOKEN != ''
         run: npx --yes @grafana/plugin-validator@latest -sourceCodeUri "${{ github.server_url }}/${{ github.repository }}" dist/
 
       - name: Package plugin
