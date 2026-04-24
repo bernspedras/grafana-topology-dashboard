@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bernspedras.dev/topology-dashboard/schemas/sla-defaults.schema.json",
+  "title": "SLA Defaults",
+  "description": "Default SLA thresholds per entity type. Each key maps a node or edge kind to a set of metric thresholds.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "node": { "$ref": "#/$defs/thresholdGroup" },
+    "http-json": { "$ref": "#/$defs/thresholdGroup" },
+    "http-xml": { "$ref": "#/$defs/thresholdGroup" },
+    "tcp-db": { "$ref": "#/$defs/thresholdGroup" },
+    "amqp": { "$ref": "#/$defs/thresholdGroup" },
+    "kafka": { "$ref": "#/$defs/thresholdGroup" },
+    "grpc": { "$ref": "#/$defs/thresholdGroup" }
+  },
+  "$defs": {
+    "threshold": {
+      "type": "object",
+      "required": ["warning", "critical"],
+      "additionalProperties": false,
+      "properties": {
+        "warning": { "type": "number", "description": "Warning threshold value." },
+        "critical": { "type": "number", "description": "Critical threshold value." }
+      }
+    },
+    "thresholdGroup": {
+      "type": "object",
+      "description": "A set of named metric thresholds for a given entity type.",
+      "additionalProperties": { "$ref": "#/$defs/threshold" }
+    }
+  }
+}
