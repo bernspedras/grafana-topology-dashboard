@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bernspedras.dev/topology-dashboard/schemas/datasources.schema.json",
+  "title": "Topology Datasources",
+  "description": "Array of datasource references used by topology definitions.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["name", "type"],
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Logical datasource name referenced by node and edge templates."
+      },
+      "type": {
+        "type": "string",
+        "enum": ["prometheus"],
+        "description": "Datasource type."
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+
+# Build output
+dist/
+artifacts/
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+
+# Test
+coverage
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+
+# ESLint
+.eslintcache
+
+# Claude Code local settings
+.claude/
+
+# Serena
+.serena/
+
+# Local Claude instructions (not for public repo)
+CLAUDE.local.md
+
+# Go
+pkg/plugin/__debug_bin*
+
+# Temporary files
+/tmp/
