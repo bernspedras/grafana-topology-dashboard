@@ -51,6 +51,10 @@ import { SaveEntityPropertiesProvider } from '../features/topology/ui/SaveEntity
 import type { EntityPropertySave } from '../features/topology/ui/SaveEntityPropertiesContext';
 import { applyPropertyPatchToFlowRefs } from '../features/topology/application/applyPropertyPatch';
 import { TopologyErrorBoundary } from '../features/topology/ui/TopologyErrorBoundary';
+import { EditFlowJsonModal } from '../features/topology/ui/EditFlowJsonModal';
+import { JsonEditorModal } from '../features/topology/ui/JsonEditorModal';
+import { UploadZipConfirmModal } from '../features/topology/ui/UploadZipConfirmModal';
+import { zipSync, strToU8 } from 'fflate';
 
 const POLL_INTERVAL_MS = 30000;
 const SELECTED_TOPOLOGY_KEY = 'topology-selected-id';
@@ -417,6 +421,62 @@ function TopologyPage(): React.JSX.Element {
     () => topologies.map((t) => t.name),
     [topologies],
   );
+
+  // ── Edit flow JSON modal state ──
+  const [editFlowJsonOpen, setEditFlowJsonOpen] = useState(false);
+  const handleOpenEditFlowJson = useCallback((): void => { setEditFlowJsonOpen(true); }, []);
+  const handleCloseEditFlowJson = useCallback((): void => { setEditFlowJsonOpen(false); }, []);
+  const handleFlowJsonSaved = useCallback((): void => { setEditFlowJsonOpen(false); reload(); }, [reload]);
+
+  // ── JSON editor modal state ──
+  const [jsonEditorOpen, setJsonEditorOpen] = useState(false);
+  const handleOpenJsonEditor = useCallback((): void => { setJsonEditorOpen(true); }, []);
+  const handleCloseJsonEditor = useCallback((): void => { setJsonEditorOpen(false); }, []);
+
+  // ── Upload ZIP state ──
+  const [uploadZipFile, setUploadZipFile] = useState<File | undefined>(undefined);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const handleUploadZipClick = useCallback((): void => { fileInputRef.current?.click(); }, []);
+  const handleFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0];
+    if (file !== undefined) { setUploadZipFile(file); }
+    e.target.value = '';
+  }, []);
+  const handleCloseUploadZip = useCallback((): void => { setUploadZipFile(undefined); }, []);
+  const handleZipImported = useCallback((): void => { setUploadZipFile(undefined); reload(); }, [reload]);
+
+  // ── Download ZIP ──
+  const handleDownloadZip = useCallback((): void => {
+    const files: Record<string, Uint8Array> = {};
+
+    if (datasourceDefinitions.length > 0) {
+      files['topologies/datasources.json'] = strToU8(JSON.stringify(datasourceDefinitions, null, 2));
+    }
+    if (slaDefaultsRaw !== undefined) {
+      files['topologies/sla-defaults.json'] = strToU8(JSON.stringify(slaDefaultsRaw, null, 2));
+    }
+    for (const t of topologies) {
+      const filename = `topologies/flows/${t.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
+      files[filename] = strToU8(JSON.stringify(t.raw, null, 2));
+    }
+    for (const n of nodeTemplates) {
+      const filename = `topologies/templates/nodes/${n.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
+      files[filename] = strToU8(JSON.stringify(n, null, 2));
+    }
+    for (const e of edgeTemplates) {
+      const filename = `topologies/templates/edges/${e.id.replace(/[^a-z0-9_-]/gi, '_')}.json`;
+      files[filename] = strToU8(JSON.stringify(e, null, 2));
+    }
+
+    const zipped = zipSync(files);
+    const blob = new Blob([zipped], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'topologies.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, slaDefaultsRaw]);
 
   // ── Add node modal state ──
   const [addNodeKind, setAddNodeKind] = useState<AddableNodeKind | undefined>(undefined);
@@ -996,6 +1056,10 @@ function TopologyPage(): React.JSX.Element {
                                       onOpenTemplatesManager={handleOpenTemplatesManager}
                                       onRenameTopology={handleOpenRenameModal}
                                       onDeleteTopology={handleOpenDeleteModal}
+                                      onEditCurrentFlowJson={handleOpenEditFlowJson}
+                                      onOpenJsonEditor={handleOpenJsonEditor}
+                                      onDownloadZip={handleDownloadZip}
+                                      onUploadZip={handleUploadZipClick}
                                     />
                                   </TopologyErrorBoundary>
                                 </div>
@@ -1080,6 +1144,35 @@ function TopologyPage(): React.JSX.Element {
           error={deleteError}
         />
       )}
+      {editFlowJsonOpen && entry !== undefined && (
+        <EditFlowJsonModal
+          flowId={effectiveId}
+          flowName={entry.name}
+          rawJson={entry.raw}
+          onClose={handleCloseEditFlowJson}
+          onSaved={handleFlowJsonSaved}
+        />
+      )}
+      {jsonEditorOpen && (
+        <JsonEditorModal
+          onClose={handleCloseJsonEditor}
+          onReload={reload}
+        />
+      )}
+      {uploadZipFile !== undefined && (
+        <UploadZipConfirmModal
+          file={uploadZipFile}
+          onClose={handleCloseUploadZip}
+          onImported={handleZipImported}
+        />
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".zip"
+        style={{ display: 'none' }}
+        onChange={handleFileSelected}
+      />
     </div>
   );
 }
