@@ -64,6 +64,11 @@ function fromDatetimeLocal(value: string): number {
 
 const STORAGE_KEY = 'topology:metric-chart:time-range';
 
+/** Minimum relative range: 1 minute. */
+const MIN_RELATIVE_SECONDS = 60;
+/** Maximum relative range: 30 days (aligned with server-side maxRangeWindowSeconds). */
+const MAX_RELATIVE_SECONDS = 30 * 24 * 3600;
+
 function isRecord(val: unknown): val is Record<string, unknown> {
   return typeof val === 'object' && val !== null;
 }
@@ -75,9 +80,11 @@ export function loadTimeRange(): TimeRange {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return { kind: 'relative', seconds: 3600 };
     if (parsed.kind === 'relative' && typeof parsed.seconds === 'number') {
-      return { kind: 'relative', seconds: parsed.seconds };
+      const clamped = Math.max(MIN_RELATIVE_SECONDS, Math.min(parsed.seconds, MAX_RELATIVE_SECONDS));
+      return { kind: 'relative', seconds: clamped };
     }
     if (parsed.kind === 'absolute' && typeof parsed.startUnix === 'number' && typeof parsed.endUnix === 'number') {
+      if (parsed.endUnix <= parsed.startUnix) return { kind: 'relative', seconds: 3600 };
       return { kind: 'absolute', startUnix: parsed.startUnix, endUnix: parsed.endUnix };
     }
   } catch {

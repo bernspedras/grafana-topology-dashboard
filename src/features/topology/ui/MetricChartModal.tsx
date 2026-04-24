@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { css, keyframes } from '@emotion/css';
-import { getBackendSrv } from '@grafana/runtime';
-import { firstValueFrom } from 'rxjs';
 import { Select } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import { TimeRangePicker, loadTimeRange, saveTimeRange, resolveRange } from './TimeRangePicker';
@@ -31,7 +29,7 @@ import type { FlowOverridePatch } from '../application/flowOverridePatch';
 import { metricDescription } from '../application/metricDescriptions';
 import { slaTooltipText } from '../application/metricTooltip';
 import { formatMetricValue } from '../application/formatMetricValue';
-import { PLUGIN_ID } from '../application/pluginConstants';
+import { fetchMetricRange } from '../application/topologyApi';
 
 // ─── Query key resolution ───────────────────────────────────────────────────
 
@@ -465,22 +463,18 @@ export function MetricChartModal({ title, entityId, entityType, metricKey, descr
         return;
       }
 
-      interface BackendRangeResponse {
-        readonly results: Record<string, { readonly timestamps: number[]; readonly values: number[] } | null>;
-      }
-
-      const response = await firstValueFrom(getBackendSrv()
-        .fetch<BackendRangeResponse>({
-          url: `/api/plugins/${PLUGIN_ID}/resources/metric-range`,
-          method: 'POST',
-          data: { datasource: dsName, queries: { [effectiveKey]: promql }, start, end, step },
-          requestId: `metric-chart-${entityId}-${metricKey}`,
-          showErrorAlert: false,
-        }));
+      const response = await fetchMetricRange({
+        datasource: dsName,
+        queries: { [effectiveKey]: promql },
+        start,
+        end,
+        step,
+        requestId: `metric-chart-${entityId}-${metricKey}`,
+      });
 
       if (signal.aborted) return;
 
-      const rangeResult = response.data.results[effectiveKey] ?? undefined;
+      const rangeResult = response.results[effectiveKey] ?? undefined;
       if (rangeResult === undefined || rangeResult.timestamps.length === 0) {
         setState({ status: 'error', message: 'No data returned for this metric' });
         return;

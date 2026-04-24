@@ -81,9 +81,9 @@ const CARD_VERTICAL_MARGIN = 40; // breathing room between consecutive cards
 /** Number of built-in metric rows per edge type (before custom metrics). */
 function baseMetricCount(edge: TopologyEdge): number {
   if (edge instanceof HttpJsonEdge || edge instanceof HttpXmlEdge || edge instanceof GrpcEdge) return 4;
-  if (edge instanceof TcpDbConnectionEdge) return 7;
+  if (edge instanceof TcpDbConnectionEdge) return 8;
   if (edge instanceof AmqpEdge) return 13;
-  if (edge instanceof KafkaEdge) return 13;
+  if (edge instanceof KafkaEdge) return 11;
   return 4;
 }
 

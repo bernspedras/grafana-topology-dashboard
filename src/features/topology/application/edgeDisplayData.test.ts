@@ -300,41 +300,42 @@ describe('edgeMetricRows', (): void => {
   });
 
   describe('TcpDbConnectionEdge', (): void => {
-    it('returns Pool conns, Pool hit rate, RPS, Query P50, Timeouts/min, Stale/min, Error rate rows', (): void => {
+    it('returns Active conns, Idle conns, Pool hit rate, RPS, Query P50, Timeouts/min, Stale/min, Error rate rows', (): void => {
       const rows = edgeMetricRows(makeDbEdge({
         activeConnections: 8, idleConnections: 2, avgQueryTimeMs: 5, rps: 200, errorRate: 0,
       }));
-      expect(rows).toHaveLength(7);
-      expect(rows[0]).toMatchObject({ label: 'Pool conns', value: '10', color: '#e2e8f0', status: 'unknown', metricKey: 'activeConnections' });
-      expect(rows[1]?.label).toBe('Pool hit rate');
-      expect(rows[2]?.label).toBe('RPS');
-      expect(rows[3]).toMatchObject({ label: 'Query P50', value: '5 ms', color: '#e2e8f0', status: 'unknown', metricKey: 'avgQueryTimeMs' });
-      expect(rows[4]?.label).toBe('Timeouts/min');
-      expect(rows[5]?.label).toBe('Stale/min');
-      expect(rows[6]?.label).toBe('Error rate');
+      expect(rows).toHaveLength(8);
+      expect(rows[0]).toMatchObject({ label: 'Active conns', value: '8', color: '#e2e8f0', status: 'unknown', metricKey: 'activeConnections' });
+      expect(rows[1]).toMatchObject({ label: 'Idle conns', value: '2', color: '#e2e8f0', status: 'unknown', metricKey: 'idleConnections' });
+      expect(rows[2]?.label).toBe('Pool hit rate');
+      expect(rows[3]?.label).toBe('RPS');
+      expect(rows[4]).toMatchObject({ label: 'Query P50', value: '5 ms', color: '#e2e8f0', status: 'unknown', metricKey: 'avgQueryTimeMs' });
+      expect(rows[5]?.label).toBe('Timeouts/min');
+      expect(rows[6]?.label).toBe('Stale/min');
+      expect(rows[7]?.label).toBe('Error rate');
     });
 
     it('uses no-baseline color for Query P50 when weekAgo is undefined', (): void => {
       const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 50 }));
-      expect(rows[3]?.color).toBe('#e2e8f0');
+      expect(rows[4]?.color).toBe('#e2e8f0');
     });
 
     it('uses yellow (warning) for Query P50 when 20-50% higher than weekAgo (lower-is-better)', (): void => {
       const dirs: MetricDirectionMap = { avgQueryTimeMs: 'lower-is-better' };
       const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 125, avgQueryTimeMsWeekAgo: 100 }), undefined, undefined, undefined, dirs);
-      expect(rows[3]?.color).toBe('#eab308');
+      expect(rows[4]?.color).toBe('#eab308');
     });
 
     it('uses red (critical) for Query P50 when >50% higher than weekAgo (lower-is-better)', (): void => {
       const dirs: MetricDirectionMap = { avgQueryTimeMs: 'lower-is-better' };
       const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 160, avgQueryTimeMsWeekAgo: 100 }), undefined, undefined, undefined, dirs);
-      expect(rows[3]?.color).toBe('#ef4444');
+      expect(rows[4]?.color).toBe('#ef4444');
     });
 
     it('uses better color for Query P50 when >20% lower than weekAgo (lower-is-better)', (): void => {
       const dirs: MetricDirectionMap = { avgQueryTimeMs: 'lower-is-better' };
       const rows = edgeMetricRows(makeDbEdge({ avgQueryTimeMs: 75, avgQueryTimeMsWeekAgo: 100 }), undefined, undefined, undefined, dirs);
-      expect(rows[3]?.color).toBe('#22c55e');
+      expect(rows[4]?.color).toBe('#22c55e');
     });
   });
 
@@ -429,22 +430,20 @@ describe('edgeMetricRows', (): void => {
       expect(edgeEndpointLabel(makeKafkaEdge({ consumerGroup: 'order-processor' }))).toBe('orders-topic / order-processor');
     });
 
-    it('returns 13 metric rows', (): void => {
+    it('returns 11 metric rows', (): void => {
       const rows = edgeMetricRows(makeKafkaEdge());
-      expect(rows).toHaveLength(13);
+      expect(rows).toHaveLength(11);
       expect(rows[0]?.label).toBe('Pub RPS');
       expect(rows[1]?.label).toBe('Pub P95');
       expect(rows[2]?.label).toBe('Pub Avg');
       expect(rows[3]?.label).toBe('Pub errors');
-      expect(rows[4]?.label).toBe('Transit P95');
-      expect(rows[5]?.label).toBe('Transit Avg');
-      expect(rows[6]?.label).toBe('Consumer lag');
-      expect(rows[7]?.label).toBe('Process P95');
-      expect(rows[8]?.label).toBe('Process Avg');
-      expect(rows[9]?.label).toBe('Consumer RPS');
-      expect(rows[10]?.label).toBe('Consumer errors');
-      expect(rows[11]?.label).toBe('E2E P95');
-      expect(rows[12]?.label).toBe('E2E Avg');
+      expect(rows[4]?.label).toBe('Consumer lag');
+      expect(rows[5]?.label).toBe('Process P95');
+      expect(rows[6]?.label).toBe('Process Avg');
+      expect(rows[7]?.label).toBe('Consumer RPS');
+      expect(rows[8]?.label).toBe('Consumer errors');
+      expect(rows[9]?.label).toBe('E2E P95');
+      expect(rows[10]?.label).toBe('E2E Avg');
     });
   });
 
@@ -563,14 +562,16 @@ describe('edgeMetricRows', (): void => {
 
   // ─── DB edge Pool conns computation ──────────────────────────────────────
 
-  describe('TcpDbConnectionEdge Pool conns computation', (): void => {
-    it('sums active + idle connections: active=8, idle=2 → value="10"', (): void => {
+  describe('TcpDbConnectionEdge Active/Idle conns rows', (): void => {
+    it('shows active=8 and idle=2 as separate rows', (): void => {
       const rows = edgeMetricRows(makeDbEdge({ activeConnections: 8, idleConnections: 2 }));
-      expect(rows[0]?.label).toBe('Pool conns');
-      expect(rows[0]?.value).toBe('10');
+      expect(rows[0]?.label).toBe('Active conns');
+      expect(rows[0]?.value).toBe('8');
+      expect(rows[1]?.label).toBe('Idle conns');
+      expect(rows[1]?.value).toBe('2');
     });
 
-    it('shows N/A when active connections is undefined', (): void => {
+    it('shows N/A for active conns when active connections is undefined', (): void => {
       const edge = new TcpDbConnectionEdge({
         id: 'e-db-na', source: 'a', target: 'b',
         metrics: new DbConnectionMetrics({
@@ -579,8 +580,10 @@ describe('edgeMetricRows', (): void => {
         }),
       });
       const rows = edgeMetricRows(edge);
-      expect(rows[0]?.label).toBe('Pool conns');
+      expect(rows[0]?.label).toBe('Active conns');
       expect(rows[0]?.value).toBe('N/A');
+      expect(rows[1]?.label).toBe('Idle conns');
+      expect(rows[1]?.value).toBe('2');
     });
   });
 });

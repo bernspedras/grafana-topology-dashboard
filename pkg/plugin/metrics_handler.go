@@ -64,8 +64,7 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Queries) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(MetricsBatchResponse{
+		a.writeJSON(w, http.StatusOK, MetricsBatchResponse{
 			Results: make(map[string]*float64),
 		})
 		return
@@ -251,10 +250,13 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string)
 	sort.Strings(dsNames)
 
 	h := sha256.New()
+	nul := []byte{0} // null-byte delimiter to prevent field concatenation collisions
 	for _, dsName := range dsNames {
 		uid := dsMap[dsName]
 		h.Write([]byte(dsName))
+		h.Write(nul)
 		h.Write([]byte(uid))
+		h.Write(nul)
 
 		// Sort query keys within each datasource.
 		keys := make([]string, 0, len(req.Queries[dsName]))
@@ -264,7 +266,9 @@ func (a *App) baselineCacheKey(req MetricsBatchRequest, dsMap map[string]string)
 		sort.Strings(keys)
 		for _, k := range keys {
 			h.Write([]byte(k))
+			h.Write(nul)
 			h.Write([]byte(req.Queries[dsName][k]))
+			h.Write(nul)
 		}
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))

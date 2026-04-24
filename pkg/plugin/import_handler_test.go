@@ -325,6 +325,39 @@ func TestImportZip_NestedPaths_Recognised(t *testing.T) {
 	}
 }
 
+func TestMatchesPath_RejectsDeeplyNestedPaths(t *testing.T) {
+	// Direct match — must pass.
+	if !matchesPath("flows/f1.json", "flows") {
+		t.Error("direct path should match")
+	}
+	if !matchesPath("templates/edges/e1.json", "templates/edges") {
+		t.Error("direct edge path should match")
+	}
+
+	// Single-prefix — must pass.
+	if !matchesPath("topologies/flows/f1.json", "flows") {
+		t.Error("single-prefix path should match")
+	}
+	if !matchesPath("data/templates/nodes/n1.json", "templates/nodes") {
+		t.Error("single-prefix node path should match")
+	}
+
+	// Deeply nested — must NOT match. This was the bug: a path like
+	// "data/old-flows/flows/archived/templates/edges/e1.json" would match
+	// "flows" because strings.Contains found "/flows/" anywhere.
+	if matchesPath("data/old-flows/flows/archived/e1.json", "flows") {
+		t.Error("deeply nested path should NOT match flows")
+	}
+	if matchesPath("a/b/templates/edges/e1.json", "templates/edges") {
+		t.Error("two-prefix path should NOT match templates/edges")
+	}
+
+	// Edge case: file directly in the category directory (no nesting).
+	if !matchesPath("flows/deep/nested.json", "flows") {
+		t.Error("direct path with subdirectory should match")
+	}
+}
+
 func TestImportZip_InvalidJSON_Returns400(t *testing.T) {
 	mux, _ := newHandlerTestApp(t)
 

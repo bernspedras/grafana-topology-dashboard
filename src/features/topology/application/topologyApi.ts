@@ -183,6 +183,51 @@ export async function deleteSlaDefaults(): Promise<void> {
   );
 }
 
+// ─── Metric range queries ──────────────────────────────────────────────────
+
+export interface MetricRangeResult {
+  readonly timestamps: number[];
+  readonly values: number[];
+}
+
+export interface MetricRangeResponse {
+  readonly results: Record<string, MetricRangeResult | null>;
+}
+
+export interface MetricRangeRequest {
+  readonly datasource: string;
+  readonly queries: Record<string, string>;
+  readonly start: number;
+  readonly end: number;
+  readonly step: number;
+  readonly requestId?: string;
+}
+
+/**
+ * Fetches range data from the Go backend's `/resources/metric-range` endpoint.
+ *
+ * Both MetricChartModal and PodsChartModal use this to retrieve time-series
+ * data for their charts.
+ */
+export async function fetchMetricRange(req: MetricRangeRequest): Promise<MetricRangeResponse> {
+  const res = await firstValueFrom(
+    getBackendSrv().fetch<MetricRangeResponse>({
+      url: `${BASE}/metric-range`,
+      method: 'POST',
+      data: {
+        datasource: req.datasource,
+        queries: req.queries,
+        start: req.start,
+        end: req.end,
+        step: req.step,
+      },
+      requestId: req.requestId,
+      showErrorAlert: false,
+    }),
+  );
+  return res.data;
+}
+
 // ─── Atomic ZIP import ──────────────────────────────────────────────────────
 
 export interface ImportResult {

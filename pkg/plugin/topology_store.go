@@ -346,6 +346,8 @@ func (s *TopologyStore) DeleteEdgeTemplate(id string) error {
 
 // isContainedIn verifies that dest resides strictly within baseDir after
 // path cleaning, preventing path traversal via ".." or symlinks.
+// Both paths are resolved through EvalSymlinks so the check works correctly
+// when baseDir is a symlink — common in Docker/K8s volume mounts.
 func isContainedIn(baseDir, dest string) bool {
 	absBase, err := filepath.Abs(filepath.Clean(baseDir))
 	if err != nil {
@@ -355,7 +357,31 @@ func isContainedIn(baseDir, dest string) bool {
 	if err != nil {
 		return false
 	}
+	// Resolve symlinks on both paths so a symlinked data directory (e.g.
+	// Docker volume mount where /var -> /private/var) still passes the
+	// prefix check. For dest, the file may not exist yet (write path), so
+	// resolve the longest existing ancestor and re-append the remaining tail.
+	absBase = evalSymlinksOrSelf(absBase)
+	absDest = evalSymlinksOrSelf(absDest)
 	return strings.HasPrefix(absDest, absBase+string(filepath.Separator))
+}
+
+// evalSymlinksOrSelf resolves symlinks in path. If the full path does not
+// exist (e.g. a file about to be created), it walks up to the nearest
+// existing ancestor, resolves that, and re-appends the tail.
+func evalSymlinksOrSelf(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved
+	}
+	// Walk up until we find a path that exists, resolve it, then re-append.
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	if dir == path {
+		// Reached the root without finding an existing path — return as-is.
+		return path
+	}
+	return filepath.Join(evalSymlinksOrSelf(dir), base)
 }
 
 // isSymlink returns true if path exists and is a symbolic link.

@@ -135,14 +135,9 @@ export function edgeMetricRows(
 
   if (edge instanceof TcpDbConnectionEdge) {
     const m = edge.metrics;
-    const totalConns = m.activeConnections !== undefined && m.idleConnections !== undefined
-      ? m.activeConnections + m.idleConnections
-      : undefined;
-    const totalConnsWeekAgo = m.activeConnectionsWeekAgo !== undefined && m.idleConnectionsWeekAgo !== undefined
-      ? m.activeConnectionsWeekAgo + m.idleConnectionsWeekAgo
-      : undefined;
     return [
-      row('Pool conns', totalConns, totalConnsWeekAgo, 'activeConnections', 'count', mode, sla, d),
+      row('Active conns', m.activeConnections, m.activeConnectionsWeekAgo, 'activeConnections', 'count', mode, sla, d),
+      row('Idle conns', m.idleConnections, m.idleConnectionsWeekAgo, 'idleConnections', 'count', mode, sla, d),
       row('Pool hit rate', m.poolHitRatePercent, m.poolHitRatePercentWeekAgo, 'poolHitRatePercent', 'percent', mode, sla, d),
       row('RPS', m.rps, m.rpsWeekAgo, 'rps', 'req/s', mode, sla, d),
       row('Query P50', m.avgQueryTimeMs, m.avgQueryTimeMsWeekAgo, 'avgQueryTimeMs', 'ms', mode, sla, d),
@@ -186,8 +181,6 @@ export function edgeMetricRows(
       row('Pub P95', m.latencyP95, m.latencyP95WeekAgo, 'latencyP95', 'ms', mode, sla, d),
       row('Pub Avg', m.latencyAvg, m.latencyAvgWeekAgo, 'latencyAvg', 'ms', mode, sla, d),
       row('Pub errors', m.errorRate, m.errorRateWeekAgo, 'errorRate', 'percent', mode, sla, d),
-      row('Transit P95', m.queueResidenceTimeP95, m.queueResidenceTimeP95WeekAgo, 'queueResidenceTimeP95', 'ms', mode, sla, d),
-      row('Transit Avg', m.queueResidenceTimeAvg, m.queueResidenceTimeAvgWeekAgo, 'queueResidenceTimeAvg', 'ms', mode, sla, d),
       row('Consumer lag', m.consumerLag, m.consumerLagWeekAgo, 'consumerLag', 'count', mode, sla, d),
       row('Process P95', m.consumerProcessingTimeP95, m.consumerProcessingTimeP95WeekAgo, 'consumerProcessingTimeP95', 'ms', mode, sla, d),
       row('Process Avg', m.consumerProcessingTimeAvg, m.consumerProcessingTimeAvgWeekAgo, 'consumerProcessingTimeAvg', 'ms', mode, sla, d),
@@ -200,9 +193,7 @@ export function edgeMetricRows(
   }
 
   if (edge instanceof GrpcEdge) {
-    const m = selectedEndpoint === 'all' && edge.aggregateMetrics !== undefined
-      ? edge.aggregateMetrics
-      : edge.metrics;
+    const m = edge.metrics;
     return [
       row('RPS', m.rps, m.rpsWeekAgo, 'rps', 'req/s', mode, sla, d),
       row('Latency P95', m.latencyP95, m.latencyP95WeekAgo, 'latencyP95', 'ms', mode, sla, d),
