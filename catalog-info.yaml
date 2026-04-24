@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: grafana-topology-dashboard
+  title: "Grafana Topology Dashboard Plugin"
+  description: "Plugin para o grafana de topologia"
+  namespace: banking
+spec:
+  type: service
+  lifecycle: experimental
+  owner: stone-payments/banking-local-schemes-leads
+  
