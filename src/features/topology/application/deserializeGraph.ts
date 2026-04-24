@@ -395,7 +395,6 @@ function deserializeEdge(dto: TopologyEdgeDto): TopologyEdge | undefined {
         customMetrics: toCustomMetrics(dto.customMetrics),
         sequenceOrder: dto.sequenceOrder,
         metrics: toHttpEdgeMetrics(dto.metrics),
-        ...(dto.aggregateMetrics !== undefined ? { aggregateMetrics: toHttpEdgeMetrics(dto.aggregateMetrics) } : {}),
         grpcService: dto.grpcService,
         grpcMethod: dto.grpcMethod,
       });

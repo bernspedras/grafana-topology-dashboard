@@ -45,11 +45,6 @@ type ImportFileError struct {
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 func (a *App) handleImportZip(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	// Read the raw ZIP body.
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxImportZipSize+1))
 	if err != nil {
@@ -250,14 +245,24 @@ func (a *App) handleImportZip(w http.ResponseWriter, r *http.Request) {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 // matchesPath checks if a ZIP entry path belongs to the given directory.
-// Handles both "flows/name.json" and "some-prefix/flows/name.json".
+// Accepts at most one prefix level: "flows/foo.json" or "prefix/flows/foo.json",
+// but rejects deeper nesting like "a/b/flows/foo.json" to avoid misclassification
+// when paths contain ambiguous directory names.
 func matchesPath(name, dir string) bool {
 	// Direct match: "flows/foo.json"
 	if strings.HasPrefix(name, dir+"/") {
 		return true
 	}
-	// Nested match: "topologies/flows/foo.json"
-	return strings.Contains(name, "/"+dir+"/")
+	// Single-prefix match: "topologies/flows/foo.json"
+	// Find the first "/" — everything before it is the single allowed prefix.
+	slashIdx := strings.Index(name, "/")
+	if slashIdx >= 0 {
+		rest := name[slashIdx+1:]
+		if strings.HasPrefix(rest, dir+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // extractID reads the "id" field from a JSON object.

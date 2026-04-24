@@ -211,7 +211,6 @@ export class KafkaEdge extends BaseEdge {
 export class GrpcEdge extends BaseEdge {
   public readonly protocol = 'grpc' as const;
   public readonly metrics: HttpEdgeMetrics;
-  public readonly aggregateMetrics: HttpEdgeMetrics | undefined;
   public readonly grpcService: string;
   public readonly grpcMethod: string;
 
@@ -223,13 +222,11 @@ export class GrpcEdge extends BaseEdge {
     customMetrics?: readonly CustomMetricValue[];
     sequenceOrder?: number | undefined;
     metrics: HttpEdgeMetrics;
-    aggregateMetrics?: HttpEdgeMetrics | undefined;
     grpcService: string;
     grpcMethod: string;
   }) {
     super(params);
     this.metrics = params.metrics;
-    this.aggregateMetrics = params.aggregateMetrics;
     this.grpcService = params.grpcService;
     this.grpcMethod = params.grpcMethod;
   }

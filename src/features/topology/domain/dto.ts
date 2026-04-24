@@ -263,7 +263,6 @@ export interface GrpcEdgeDto {
   readonly target: string;
   readonly animated: boolean;
   readonly metrics: BaseEdgeMetricsDto;
-  readonly aggregateMetrics: BaseEdgeMetricsDto | undefined;
   readonly grpcService: string;
   readonly grpcMethod: string;
   readonly customMetrics?: readonly CustomMetricValueDto[];

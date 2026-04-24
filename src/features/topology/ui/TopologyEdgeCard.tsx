@@ -421,8 +421,13 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     e.stopPropagation();
     const startX = e.clientX;
     const startY = e.clientY;
-    const baseX = savedOffset?.x ?? 0;
-    const baseY = savedOffset?.y ?? 0;
+    // Read offset directly from the store to avoid stale closure if a new drag
+    // starts before React re-renders after the previous drag's store write.
+    const current = useTopologyPositionStore.getState().perTopology[
+      useTopologyPositionStore.getState().currentTopologyId
+    ]?.edgeLabelOffsets[edgeId];
+    const baseX = current?.x ?? 0;
+    const baseY = current?.y ?? 0;
     dragRef.current = { startX, startY, offsetX: baseX, offsetY: baseY };
 
     const onMouseMove = (ev: MouseEvent): void => {
@@ -449,7 +454,7 @@ function TopologyEdgeCardInner(props: EdgeProps<TopologyEdgeCardType>): React.JS
     listenersRef.current = { move: onMouseMove, up: onMouseUp };
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [edgeId, savedOffset, setEdgeLabelOffset]);
+  }, [edgeId, setEdgeLabelOffset]);
 
   const editMode = useEditMode();
   const resolvedQueries = usePromqlQueries(data?.domainEdge.id ?? '');

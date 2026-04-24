@@ -789,7 +789,6 @@ describe('deserializeGraph — edges', (): void => {
           target: 'svc-b',
           animated: true,
           metrics: makeBaseEdgeMetricsDto(),
-          aggregateMetrics: undefined,
           grpcService: 'PaymentService',
           grpcMethod: 'ProcessPayment',
         } satisfies GrpcEdgeDto,

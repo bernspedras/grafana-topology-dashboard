@@ -50,6 +50,7 @@ import { FlowDataProvider } from '../features/topology/ui/FlowDataContext';
 import { SaveEntityPropertiesProvider } from '../features/topology/ui/SaveEntityPropertiesContext';
 import type { EntityPropertySave } from '../features/topology/ui/SaveEntityPropertiesContext';
 import { applyPropertyPatchToFlowRefs } from '../features/topology/application/applyPropertyPatch';
+import { TopologyErrorBoundary } from '../features/topology/ui/TopologyErrorBoundary';
 
 const POLL_INTERVAL_MS = 30000;
 const SELECTED_TOPOLOGY_KEY = 'topology-selected-id';
@@ -191,6 +192,29 @@ function TopologyPage(): React.JSX.Element {
   const styles = useStyles2(getStyles);
   const { loading: topologyLoading, topologies, nodeTemplates, edgeTemplates, datasourceDefinitions, dataSourceMap, editAllowList, slaDefaultsRaw, saveTopologyLayout, reload } = useTopologyData();
   const canEdit = canEditTopology(editAllowList);
+
+  // ── Page-level error banner for async operations that have no modal ──
+  const [operationError, setOperationError] = useState<string | undefined>(undefined);
+  const operationErrorTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Show a transient error banner that auto-clears after 8 seconds. */
+  const showOperationError = useCallback((msg: string): void => {
+    if (operationErrorTimerRef.current !== null) {
+      clearTimeout(operationErrorTimerRef.current);
+    }
+    setOperationError(msg);
+    operationErrorTimerRef.current = setTimeout((): void => {
+      setOperationError(undefined);
+      operationErrorTimerRef.current = null;
+    }, 8000);
+  }, []);
+
+  // Clean up the timer on unmount.
+  useEffect(() => (): void => {
+    if (operationErrorTimerRef.current !== null) {
+      clearTimeout(operationErrorTimerRef.current);
+    }
+  }, []);
 
   const [selectedId, setSelectedId] = useState((): string => {
     try { return localStorage.getItem(SELECTED_TOPOLOGY_KEY) ?? ''; } catch { console.warn('localStorage unavailable — topology selection will not persist'); return ''; }
@@ -631,9 +655,10 @@ function TopologyPage(): React.JSX.Element {
         reload();
       } catch (err) {
         console.error('[topology] Failed to add flow step', err);
+        showOperationError(err instanceof Error ? err.message : 'Failed to add flow step');
       }
     })();
-  }, [topologies, effectiveId, reload]);
+  }, [topologies, effectiveId, reload, showOperationError]);
 
   const handleSaveFlowStep = useCallback((stepId: string, step: number, text: string, moreDetails: string | undefined): void => {
     void (async (): Promise<void> => {
@@ -658,9 +683,10 @@ function TopologyPage(): React.JSX.Element {
         reload();
       } catch (err) {
         console.error('[topology] Failed to save flow step', err);
+        showOperationError(err instanceof Error ? err.message : 'Failed to save flow step');
       }
     })();
-  }, [topologies, effectiveId, reload]);
+  }, [topologies, effectiveId, reload, showOperationError]);
 
   const handleDeleteFlowStep = useCallback((stepId: string): void => {
     void (async (): Promise<void> => {
@@ -682,9 +708,10 @@ function TopologyPage(): React.JSX.Element {
         reload();
       } catch (err) {
         console.error('[topology] Failed to delete flow step', err);
+        showOperationError(err instanceof Error ? err.message : 'Failed to delete flow step');
       }
     })();
-  }, [topologies, effectiveId, reload]);
+  }, [topologies, effectiveId, reload, showOperationError]);
 
   const [viewOptions, setViewOptions] = useState<ViewOptions>({ showNAMetrics: true, showFlowStepCards: true, lowPolyMode: false, sequenceDiagramMode: false, collapseDbConnections: false, coloringMode: 'baseline' });
   const toggleViewOption = useCallback((key: ViewOptionKey): void => {
@@ -752,9 +779,10 @@ function TopologyPage(): React.JSX.Element {
         reload();
       } catch (err) {
         console.error('[topology] Failed to remove card from flow', err);
+        showOperationError(err instanceof Error ? err.message : 'Failed to remove card from topology');
       }
     })();
-  }, [canEdit, topologies, effectiveId, reload]);
+  }, [canEdit, topologies, effectiveId, reload, showOperationError]);
 
   /** Save all edited metric queries for an entity in a single template write. */
   const handleSaveAllMetricQueries = useCallback((entityId: string, changes: readonly MetricChange[]): void => {
@@ -786,9 +814,10 @@ function TopologyPage(): React.JSX.Element {
         console.warn('[topology] Could not find template for entity', entityId);
       } catch (err) {
         console.error('[topology] Failed to save metric queries', err);
+        showOperationError(err instanceof Error ? err.message : 'Failed to save metric queries');
       }
     })();
-  }, [canEdit, nodeTemplates, edgeTemplates, reload]);
+  }, [canEdit, nodeTemplates, edgeTemplates, reload, showOperationError]);
 
   /** Save an edited metric query to the node or edge template, then reload. */
   const handleSaveMetricQuery = useCallback(async (entityId: string, metricKey: string, newQuery: string, newDataSource: string): Promise<void> => {
@@ -815,8 +844,9 @@ function TopologyPage(): React.JSX.Element {
       console.warn('[topology] Could not find template for entity', entityId);
     } catch (err) {
       console.error('[topology] Failed to save metric query', err);
+      showOperationError(err instanceof Error ? err.message : 'Failed to save metric query');
     }
-  }, [canEdit, nodeTemplates, edgeTemplates, reload]);
+  }, [canEdit, nodeTemplates, edgeTemplates, reload, showOperationError]);
 
   /** Save entity property edits (ref overrides + template updates + inline patches). */
   const handleSaveEntityProperties = useCallback(async (save: EntityPropertySave): Promise<void> => {
@@ -924,6 +954,7 @@ function TopologyPage(): React.JSX.Element {
         )}
         <RefreshStatus lastRefreshAt={lastRefreshAt} pollIntervalMs={POLL_INTERVAL_MS} loading={metricsLoading} />
         {error !== undefined && <span className={styles.error}>{error}</span>}
+        {operationError !== undefined && <span className={styles.error}>{operationError}</span>}
       </div>
       {graph !== undefined && (
         <TopologyIdProvider value={effectiveId}>
@@ -944,27 +975,29 @@ function TopologyPage(): React.JSX.Element {
                               <SlaProvider value={slaMap}>
                               <DirectionProvider value={directionMap}>
                                 <div className={styles.graphArea}>
-                                  <TopologyView
-                                    graph={graph}
-                                    bundledLayout={entry?.layout}
-                                    canEdit={canEdit}
-                                    isEditing={isEditing}
-                                    onToggleEditMode={toggleEditMode}
-                                    onAddNode={handleAddNode}
-                                    onAddEdge={handleAddEdge}
-                                    hideFlowSteps={!viewOptions.showFlowStepCards}
-                                    editingFlowStepId={editingFlowStepId}
-                                    onOpenFlowStepEditor={handleOpenFlowStepEditor}
-                                    onCloseFlowStepEditor={handleCloseFlowStepEditor}
-                                    onSaveFlowStep={handleSaveFlowStep}
-                                    onDeleteFlowStep={handleDeleteFlowStep}
-                                    onAddFlowStep={handleAddFlowStep}
-                                    onSaveLayout={saveTopologyLayout}
-                                    rawFlowJson={entry?.raw}
-                                    onOpenTemplatesManager={handleOpenTemplatesManager}
-                                    onRenameTopology={handleOpenRenameModal}
-                                    onDeleteTopology={handleOpenDeleteModal}
-                                  />
+                                  <TopologyErrorBoundary>
+                                    <TopologyView
+                                      graph={graph}
+                                      bundledLayout={entry?.layout}
+                                      canEdit={canEdit}
+                                      isEditing={isEditing}
+                                      onToggleEditMode={toggleEditMode}
+                                      onAddNode={handleAddNode}
+                                      onAddEdge={handleAddEdge}
+                                      hideFlowSteps={!viewOptions.showFlowStepCards}
+                                      editingFlowStepId={editingFlowStepId}
+                                      onOpenFlowStepEditor={handleOpenFlowStepEditor}
+                                      onCloseFlowStepEditor={handleCloseFlowStepEditor}
+                                      onSaveFlowStep={handleSaveFlowStep}
+                                      onDeleteFlowStep={handleDeleteFlowStep}
+                                      onAddFlowStep={handleAddFlowStep}
+                                      onSaveLayout={saveTopologyLayout}
+                                      rawFlowJson={entry?.raw}
+                                      onOpenTemplatesManager={handleOpenTemplatesManager}
+                                      onRenameTopology={handleOpenRenameModal}
+                                      onDeleteTopology={handleOpenDeleteModal}
+                                    />
+                                  </TopologyErrorBoundary>
                                 </div>
                               </DirectionProvider>
                               </SlaProvider>

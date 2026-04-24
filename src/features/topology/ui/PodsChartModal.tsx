@@ -4,8 +4,6 @@ import uPlot from 'uplot';
 import { useEscapeKey, useBackdropClick } from './useModalClose';
 import 'uplot/dist/uPlot.min.css';
 import { css, keyframes } from '@emotion/css';
-import { getBackendSrv } from '@grafana/runtime';
-import { firstValueFrom } from 'rxjs';
 import { Select } from '@grafana/ui';
 import type { SelectableValue } from '@grafana/data';
 import { TimeRangePicker, loadTimeRange, saveTimeRange, resolveRange } from './TimeRangePicker';
@@ -20,7 +18,7 @@ import { useDatasourceDefs } from './DatasourceDefsContext';
 import { useMetricDatasource } from './MetricDatasourceContext';
 import { useSaveMetricQuery } from './SaveMetricQueryContext';
 import { metricDescription } from '../application/metricDescriptions';
-import { PLUGIN_ID } from '../application/pluginConstants';
+import { fetchMetricRange, type MetricRangeResult } from '../application/topologyApi';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -135,12 +133,8 @@ function PodsTimeSeriesChart({ ready, desired }: { readonly ready: SeriesData | 
 
 // ─── Fetch helper ───────────────────────────────────────────────────────────
 
-interface BackendRangeResponse {
-  readonly results: Record<string, { readonly timestamps: number[]; readonly values: number[] } | null>;
-}
-
 function toSeriesData(
-  result: { readonly timestamps: number[]; readonly values: number[] } | null | undefined,
+  result: MetricRangeResult | null | undefined,
   promql: string,
 ): SeriesData | undefined {
   if (result === null || result === undefined || result.timestamps.length === 0) return undefined;
@@ -229,22 +223,22 @@ export function PodsChartModal({ title, entityId, deployment, onClose }: PodsCha
     if (desiredPromql !== undefined) queries[desiredKey] = desiredPromql;
 
     try {
-      const response = await firstValueFrom(getBackendSrv()
-        .fetch<BackendRangeResponse>({
-          url: `/api/plugins/${PLUGIN_ID}/resources/metric-range`,
-          method: 'POST',
-          data: { datasource: dsName, queries, start, end, step },
-          requestId: `pods-chart-${entityId}`,
-          showErrorAlert: false,
-        }));
+      const response = await fetchMetricRange({
+        datasource: dsName,
+        queries,
+        start,
+        end,
+        step,
+        requestId: `pods-chart-${entityId}`,
+      });
 
       if (signal.aborted) return;
 
       const readyData = readyPromql !== undefined
-        ? toSeriesData(response.data.results[readyKey], readyPromql)
+        ? toSeriesData(response.results[readyKey], readyPromql)
         : undefined;
       const desiredData = desiredPromql !== undefined
-        ? toSeriesData(response.data.results[desiredKey], desiredPromql)
+        ? toSeriesData(response.results[desiredKey], desiredPromql)
         : undefined;
 
       if (readyData === undefined && desiredData === undefined) {
