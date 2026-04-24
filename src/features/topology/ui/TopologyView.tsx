@@ -53,6 +53,10 @@ interface TopologyViewProps {
   onOpenTemplatesManager?: () => void;
   onRenameTopology?: () => void;
   onDeleteTopology?: () => void;
+  onEditCurrentFlowJson?: () => void;
+  onOpenJsonEditor?: () => void;
+  onDownloadZip?: () => void;
+  onUploadZip?: () => void;
 }
 
 function useToast(): { visible: boolean; message: string; show: (msg: string) => void } {
@@ -281,9 +285,13 @@ interface ManageMenuProps {
   readonly onOpenTemplatesManager: () => void;
   readonly onRenameTopology?: () => void;
   readonly onDeleteTopology?: () => void;
+  readonly onEditCurrentFlowJson?: () => void;
+  readonly onOpenJsonEditor?: () => void;
+  readonly onDownloadZip?: () => void;
+  readonly onUploadZip?: () => void;
 }
 
-function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology }: ManageMenuProps): React.JSX.Element {
+function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology, onEditCurrentFlowJson, onOpenJsonEditor, onDownloadZip, onUploadZip }: ManageMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -318,9 +326,10 @@ function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology
       </button>
       {open && (
         <div className={manageMenuStyles.menu}>
-          {(onRenameTopology !== undefined || onDeleteTopology !== undefined) && (
+          {/* ── Current Topology ── */}
+          {(onRenameTopology !== undefined || onDeleteTopology !== undefined || onEditCurrentFlowJson !== undefined) && (
             <>
-              <div className={manageMenuStyles.menuHeader}>Topology</div>
+              <div className={manageMenuStyles.menuHeader}>Current Topology</div>
               {onRenameTopology !== undefined && (
                 <button
                   type="button"
@@ -334,8 +343,27 @@ function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology
                     <path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
                   </svg>
                   <span className={manageMenuStyles.menuItemContent}>
-                    <span className={manageMenuStyles.menuItemLabel}>Rename topology</span>
+                    <span className={manageMenuStyles.menuItemLabel}>Rename</span>
                     <span className={manageMenuStyles.menuItemDesc}>Change the topology name</span>
+                  </span>
+                </button>
+              )}
+              {onEditCurrentFlowJson !== undefined && (
+                <button
+                  type="button"
+                  className={manageMenuStyles.menuItem}
+                  onClick={(): void => {
+                    onEditCurrentFlowJson();
+                    setOpen(false);
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="16 18 22 12 16 6" />
+                    <polyline points="8 6 2 12 8 18" />
+                  </svg>
+                  <span className={manageMenuStyles.menuItemContent}>
+                    <span className={manageMenuStyles.menuItemLabel}>Edit JSON</span>
+                    <span className={manageMenuStyles.menuItemDesc}>Edit this topology&#39;s raw JSON</span>
                   </span>
                 </button>
               )}
@@ -355,7 +383,7 @@ function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology
                     <line x1="14" y1="11" x2="14" y2="17" />
                   </svg>
                   <span className={manageMenuStyles.menuItemContent}>
-                    <span className={manageMenuStyles.menuItemLabel}>Delete topology</span>
+                    <span className={manageMenuStyles.menuItemLabel}>Delete</span>
                     <span className={manageMenuStyles.menuItemDesc}>Permanently remove this topology</span>
                   </span>
                 </button>
@@ -363,6 +391,9 @@ function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology
               <div className={manageMenuStyles.menuDivider} />
             </>
           )}
+
+          {/* ── All Topologies ── */}
+          <div className={manageMenuStyles.menuHeader}>All Topologies</div>
           <button
             type="button"
             className={manageMenuStyles.menuItem}
@@ -382,6 +413,69 @@ function ManageMenu({ onOpenTemplatesManager, onRenameTopology, onDeleteTopology
               <span className={manageMenuStyles.menuItemDesc}>Browse, edit, and delete reusable templates</span>
             </span>
           </button>
+          {onOpenJsonEditor !== undefined && (
+            <button
+              type="button"
+              className={manageMenuStyles.menuItem}
+              onClick={(): void => {
+                onOpenJsonEditor();
+                setOpen(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+              <span className={manageMenuStyles.menuItemContent}>
+                <span className={manageMenuStyles.menuItemLabel}>JSON editor</span>
+                <span className={manageMenuStyles.menuItemDesc}>Edit all flows and templates as raw JSON</span>
+              </span>
+            </button>
+          )}
+          <div className={manageMenuStyles.menuDivider} />
+
+          {/* ── Import / Export ── */}
+          <div className={manageMenuStyles.menuHeader}>Import / Export</div>
+          {onDownloadZip !== undefined && (
+            <button
+              type="button"
+              className={manageMenuStyles.menuItem}
+              onClick={(): void => {
+                onDownloadZip();
+                setOpen(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span className={manageMenuStyles.menuItemContent}>
+                <span className={manageMenuStyles.menuItemLabel}>Download all as ZIP</span>
+                <span className={manageMenuStyles.menuItemDesc}>Export all topology data</span>
+              </span>
+            </button>
+          )}
+          {onUploadZip !== undefined && (
+            <button
+              type="button"
+              className={manageMenuStyles.menuItemDanger}
+              onClick={(): void => {
+                onUploadZip();
+                setOpen(false);
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span className={manageMenuStyles.menuItemContent}>
+                <span className={manageMenuStyles.menuItemLabel}>Upload ZIP (replaces ALL data!)</span>
+                <span className={manageMenuStyles.menuItemDescWarning}>Wipes everything and imports from ZIP</span>
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -497,7 +591,7 @@ function ViewportRestorer(): null {
   return null;
 }
 
-export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson, onOpenTemplatesManager, onRenameTopology, onDeleteTopology }: TopologyViewProps): React.JSX.Element {
+export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggleEditMode, onAddNode, onAddEdge, hideFlowSteps, editingFlowStepId, onOpenFlowStepEditor, onCloseFlowStepEditor, onSaveFlowStep, onDeleteFlowStep, onAddFlowStep, onSaveLayout, rawFlowJson, onOpenTemplatesManager, onRenameTopology, onDeleteTopology, onEditCurrentFlowJson, onOpenJsonEditor, onDownloadZip, onUploadZip }: TopologyViewProps): React.JSX.Element {
   const { options: viewOpts } = useViewOptions();
   const slaMap = useSlaMap();
   const dirMap = useDirectionMap();
@@ -655,6 +749,10 @@ export function TopologyView({ graph, bundledLayout, canEdit, isEditing, onToggl
                 onOpenTemplatesManager={onOpenTemplatesManager}
                 onRenameTopology={onRenameTopology}
                 onDeleteTopology={onDeleteTopology}
+                onEditCurrentFlowJson={onEditCurrentFlowJson}
+                onOpenJsonEditor={onOpenJsonEditor}
+                onDownloadZip={onDownloadZip}
+                onUploadZip={onUploadZip}
               />
             )}
             {isEditing === true && (
@@ -975,7 +1073,7 @@ const manageMenuStyles = {
     top: '100%',
     right: 0,
     marginTop: '6px',
-    minWidth: '260px',
+    minWidth: '300px',
     borderRadius: '8px',
     backgroundColor: '#1e293b',
     border: '1px solid #334155',
@@ -1037,6 +1135,11 @@ const manageMenuStyles = {
   menuItemDesc: css({
     fontSize: '11px',
     color: '#94a3b8',
+    lineHeight: 1.2,
+  }),
+  menuItemDescWarning: css({
+    fontSize: '11px',
+    color: '#fbbf24',
     lineHeight: 1.2,
   }),
 };
