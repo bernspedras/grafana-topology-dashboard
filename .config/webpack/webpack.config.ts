@@ -1,3 +1,4 @@
+// Build tooling based on @grafana/create-plugin conventions.
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 import ESLintPlugin from 'eslint-webpack-plugin';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
@@ -72,7 +73,7 @@ const config = async (env: Record<string, unknown>): Promise<Configuration> => {
         }
       : { minimize: false },
     output: {
-      clean: { keep: /gpx_/ },
+      clean: { keep: /gpx_|go_plugin_build_manifest/ },
       filename: '[name].js',
       library: { type: 'amd' },
       path: path.resolve(process.cwd(), 'dist'),

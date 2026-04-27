@@ -4,7 +4,7 @@ Grafana app plugin for interactive service topology visualization with live Prom
 
 Render a graph of your services, databases, message brokers, and external systems — with real-time metrics on every node and edge. Define topologies as JSON or build them directly in the UI, point them at your Prometheus datasources, and get a live health dashboard out of the box.
 
-![Topology View](src/img/screenshot-topology-view.png)
+![Topology View](https://raw.githubusercontent.com/bernspedras/grafana-topology-dashboard/main/src/img/screenshot-topology-view.png)
 
 ## Features
 
@@ -23,7 +23,7 @@ Render a graph of your services, databases, message brokers, and external system
 - **Range query charts** — click any metric to see a time-series chart with configurable time windows
 - **Low Poly mode** — simplified rendering for large topologies or low-resource environments
 
-![View Options](src/img/screenshot-view-options.png)
+![View Options](https://raw.githubusercontent.com/bernspedras/grafana-topology-dashboard/main/src/img/screenshot-view-options.png)
 
 ## Requirements
 
