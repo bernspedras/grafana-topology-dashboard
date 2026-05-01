@@ -1,0 +1,33 @@
+{
+  "id": "demo-flow",
+  "name": "Demo: API → Backend → Database",
+  "definition": {
+    "nodes": [
+      { "nodeId": "api-gateway" },
+      { "nodeId": "backend-service" },
+      { "nodeId": "backend-db" }
+    ],
+    "edges": [
+      {
+        "edgeId": "api-gateway->backend-service",
+        "kind": "http-json",
+        "method": "POST",
+        "endpointPath": "/api/orders",
+        "sequenceOrder": 1
+      },
+      {
+        "edgeId": "backend-service->backend-db",
+        "kind": "tcp-db",
+        "sequenceOrder": 2
+      }
+    ],
+    "flowSteps": []
+  },
+  "layout": {
+    "positions": {
+      "api-gateway": { "x": 0, "y": 200 },
+      "backend-service": { "x": 600, "y": 200 },
+      "backend-db": { "x": 1200, "y": 200 }
+    }
+  }
+}

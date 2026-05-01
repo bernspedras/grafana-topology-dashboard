@@ -3,7 +3,6 @@ package plugin
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -573,29 +572,6 @@ func TestHandleMetrics_DoesNotEchoUserDataInResponse(t *testing.T) {
 	})
 }
 
-func TestBasicAuth(t *testing.T) {
-	tests := []struct {
-		name     string
-		user     string
-		password string
-	}{
-		{"simple credentials", "admin", "admin"},
-		{"special characters", "user@domain.com", "p@ss:w0rd!"},
-		{"empty password", "admin", ""},
-		{"empty user", "", "password"},
-		{"unicode", "ユーザー", "パスワード"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := basicAuth(tt.user, tt.password)
-			want := base64.StdEncoding.EncodeToString([]byte(tt.user + ":" + tt.password))
-			if got != want {
-				t.Errorf("basicAuth(%q, %q) = %q, want %q", tt.user, tt.password, got, want)
-			}
-		})
-	}
-}
 
 // ─── resolveAuth tests ─────────────────────────────────────────────────────
 
@@ -623,79 +599,7 @@ func TestResolveAuth_ServiceAccountToken(t *testing.T) {
 	}
 }
 
-func TestResolveAuth_EnvVarToken(t *testing.T) {
-	t.Setenv("GF_SA_TOKEN", "envtoken")
-	t.Setenv("TOPOLOGY_DEV_MODE", "")
-
-	app := newTestApp()
-	// No service account token in plugin context.
-	pCtx := backend.PluginContext{
-		AppInstanceSettings: &backend.AppInstanceSettings{
-			DecryptedSecureJSONData: map[string]string{},
-		},
-		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
-	}
-	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
-	ctx := backend.WithPluginContext(req.Context(), pCtx)
-	req = req.WithContext(ctx)
-
-	_, authHeader := app.resolveAuth(req)
-	if authHeader != "Bearer envtoken" {
-		t.Errorf("expected 'Bearer envtoken', got %q", authHeader)
-	}
-}
-
-func TestResolveAuth_DevModeBasicAuth(t *testing.T) {
-	t.Setenv("GF_SA_TOKEN", "")
-	t.Setenv("TOPOLOGY_DEV_MODE", "true")
-	t.Setenv("GF_SECURITY_ADMIN_USER", "admin")
-	t.Setenv("GF_SECURITY_ADMIN_PASSWORD", "secret")
-
-	app := newTestApp()
-	pCtx := backend.PluginContext{
-		AppInstanceSettings: &backend.AppInstanceSettings{
-			DecryptedSecureJSONData: map[string]string{},
-		},
-		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
-	}
-	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
-	ctx := backend.WithPluginContext(req.Context(), pCtx)
-	req = req.WithContext(ctx)
-
-	_, authHeader := app.resolveAuth(req)
-	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
-	if authHeader != want {
-		t.Errorf("expected %q, got %q", want, authHeader)
-	}
-}
-
-func TestResolveAuth_DevModeMissingCreds(t *testing.T) {
-	t.Setenv("GF_SA_TOKEN", "")
-	t.Setenv("TOPOLOGY_DEV_MODE", "true")
-	t.Setenv("GF_SECURITY_ADMIN_USER", "")
-	t.Setenv("GF_SECURITY_ADMIN_PASSWORD", "")
-
-	app := newTestApp()
-	pCtx := backend.PluginContext{
-		AppInstanceSettings: &backend.AppInstanceSettings{
-			DecryptedSecureJSONData: map[string]string{},
-		},
-		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{backend.AppURL: "http://grafana:3000"}),
-	}
-	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
-	ctx := backend.WithPluginContext(req.Context(), pCtx)
-	req = req.WithContext(ctx)
-
-	_, authHeader := app.resolveAuth(req)
-	if authHeader != "" {
-		t.Errorf("expected empty auth header when dev mode creds missing, got %q", authHeader)
-	}
-}
-
 func TestResolveAuth_NoAuth(t *testing.T) {
-	t.Setenv("GF_SA_TOKEN", "")
-	t.Setenv("TOPOLOGY_DEV_MODE", "")
-
 	app := newTestApp()
 	pCtx := backend.PluginContext{
 		AppInstanceSettings: &backend.AppInstanceSettings{
@@ -724,30 +628,7 @@ func TestResolveAuth_GrafanaURL_FromConfig(t *testing.T) {
 	}
 }
 
-func TestResolveAuth_GrafanaURL_FromEnv(t *testing.T) {
-	t.Setenv("GF_APP_URL", "http://env-grafana:9090")
-
-	app := newTestApp()
-	// Empty AppURL in config.
-	pCtx := backend.PluginContext{
-		AppInstanceSettings: &backend.AppInstanceSettings{
-			DecryptedSecureJSONData: map[string]string{"serviceAccountToken": "token"},
-		},
-		GrafanaConfig: backend.NewGrafanaCfg(map[string]string{}),
-	}
-	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
-	ctx := backend.WithPluginContext(req.Context(), pCtx)
-	req = req.WithContext(ctx)
-
-	grafanaURL, _ := app.resolveAuth(req)
-	if grafanaURL != "http://env-grafana:9090" {
-		t.Errorf("expected 'http://env-grafana:9090', got %q", grafanaURL)
-	}
-}
-
 func TestResolveAuth_GrafanaURL_Default(t *testing.T) {
-	t.Setenv("GF_APP_URL", "")
-
 	app := newTestApp()
 	pCtx := backend.PluginContext{
 		AppInstanceSettings: &backend.AppInstanceSettings{

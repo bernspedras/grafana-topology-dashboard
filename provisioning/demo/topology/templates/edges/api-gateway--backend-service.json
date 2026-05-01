@@ -1,0 +1,24 @@
+{
+  "kind": "http-json",
+  "id": "api-gateway->backend-service",
+  "source": "api-gateway",
+  "target": "backend-service",
+  "dataSource": "demo",
+  "metrics": {
+    "rps": {
+      "query": "sum(rate(demo_http_requests_total{service=\"backend-service\"}[5m]))",
+      "unit": "req/s",
+      "direction": "higher-is-better"
+    },
+    "latencyP95": {
+      "query": "histogram_quantile(0.95, sum(rate(demo_http_duration_seconds_bucket{service=\"backend-service\"}[5m])) by (le)) * 1000",
+      "unit": "ms",
+      "direction": "lower-is-better"
+    },
+    "errorRate": {
+      "query": "sum(rate(demo_http_requests_total{service=\"backend-service\",status=~\"5..\"}[5m])) / sum(rate(demo_http_requests_total{service=\"backend-service\"}[5m])) * 100",
+      "unit": "percent",
+      "direction": "lower-is-better"
+    }
+  }
+}

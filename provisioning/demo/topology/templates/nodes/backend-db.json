@@ -1,0 +1,9 @@
+{
+  "kind": "database",
+  "id": "backend-db",
+  "label": "Backend Database",
+  "dataSource": "demo",
+  "engine": "PostgreSQL",
+  "isReadReplica": false,
+  "metrics": {}
+}

@@ -250,12 +250,18 @@ export interface ImportValidationError {
 
 export async function importZip(file: File): Promise<ImportResult> {
   const buffer = await file.arrayBuffer();
+  // Encode ZIP as base64 inside a JSON envelope because Grafana's
+  // getBackendSrv().fetch() does not forward raw binary ArrayBuffer bodies
+  // through the plugin resource proxy (the body arrives as nil/empty on the
+  // Go backend). Wrapping in JSON ensures the body is serialized correctly.
+  const base64 = btoa(
+    new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''),
+  );
   const res = await firstValueFrom(
     getBackendSrv().fetch<ImportResult>({
       url: `${BASE}/topologies/import`,
       method: 'POST',
-      data: buffer,
-      headers: { 'Content-Type': 'application/zip' },
+      data: { zipBase64: base64 },
       showErrorAlert: false,
     }),
   );

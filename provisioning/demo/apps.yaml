@@ -1,0 +1,10 @@
+apiVersion: 1
+
+apps:
+  - type: bernspedras-topology-app
+    org_id: 1
+    org_name: Main Org.
+    disabled: false
+    jsonData:
+      dataSourceMap:
+        demo: demo-prometheus

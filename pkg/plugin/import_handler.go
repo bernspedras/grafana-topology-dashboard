@@ -3,11 +3,11 @@ package plugin
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
 )
 
@@ -45,13 +45,42 @@ type ImportFileError struct {
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 func (a *App) handleImportZip(w http.ResponseWriter, r *http.Request) {
-	// Read the raw ZIP body.
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxImportZipSize+1))
+	if r.Body == nil {
+		http.Error(w, "Empty request body", http.StatusBadRequest)
+		return
+	}
+	// Read the raw body.
+	rawBody, err := io.ReadAll(io.LimitReader(r.Body, maxImportZipSize+1))
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
+
+	// Support two formats:
+	// 1. Raw binary ZIP (Content-Type: application/zip) — used by curl / external API
+	// 2. JSON envelope with base64-encoded ZIP — used by the Grafana frontend
+	//    because getBackendSrv().fetch() does not forward raw binary bodies
+	//    through the plugin resource proxy.
+	body := rawBody
+	if r.Header.Get("Content-Type") != "application/zip" || !isZipMagic(rawBody) {
+		var envelope struct {
+			ZipBase64 string `json:"zipBase64"`
+		}
+		if json.Unmarshal(rawBody, &envelope) == nil && envelope.ZipBase64 != "" {
+			decoded, decErr := base64Decode(envelope.ZipBase64)
+			if decErr != nil {
+				http.Error(w, "Invalid base64 in zipBase64 field", http.StatusBadRequest)
+				return
+			}
+			body = decoded
+		}
+	}
+
+	if len(body) == 0 {
+		http.Error(w, "Empty ZIP data", http.StatusBadRequest)
+		return
+	}
 	if len(body) > maxImportZipSize {
 		http.Error(w, fmt.Sprintf("ZIP file too large (max %d MB)", maxImportZipSize>>20), http.StatusBadRequest)
 		return
@@ -121,7 +150,7 @@ func (a *App) handleImportZip(w http.ResponseWriter, r *http.Request) {
 		}
 
 		raw := json.RawMessage(data)
-		name := filepath.ToSlash(f.Name) // normalise to forward slashes
+		name := strings.ReplaceAll(f.Name, "\\", "/") // normalise to forward slashes
 
 		switch {
 		case name == "datasources.json" || strings.HasSuffix(name, "/datasources.json"):
@@ -274,4 +303,14 @@ func extractID(raw json.RawMessage) string {
 		return ""
 	}
 	return peek.ID
+}
+
+// isZipMagic checks if data starts with the ZIP magic bytes (PK\x03\x04).
+func isZipMagic(data []byte) bool {
+	return len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04
+}
+
+// base64Decode decodes a standard base64 string.
+func base64Decode(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
 }

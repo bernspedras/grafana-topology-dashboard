@@ -2,13 +2,12 @@ package plugin
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -77,7 +76,7 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if authHeader == "" {
-		http.Error(w, "No service account token configured. Set one in plugin settings or via GF_SA_TOKEN env var.", http.StatusServiceUnavailable)
+		http.Error(w, "No service account token configured. Set one in plugin settings.", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -173,55 +172,34 @@ func (a *App) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// resolveAuth determines the Grafana base URL and authorization header.
-// It tries (in order): plugin context config, secure JSON data, env vars, dev fallback.
-func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string) {
+// resolveGrafanaURL determines the Grafana base URL from plugin context.
+func (a *App) resolveGrafanaURL(r *http.Request) string {
 	pluginCtx := backend.PluginConfigFromContext(r.Context())
-
-	// Try GrafanaConfig for AppURL.
 	if cfg := pluginCtx.GrafanaConfig; cfg != nil {
 		if u, err := cfg.AppURL(); err == nil && u != "" {
-			grafanaURL = u
+			u = strings.TrimRight(u, "/")
+			return u
 		}
 	}
-	if grafanaURL == "" {
-		grafanaURL = os.Getenv("GF_APP_URL")
-	}
-	if grafanaURL == "" {
-		grafanaURL = "http://localhost:3000"
-		a.logger.Warn("Grafana URL not configured — falling back to http://localhost:3000")
-	}
+	a.logger.Warn("Grafana URL not configured — falling back to http://localhost:3000")
+	return "http://localhost:3000"
+}
 
-	// Strip trailing slash.
-	if len(grafanaURL) > 0 && grafanaURL[len(grafanaURL)-1] == '/' {
-		grafanaURL = grafanaURL[:len(grafanaURL)-1]
-	}
+// resolveAuth determines the Grafana base URL and authorization header.
+// Uses the service account token configured in plugin settings (secureJsonData).
+// The same token is used for both Prometheus queries and topology persistence.
+// In production, the service account needs datasource query + plugins:write permissions.
+func (a *App) resolveAuth(r *http.Request) (grafanaURL string, authHeader string) {
+	grafanaURL = a.resolveGrafanaURL(r)
+	pluginCtx := backend.PluginConfigFromContext(r.Context())
 
-	// Try secure JSON data for service account token.
 	if pluginCtx.AppInstanceSettings != nil {
 		if token, ok := pluginCtx.AppInstanceSettings.DecryptedSecureJSONData["serviceAccountToken"]; ok && token != "" {
 			return grafanaURL, "Bearer " + token
 		}
 	}
 
-	// Try environment variable.
-	if token := os.Getenv("GF_SA_TOKEN"); token != "" {
-		return grafanaURL, "Bearer " + token
-	}
-
-	// Dev-only fallback: basic auth (requires explicit opt-in).
-	if os.Getenv("TOPOLOGY_DEV_MODE") == "true" {
-		user := os.Getenv("GF_SECURITY_ADMIN_USER")
-		pass := os.Getenv("GF_SECURITY_ADMIN_PASSWORD")
-		if user == "" || pass == "" {
-			a.logger.Error("DEV MODE: GF_SECURITY_ADMIN_USER and GF_SECURITY_ADMIN_PASSWORD must be set")
-			return grafanaURL, ""
-		}
-		a.logger.Warn("DEV MODE: using basic auth fallback for Prometheus proxy — do not use in production")
-		return grafanaURL, "Basic " + basicAuth(user, pass)
-	}
-
-	a.logger.Error("No service account token configured — set one in plugin settings or GF_SA_TOKEN env var")
+	a.logger.Error("No service account token configured — set one in plugin settings")
 	return grafanaURL, ""
 }
 
@@ -290,7 +268,3 @@ func validateQueries(req MetricsBatchRequest) error {
 	return nil
 }
 
-// basicAuth encodes credentials for HTTP Basic Authentication.
-func basicAuth(user, password string) string {
-	return base64.StdEncoding.EncodeToString([]byte(user + ":" + password))
-}

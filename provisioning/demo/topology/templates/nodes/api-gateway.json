@@ -1,0 +1,8 @@
+{
+  "kind": "external",
+  "id": "api-gateway",
+  "label": "API Gateway",
+  "dataSource": "demo",
+  "provider": "Cloud",
+  "metrics": {}
+}

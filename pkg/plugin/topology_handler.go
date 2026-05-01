@@ -14,41 +14,41 @@ func (a *App) registerTopologyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /topologies/bundle", a.handleGetBundle)
 
 	// Atomic ZIP import — validates all files before writing any.
-	mux.HandleFunc("POST /topologies/import", requireEdit(a.handleImportZip))
+	mux.HandleFunc("POST /topologies/import", requireEdit(a.withPersist(a.handleImportZip)))
 
 	// Flows — read-only.
 	mux.HandleFunc("GET /topologies", a.handleListFlows)
 	mux.HandleFunc("GET /topologies/{id}", a.handleGetFlow)
 
-	// Flows — mutating (requires edit permission).
-	mux.HandleFunc("POST /topologies", requireEdit(a.handleCreateFlow))
-	mux.HandleFunc("PUT /topologies/{id}", requireEdit(a.handlePutFlow))
-	mux.HandleFunc("DELETE /topologies/{id}", requireEdit(a.handleDeleteFlow))
+	// Flows — mutating (requires edit permission + persist).
+	mux.HandleFunc("POST /topologies", requireEdit(a.withPersist(a.handleCreateFlow)))
+	mux.HandleFunc("PUT /topologies/{id}", requireEdit(a.withPersist(a.handlePutFlow)))
+	mux.HandleFunc("DELETE /topologies/{id}", requireEdit(a.withPersist(a.handleDeleteFlow)))
 
 	// Node templates — read-only.
 	mux.HandleFunc("GET /templates/nodes", a.handleListNodeTemplates)
 	mux.HandleFunc("GET /templates/nodes/{id}", a.handleGetNodeTemplate)
 
-	// Node templates — mutating (requires edit permission).
-	mux.HandleFunc("POST /templates/nodes", requireEdit(a.handleCreateNodeTemplate))
-	mux.HandleFunc("PUT /templates/nodes/{id}", requireEdit(a.handlePutNodeTemplate))
-	mux.HandleFunc("DELETE /templates/nodes/{id}", requireEdit(a.handleDeleteNodeTemplate))
+	// Node templates — mutating (requires edit permission + persist).
+	mux.HandleFunc("POST /templates/nodes", requireEdit(a.withPersist(a.handleCreateNodeTemplate)))
+	mux.HandleFunc("PUT /templates/nodes/{id}", requireEdit(a.withPersist(a.handlePutNodeTemplate)))
+	mux.HandleFunc("DELETE /templates/nodes/{id}", requireEdit(a.withPersist(a.handleDeleteNodeTemplate)))
 
 	// Edge templates — read-only.
 	mux.HandleFunc("GET /templates/edges", a.handleListEdgeTemplates)
 	mux.HandleFunc("GET /templates/edges/{id}", a.handleGetEdgeTemplate)
 
-	// Edge templates — mutating (requires edit permission).
-	mux.HandleFunc("POST /templates/edges", requireEdit(a.handleCreateEdgeTemplate))
-	mux.HandleFunc("PUT /templates/edges/{id}", requireEdit(a.handlePutEdgeTemplate))
-	mux.HandleFunc("DELETE /templates/edges/{id}", requireEdit(a.handleDeleteEdgeTemplate))
+	// Edge templates — mutating (requires edit permission + persist).
+	mux.HandleFunc("POST /templates/edges", requireEdit(a.withPersist(a.handleCreateEdgeTemplate)))
+	mux.HandleFunc("PUT /templates/edges/{id}", requireEdit(a.withPersist(a.handlePutEdgeTemplate)))
+	mux.HandleFunc("DELETE /templates/edges/{id}", requireEdit(a.withPersist(a.handleDeleteEdgeTemplate)))
 
 	// Datasource definitions.
-	mux.HandleFunc("PUT /datasources", requireEdit(a.handlePutDatasources))
+	mux.HandleFunc("PUT /datasources", requireEdit(a.withPersist(a.handlePutDatasources)))
 
 	// SLA defaults.
-	mux.HandleFunc("PUT /sla-defaults", requireEdit(a.handlePutSlaDefaults))
-	mux.HandleFunc("DELETE /sla-defaults", requireEdit(a.handleDeleteSlaDefaults))
+	mux.HandleFunc("PUT /sla-defaults", requireEdit(a.withPersist(a.handlePutSlaDefaults)))
+	mux.HandleFunc("DELETE /sla-defaults", requireEdit(a.withPersist(a.handleDeleteSlaDefaults)))
 }
 
 // ─── Bundle ─────────────────────────────────────────────────────────────────

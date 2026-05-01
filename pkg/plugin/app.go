@@ -2,10 +2,9 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -22,7 +21,8 @@ var (
 )
 
 // App is the Grafana app plugin backend. It handles batch Prometheus query
-// execution via the CallResource interface and topology CRUD via the file store.
+// execution via the CallResource interface and topology CRUD via an in-memory
+// store backed by Grafana plugin settings for persistence.
 type App struct {
 	backend.CallResourceHandler
 	httpClient      *http.Client
@@ -46,25 +46,15 @@ type App struct {
 	baselineFlight singleflight.Group
 }
 
-// resolveDataDir determines where topology JSON files are stored on disk.
-//
-// Resolution order:
-//  1. TOPOLOGY_DATA_DIR env var (explicit override)
-//  2. GF_PATHS_DATA + "/topology-data" (standard Grafana data dir)
-//  3. ./data/topologies (fallback for local dev)
-func resolveDataDir() string {
-	if dir := os.Getenv("TOPOLOGY_DATA_DIR"); dir != "" {
-		return dir
-	}
-	if gfData := os.Getenv("GF_PATHS_DATA"); gfData != "" {
-		return filepath.Join(gfData, "topology-data")
-	}
-	return filepath.Join(".", "data", "topologies")
+// appJSONData mirrors the jsonData stored in Grafana plugin settings,
+// specifically the topologyData sub-field used for persistence.
+type appJSONData struct {
+	TopologyData *TopologyData `json:"topologyData"`
 }
 
 // NewApp creates a new App instance. Called by the Grafana plugin SDK once per
 // organisation when the plugin is loaded.
-func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Instance, error) {
+func NewApp(_ context.Context, settings backend.AppInstanceSettings) (instancemgmt.Instance, error) {
 	logger := log.DefaultLogger
 
 	httpClient := &http.Client{
@@ -81,13 +71,16 @@ func NewApp(_ context.Context, _ backend.AppInstanceSettings) (instancemgmt.Inst
 		Timeout: 30 * time.Second,
 	}
 
-	// Initialise the file-based topology store.
-	dataDir := resolveDataDir()
-	store, err := NewTopologyStore(dataDir, logger)
-	if err != nil {
-		return nil, err
+	// Parse topology data from plugin settings (persisted in Grafana DB).
+	var jsonData appJSONData
+	if len(settings.JSONData) > 0 {
+		if err := json.Unmarshal(settings.JSONData, &jsonData); err != nil {
+			logger.Warn("Failed to parse topologyData from plugin settings — starting with empty store", "error", err)
+		}
 	}
-	logger.Info("Topology store initialised", "dataDir", dataDir)
+
+	store := NewTopologyStore(jsonData.TopologyData, logger)
+	logger.Info("Topology store initialised from plugin settings")
 
 	sv, err := NewSchemaValidator()
 	if err != nil {

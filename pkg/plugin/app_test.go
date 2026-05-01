@@ -2,52 +2,69 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
-func TestResolveDataDir_Default(t *testing.T) {
-	t.Setenv("TOPOLOGY_DATA_DIR", "")
-	t.Setenv("GF_PATHS_DATA", "")
+func TestNewApp_EmptySettings(t *testing.T) {
+	settings := backend.AppInstanceSettings{}
 
-	got := resolveDataDir()
-	want := filepath.Join(".", "data", "topologies")
-	if got != want {
-		t.Errorf("resolveDataDir() = %q, want %q", got, want)
+	instance, err := NewApp(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("NewApp returned error: %v", err)
+	}
+	app := instance.(*App)
+	if app.topologyStore == nil {
+		t.Fatal("expected non-nil topology store")
+	}
+
+	// Empty settings → empty store.
+	bundle, err := app.topologyStore.GetBundle()
+	if err != nil {
+		t.Fatalf("GetBundle: %v", err)
+	}
+	if len(bundle.Flows) != 0 {
+		t.Fatalf("expected 0 flows, got %d", len(bundle.Flows))
 	}
 }
 
-func TestResolveDataDir_TopologyDataDir(t *testing.T) {
-	t.Setenv("TOPOLOGY_DATA_DIR", "/custom/path")
-	t.Setenv("GF_PATHS_DATA", "")
-
-	got := resolveDataDir()
-	if got != "/custom/path" {
-		t.Errorf("resolveDataDir() = %q, want /custom/path", got)
+func TestNewApp_WithTopologyData(t *testing.T) {
+	topologyData := TopologyData{
+		Flows: map[string]json.RawMessage{
+			"f1": json.RawMessage(`{"id":"f1","name":"Test Flow"}`),
+		},
+		NodeTemplates: map[string]json.RawMessage{
+			"n1": json.RawMessage(`{"id":"n1","kind":"eks-service"}`),
+		},
+		EdgeTemplates: map[string]json.RawMessage{},
 	}
-}
+	jsonData := struct {
+		TopologyData *TopologyData `json:"topologyData"`
+	}{TopologyData: &topologyData}
+	raw, _ := json.Marshal(jsonData)
 
-func TestResolveDataDir_GfPathsData(t *testing.T) {
-	t.Setenv("TOPOLOGY_DATA_DIR", "")
-	t.Setenv("GF_PATHS_DATA", "/grafana")
-
-	got := resolveDataDir()
-	want := filepath.Join("/grafana", "topology-data")
-	if got != want {
-		t.Errorf("resolveDataDir() = %q, want %q", got, want)
+	settings := backend.AppInstanceSettings{
+		JSONData: raw,
 	}
-}
 
-func TestResolveDataDir_TopologyDataDirTakesPrecedence(t *testing.T) {
-	t.Setenv("TOPOLOGY_DATA_DIR", "/custom/path")
-	t.Setenv("GF_PATHS_DATA", "/grafana")
+	instance, err := NewApp(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("NewApp returned error: %v", err)
+	}
+	app := instance.(*App)
 
-	got := resolveDataDir()
-	if got != "/custom/path" {
-		t.Errorf("resolveDataDir() = %q, want /custom/path (TOPOLOGY_DATA_DIR should take precedence)", got)
+	bundle, err := app.topologyStore.GetBundle()
+	if err != nil {
+		t.Fatalf("GetBundle: %v", err)
+	}
+	if len(bundle.Flows) != 1 {
+		t.Fatalf("expected 1 flow, got %d", len(bundle.Flows))
+	}
+	if len(bundle.NodeTemplates) != 1 {
+		t.Fatalf("expected 1 node template, got %d", len(bundle.NodeTemplates))
 	}
 }
 

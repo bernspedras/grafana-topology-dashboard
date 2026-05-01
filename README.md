@@ -25,6 +25,22 @@ Render a graph of your services, databases, message brokers, and external system
 
 ![View Options](https://raw.githubusercontent.com/bernspedras/grafana-topology-dashboard/main/src/img/screenshot-view-options.png)
 
+## Try it (demo)
+
+See the plugin in action with fake metrics — no real infrastructure needed:
+
+```bash
+npm install
+npm run build            # Build the plugin (Go backend + frontend)
+npm run demo             # Start Grafana + Prometheus + fake metrics
+```
+
+Open http://localhost:3000 (login: admin / admin), navigate to **Topology Dashboard** in the side menu. The "Demo: API -> Backend -> Database" topology is pre-loaded with live metrics that update every 15 seconds.
+
+To tear down: `npm run demo:clean`
+
+The demo runs 4 containers: Grafana (with the plugin), Prometheus, Pushgateway, and a fake metrics generator. Everything is self-contained in `provisioning/demo/` and does not affect the production plugin code.
+
 ## Requirements
 
 - Grafana 11.0+
@@ -42,9 +58,11 @@ After installing, enable the plugin at **Administration > Plugins > Topology Das
 
 ## Quick start
 
+> **Want to try it first?** Run `npm run demo` for a self-contained demo with fake metrics — no configuration needed. See the [demo section](#try-it-demo) above.
+
 1. **Configure datasources** — go to **Plugins > Topology Dashboard > Configuration** (requires Admin role). Under **Datasource mapping**, map at least one logical datasource name to a Grafana Prometheus datasource UID.
 
-2. **Set up the service account token** — the Go backend needs a token to query Prometheus. Go to **Administration > Service accounts**, create one with **Viewer** role, generate a token, and paste it into the plugin config page under **Service Account Token**.
+2. **Set up the service account token** — the Go backend needs a token to query Prometheus and persist topology data. Go to **Administration > Service accounts**, create one with **Admin** role, generate a token, and paste it into the plugin config page under **Service Account Token**.
 
 3. **Create your first topology** — navigate to **Topology Dashboard** in the side menu. Click **+ New** next to the topology selector to create an empty topology.
 
@@ -70,14 +88,12 @@ Go to **Plugins > Topology Dashboard > Configuration** (requires Grafana **Admin
 
 ### Creating a service account token
 
-The Go backend needs a token to query Prometheus through Grafana's datasource proxy:
+The Go backend needs a token to query Prometheus and persist topology data through Grafana's API:
 
 1. Go to **Administration > Service accounts**
-2. Create a service account with **Viewer** role
+2. Create a service account with **Admin** role (needs datasource query permissions for metrics, and `plugins:write` permission for persisting topology data)
 3. Generate a token for it
 4. Paste the token into the plugin config page under **Service Account Token**
-
-For local development, you can alternatively set `GF_SA_TOKEN` in your environment.
 
 ### Edit allow list (permissions)
 
@@ -607,13 +623,11 @@ The Go backend exposes a full CRUD REST API. All routes are prefixed with `/api/
 | `PUT` | `/sla-defaults` | Update global SLA defaults |
 | `DELETE` | `/sla-defaults` | Delete global SLA defaults |
 
-### Storage location
+### Storage
 
-Topology data is stored as JSON files on the server filesystem. The directory is resolved in order:
+Topology data is stored in Grafana's database via the plugin settings API (`jsonData.topologyData`). The Go backend holds data in memory at runtime and persists changes back to Grafana after each mutation using the service account token.
 
-1. `TOPOLOGY_DATA_DIR` environment variable (explicit override)
-2. `GF_PATHS_DATA/topology-data` (standard Grafana data directory)
-3. `./data/topologies` (fallback for local development)
+This means topology data survives plugin restarts and Grafana upgrades — it lives in the same database as your dashboards and datasources. No filesystem storage is used.
 
 ---
 
@@ -646,26 +660,62 @@ Browser                              Go Backend (gRPC subprocess)
 
 ## Development
 
-For contributors and local development:
-
 ```bash
 npm install
-npm run build           # Go backend (linux amd64+arm64) + frontend -> dist/
-npm run server          # docker compose up (Grafana at localhost:3000, login: admin/admin)
-
-npm run dev             # Webpack watch (hot-reload frontend)
-npm run dev:backend     # Build Go backend for current platform
-npm run test            # Jest frontend tests
-go test ./pkg/...       # Go backend tests
-npm run lint            # ESLint
-npm run typecheck       # TypeScript check
+npm run server           # Build plugin + start Grafana (localhost:3000, admin/admin)
 ```
 
-The plugin is volume-mounted from `dist/`. After `npm run build`, restart Grafana to pick up changes:
+That's it. `npm run server` builds the Go backend and frontend, starts Docker, and a startup script auto-creates a service account with the right permissions. No manual configuration needed.
+
+### All commands
 
 ```bash
-docker compose restart grafana
+# Start (build + Docker)
+npm run server           # Build plugin + start Grafana (localhost:3000, admin/admin)
+npm run server:clean     # Wipe Docker state and start fresh (clean install test)
+npm run demo             # Build + self-contained demo (Grafana + Prometheus + fake metrics)
+npm run demo:clean       # Tear down demo environment
+
+# Build only (no Docker)
+npm run build            # Go backend (linux amd64+arm64) + frontend → dist/
+npm run build:frontend   # Frontend only (webpack)
+npm run build:backend    # Go backend only (linux amd64 + arm64)
+npm run rebuild          # Build + restart running Grafana container
+
+# Frontend dev (hot-reload)
+npm run dev              # Webpack watch — run alongside npm run server in another terminal
+
+# Testing & quality
+npm run test             # Jest frontend tests
+go test ./pkg/...        # Go backend tests
+npm run lint             # ESLint
+npm run typecheck        # TypeScript type check
 ```
+
+### Docker dev environment
+
+`npm run server` starts Grafana with the plugin volume-mounted from `dist/`. A startup script (`setup-service-account.sh`) automatically creates a service account with Admin role and configures its token in the plugin settings.
+
+After code changes, rebuild and restart:
+```bash
+npm run rebuild          # Build + restart Grafana
+```
+
+Or for frontend-only changes with hot reload:
+```bash
+npm run dev              # In a separate terminal — webpack watches for changes
+```
+
+### Demo environment
+
+`npm run demo` starts a fully self-contained environment with:
+- **Grafana** with the plugin installed and configured
+- **Prometheus** scraping fake metrics
+- **Pushgateway** receiving synthetic metric data
+- **Fake metrics generator** pushing varying values every 15 seconds
+- **Seed script** that auto-imports a demo topology with SLA defaults on first startup
+
+The demo topology has 3 nodes (API Gateway, Backend Service, Database) and 2 edges (HTTP, TCP-DB) with live metrics. All files live in `provisioning/demo/` and don't affect the production plugin.
 
 ## Contributing
 

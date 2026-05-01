@@ -3,9 +3,6 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 
@@ -14,12 +11,7 @@ import (
 
 func newTestStore(t *testing.T) *TopologyStore {
 	t.Helper()
-	dir := t.TempDir()
-	store, err := NewTopologyStore(dir, log.DefaultLogger)
-	if err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
-	return store
+	return NewTopologyStore(nil, log.DefaultLogger)
 }
 
 func TestFlowCRUD(t *testing.T) {
@@ -165,86 +157,7 @@ func TestGetFlowNotFound(t *testing.T) {
 	}
 }
 
-func TestDirectoryStructureCreated(t *testing.T) {
-	dir := t.TempDir()
-	_, err := NewTopologyStore(dir, log.DefaultLogger)
-	if err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
-	for _, sub := range []string{"flows", "templates/nodes", "templates/edges"} {
-		p := filepath.Join(dir, sub)
-		info, err := os.Stat(p)
-		if err != nil {
-			t.Fatalf("expected dir %s: %v", sub, err)
-		}
-		if !info.IsDir() {
-			t.Fatalf("expected %s to be directory", sub)
-		}
-	}
-}
-
-// TestStaleFileMigration verifies that two files sharing the same JSON `id`
-// but with different filenames are deduped at startup, keeping the canonical
-// one. Replaces the per-write removeStaleByID O(n) scan from PERF-02.
-func TestStaleFileMigration(t *testing.T) {
-	dir := t.TempDir()
-	flowsDir := filepath.Join(dir, "flows")
-	if err := os.MkdirAll(flowsDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	// Stale: filename uses underscores, but id field uses hyphens.
-	// Canonical: matches safeFileName(id) + ".json".
-	stalePath := filepath.Join(flowsDir, "my_flow.json")
-	canonicalPath := filepath.Join(flowsDir, "my-flow.json")
-	if err := os.WriteFile(stalePath, []byte(`{"id":"my-flow","name":"Old"}`), 0o644); err != nil {
-		t.Fatalf("write stale: %v", err)
-	}
-	if err := os.WriteFile(canonicalPath, []byte(`{"id":"my-flow","name":"New"}`), 0o644); err != nil {
-		t.Fatalf("write canonical: %v", err)
-	}
-
-	if _, err := NewTopologyStore(dir, log.DefaultLogger); err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
-
-	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
-		t.Errorf("expected stale file to be removed, got err=%v", err)
-	}
-	if _, err := os.Stat(canonicalPath); err != nil {
-		t.Errorf("expected canonical file to remain, got err=%v", err)
-	}
-}
-
-// TestStaleFileMigrationKeepsUniqueFiles verifies that files with unique ids
-// are left alone — only true id collisions trigger removal.
-func TestStaleFileMigrationKeepsUniqueFiles(t *testing.T) {
-	dir := t.TempDir()
-	flowsDir := filepath.Join(dir, "flows")
-	if err := os.MkdirAll(flowsDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	pathA := filepath.Join(flowsDir, "flow-a.json")
-	pathB := filepath.Join(flowsDir, "flow-b.json")
-	if err := os.WriteFile(pathA, []byte(`{"id":"flow-a","name":"A"}`), 0o644); err != nil {
-		t.Fatalf("write A: %v", err)
-	}
-	if err := os.WriteFile(pathB, []byte(`{"id":"flow-b","name":"B"}`), 0o644); err != nil {
-		t.Fatalf("write B: %v", err)
-	}
-
-	if _, err := NewTopologyStore(dir, log.DefaultLogger); err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
-
-	if _, err := os.Stat(pathA); err != nil {
-		t.Errorf("expected flow-a to remain, got err=%v", err)
-	}
-	if _, err := os.Stat(pathB); err != nil {
-		t.Errorf("expected flow-b to remain, got err=%v", err)
-	}
-}
-
-// ─── Datasource file operations ───────────────────────────────────────────
+// ─── Datasource operations ───────────────────────────────────────────────
 
 func TestStore_WriteDatasources(t *testing.T) {
 	store := newTestStore(t)
@@ -274,10 +187,10 @@ func TestStore_WriteDatasources(t *testing.T) {
 	}
 }
 
-func TestStore_ReadDatasources_FileNotExist(t *testing.T) {
+func TestStore_ReadDatasources_NotSet(t *testing.T) {
 	store := newTestStore(t)
 
-	// No datasources.json written — bundle should return empty slice.
+	// No datasources written — bundle should return empty slice.
 	bundle, err := store.GetBundle()
 	if err != nil {
 		t.Fatalf("GetBundle: %v", err)
@@ -293,24 +206,19 @@ func TestStore_ReadDatasources_FileNotExist(t *testing.T) {
 func TestStore_WriteDatasources_ValidJSON(t *testing.T) {
 	store := newTestStore(t)
 
-	// WriteDatasources accepts any valid JSON array.
 	data := json.RawMessage(`[{"name":"grafana-cloud","uid":"abc-123","type":"prometheus"}]`)
 	if err := store.WriteDatasources(data); err != nil {
 		t.Fatalf("WriteDatasources: %v", err)
 	}
 
-	// Read back the file directly to verify content.
-	path := filepath.Join(store.DataDir(), "datasources.json")
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(content) != string(data) {
-		t.Fatalf("expected %s, got %s", string(data), string(content))
+	// Read back via Snapshot to verify content.
+	snap := store.Snapshot()
+	if string(snap.Datasources) != string(data) {
+		t.Fatalf("expected %s, got %s", string(data), string(snap.Datasources))
 	}
 }
 
-// ─── SLA defaults file operations ─────────────────────────────────────────
+// ─── SLA defaults operations ─────────────────────────────────────────────
 
 func TestStore_SlaDefaults_WriteReadDelete(t *testing.T) {
 	store := newTestStore(t)
@@ -349,10 +257,10 @@ func TestStore_SlaDefaults_WriteReadDelete(t *testing.T) {
 	}
 }
 
-func TestStore_ReadSlaDefaults_FileNotExist(t *testing.T) {
+func TestStore_ReadSlaDefaults_NotSet(t *testing.T) {
 	store := newTestStore(t)
 
-	// No sla-defaults.json written — bundle.SlaDefaults should be nil.
+	// No sla-defaults written — bundle.SlaDefaults should be nil.
 	bundle, err := store.GetBundle()
 	if err != nil {
 		t.Fatalf("GetBundle: %v", err)
@@ -362,161 +270,67 @@ func TestStore_ReadSlaDefaults_FileNotExist(t *testing.T) {
 	}
 }
 
-// ─── Security: path traversal ─────────────────────────────────────────────
+// ─── Snapshot / hydration ────────────────────────────────────────────────
 
-func TestStore_ReadFile_PathTraversal(t *testing.T) {
+func TestStore_Snapshot_RoundTrip(t *testing.T) {
 	store := newTestStore(t)
+	store.PutFlow("f1", json.RawMessage(`{"id":"f1","name":"Flow One"}`))
+	store.PutNodeTemplate("n1", json.RawMessage(`{"id":"n1","kind":"eks-service"}`))
+	store.PutEdgeTemplate("e1", json.RawMessage(`{"id":"e1","kind":"http-json"}`))
+	store.WriteDatasources(json.RawMessage(`[{"name":"prom"}]`))
+	store.WriteSlaDefaults(json.RawMessage(`{"node":{"cpu":{"warning":80}}}`))
 
-	// Create a file outside the store data directory.
-	outside := filepath.Join(t.TempDir(), "secret.json")
-	if err := os.WriteFile(outside, []byte(`{"id":"secret"}`), 0o644); err != nil {
-		t.Fatalf("write outside file: %v", err)
-	}
+	snap := store.Snapshot()
 
-	// Attempt to read via path traversal — safeFileName sanitizes ".." to "__".
-	_, err := store.GetFlow("../../" + filepath.Base(outside))
-	if err == nil {
-		t.Fatal("expected error for path traversal read, got nil")
-	}
+	// Create a new store from the snapshot.
+	store2 := NewTopologyStore(snap, log.DefaultLogger)
 
-	// Also try reading a node template with traversal.
-	_, err = store.GetNodeTemplate("../../../etc/passwd")
-	if err == nil {
-		t.Fatal("expected error for path traversal on node template, got nil")
-	}
-}
-
-func TestStore_WriteFile_PathTraversal(t *testing.T) {
-	store := newTestStore(t)
-
-	// The safeFileName function sanitizes "../" to "__/", which isContainedIn blocks.
-	// Verify that writing with a traversal-style ID does not escape the data dir.
-	err := store.PutFlow("../../escape", json.RawMessage(`{"id":"../../escape"}`))
+	bundle, err := store2.GetBundle()
 	if err != nil {
-		// If safeFileName sanitizes it to a safe name, it should succeed.
-		// If isContainedIn blocks it, that's also acceptable.
-		// Either way, verify no file was created outside the data directory.
-		return
+		t.Fatalf("GetBundle: %v", err)
 	}
-
-	// If write succeeded, the file must be inside the data directory.
-	sanitized := safeFileName("../../escape")
-	expectedPath := filepath.Join(store.DataDir(), "flows", sanitized+".json")
-	if _, err := os.Stat(expectedPath); err != nil {
-		t.Fatalf("expected sanitized file at %s, got error: %v", expectedPath, err)
+	if len(bundle.Flows) != 1 {
+		t.Fatalf("expected 1 flow, got %d", len(bundle.Flows))
 	}
-}
-
-func TestStore_DeleteFile_PathTraversal(t *testing.T) {
-	store := newTestStore(t)
-
-	// Create a file outside the store directory.
-	outsideDir := t.TempDir()
-	outsideFile := filepath.Join(outsideDir, "precious.json")
-	if err := os.WriteFile(outsideFile, []byte(`{"id":"precious"}`), 0o644); err != nil {
-		t.Fatalf("write outside file: %v", err)
+	if len(bundle.NodeTemplates) != 1 {
+		t.Fatalf("expected 1 node template, got %d", len(bundle.NodeTemplates))
 	}
-
-	// Attempt to delete via traversal — should not remove the outside file.
-	_ = store.DeleteFlow("../../" + filepath.Base(outsideFile))
-
-	// The outside file must still exist.
-	if _, err := os.Stat(outsideFile); err != nil {
-		t.Fatalf("outside file should still exist after traversal delete attempt, err=%v", err)
+	if len(bundle.EdgeTemplates) != 1 {
+		t.Fatalf("expected 1 edge template, got %d", len(bundle.EdgeTemplates))
+	}
+	if len(bundle.Datasources) != 1 {
+		t.Fatalf("expected 1 datasource, got %d", len(bundle.Datasources))
+	}
+	if bundle.SlaDefaults == nil {
+		t.Fatal("expected slaDefaults, got nil")
 	}
 }
 
-// ─── Security: symlink protection ─────────────────────────────────────────
+func TestStore_NewFromNilInitial(t *testing.T) {
+	store := NewTopologyStore(nil, log.DefaultLogger)
 
-func TestStore_Symlink_ReadBlocked(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks may require elevated privileges on Windows")
-	}
-
-	dir := t.TempDir()
-	store, err := NewTopologyStore(dir, log.DefaultLogger)
-	if err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
-
-	// Create a file outside the store.
-	outside := filepath.Join(t.TempDir(), "secret.json")
-	if err := os.WriteFile(outside, []byte(`{"id":"secret","name":"Secret"}`), 0o644); err != nil {
-		t.Fatalf("write outside: %v", err)
-	}
-
-	// Create a symlink inside the flows directory.
-	symlink := filepath.Join(dir, "flows", "evil.json")
-	if err := os.Symlink(outside, symlink); err != nil {
-		t.Skip("symlinks not supported on this system")
-	}
-
-	// ListFlows should skip the symlink (readDir skips symlinks).
+	// Should work fine with empty store.
 	flows, err := store.ListFlows()
 	if err != nil {
 		t.Fatalf("ListFlows: %v", err)
 	}
-	for _, f := range flows {
-		if f.ID == "secret" {
-			t.Fatal("readDir should have skipped the symlink — found 'secret' in flow list")
-		}
+	if len(flows) != 0 {
+		t.Fatalf("expected 0 flows, got %d", len(flows))
 	}
 
-	// GetFlow for "evil" should be blocked — safeFileName("evil") = "evil",
-	// but the file at that path is a symlink and readFile refuses symlinks.
-	_, err = store.GetFlow("evil")
-	if err == nil {
-		t.Fatal("expected error when reading symlink via GetFlow, got nil")
-	}
-}
-
-func TestStore_Symlink_WriteBlocked(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlinks may require elevated privileges on Windows")
-	}
-
-	dir := t.TempDir()
-	store, err := NewTopologyStore(dir, log.DefaultLogger)
+	bundle, err := store.GetBundle()
 	if err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
+		t.Fatalf("GetBundle: %v", err)
 	}
-
-	// Create a file outside the store.
-	outside := filepath.Join(t.TempDir(), "target.json")
-	if err := os.WriteFile(outside, []byte(`{"id":"original"}`), 0o644); err != nil {
-		t.Fatalf("write outside: %v", err)
-	}
-
-	// Create a symlink inside node templates dir.
-	symlink := filepath.Join(dir, "templates", "nodes", "evil.json")
-	if err := os.Symlink(outside, symlink); err != nil {
-		t.Skip("symlinks not supported on this system")
-	}
-
-	// Writing to the symlink should be blocked by writeFile's isSymlink check.
-	err = store.PutNodeTemplate("evil", json.RawMessage(`{"id":"evil","kind":"eks-service"}`))
-	if err == nil {
-		t.Fatal("expected error when writing to symlink, got nil")
-	}
-
-	// The original outside file should NOT have been modified.
-	content, readErr := os.ReadFile(outside)
-	if readErr != nil {
-		t.Fatalf("read outside file: %v", readErr)
-	}
-	if string(content) != `{"id":"original"}` {
-		t.Fatalf("outside file was modified through symlink: %s", string(content))
+	if len(bundle.Flows) != 0 || len(bundle.NodeTemplates) != 0 || len(bundle.EdgeTemplates) != 0 {
+		t.Fatal("expected empty bundle")
 	}
 }
 
 // ─── Concurrency: sync.RWMutex ───────────────────────────────────────────
 
 func TestStore_ConcurrentReadWrite(t *testing.T) {
-	dir := t.TempDir()
-	store, err := NewTopologyStore(dir, log.DefaultLogger)
-	if err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
+	store := NewTopologyStore(nil, log.DefaultLogger)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {

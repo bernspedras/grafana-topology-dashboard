@@ -1,0 +1,14 @@
+{
+  "node": {
+    "cpu": { "warning": 60, "critical": 85 },
+    "memory": { "warning": 70, "critical": 90 }
+  },
+  "http-json": {
+    "errorRate": { "warning": 1, "critical": 5 },
+    "latencyP95": { "warning": 200, "critical": 1000 }
+  },
+  "tcp-db": {
+    "errorRate": { "warning": 1, "critical": 5 },
+    "latencyP95": { "warning": 100, "critical": 500 }
+  }
+}
