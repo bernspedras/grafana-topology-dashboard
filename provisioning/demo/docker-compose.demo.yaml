@@ -1,0 +1,61 @@
+services:
+  grafana:
+    container_name: topology-demo-grafana
+    build:
+      context: ../../.config
+      args:
+        grafana_image: ${GRAFANA_IMAGE:-grafana-enterprise}
+        grafana_version: ${GRAFANA_VERSION:-11.4.0}
+    ports:
+      - 3000:3000/tcp
+    volumes:
+      - grafana-demo-storage:/var/lib/grafana
+      - ../../dist:/var/lib/grafana/plugins/bernspedras-topology-app
+      - ./grafana:/etc/grafana/provisioning/datasources
+      - ./apps.yaml:/etc/grafana/provisioning/plugins/apps.yaml
+    environment:
+      GF_LOG_LEVEL: info
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: bernspedras-topology-app
+      GF_FEATURE_TOGGLES_ENABLE: externalServiceAccounts
+      GF_AUTH_BASIC_ENABLED: "true"
+    depends_on:
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: topology-demo-prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  pushgateway:
+    image: prom/pushgateway:latest
+    container_name: topology-demo-pushgateway
+    ports:
+      - 9091:9091
+
+  fake-metrics:
+    image: curlimages/curl:latest
+    container_name: topology-demo-fake-metrics
+    depends_on:
+      - pushgateway
+    entrypoint: /bin/sh
+    command: ["/scripts/fake-metrics.sh"]
+    volumes:
+      - ./fake-metrics.sh:/scripts/fake-metrics.sh:ro
+    restart: unless-stopped
+
+  seed:
+    image: curlimages/curl:latest
+    container_name: topology-demo-seed
+    depends_on:
+      - grafana
+    entrypoint: /bin/sh
+    command: ["/scripts/seed-topology.sh"]
+    volumes:
+      - ./seed-topology.sh:/scripts/seed-topology.sh:ro
+      - ./topology:/data/topology:ro
+
+volumes:
+  grafana-demo-storage:

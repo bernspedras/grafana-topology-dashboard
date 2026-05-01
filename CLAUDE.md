@@ -2,15 +2,39 @@
 
 Grafana app plugin for service topology visualization with live Prometheus metrics.
 
+## Getting started
+
+```bash
+npm install              # Install dependencies
+npm run server           # Build plugin + start Grafana at localhost:3000 (admin/admin)
+```
+
+`npm run server` builds the Go backend + frontend, then starts Docker.
+A startup script auto-creates a service account with the right permissions — no manual config needed.
+
+For the self-contained demo with fake Prometheus metrics:
+```bash
+npm run demo             # Build + start Grafana + Prometheus + fake metrics
+```
+
 ## Commands
 
 ```bash
-# Development
-npm run dev              # Webpack watch (hot-reload)
+# Start (build + Docker)
+npm run server           # Build plugin + start Grafana (localhost:3000, admin/admin)
+npm run server:clean     # Wipe Docker state and start fresh (clean install test)
+npm run demo             # Build + self-contained demo (Grafana + Prometheus + fake metrics)
+npm run demo:clean       # Tear down demo environment
+
+# Build only (no Docker)
 npm run build            # Production build (Go backend + frontend) → dist/
-npm run build:frontend   # Frontend only
+npm run build:frontend   # Frontend only (webpack)
+npm run build:backend    # Go backend only (linux amd64 + arm64)
 npm run dev:backend      # Go backend for local dev (darwin/arm64)
-npm run server           # docker compose up (Grafana + plugin at localhost:3000)
+npm run rebuild          # Build + restart running Grafana container
+
+# Frontend dev (hot-reload)
+npm run dev              # Webpack watch — use alongside `npm run server` in another terminal
 
 # Testing
 npm run test             # Jest (single run)

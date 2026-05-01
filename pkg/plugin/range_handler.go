@@ -100,7 +100,7 @@ func (a *App) handleMetricRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if authHeader == "" {
-		http.Error(w, "No service account token configured. Set one in plugin settings or via GF_SA_TOKEN env var.", http.StatusServiceUnavailable)
+		http.Error(w, "No service account token configured. Set one in plugin settings.", http.StatusServiceUnavailable)
 		return
 	}
 

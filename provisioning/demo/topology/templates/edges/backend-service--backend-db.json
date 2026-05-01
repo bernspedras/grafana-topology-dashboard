@@ -1,0 +1,29 @@
+{
+  "kind": "tcp-db",
+  "id": "backend-service->backend-db",
+  "source": "backend-service",
+  "target": "backend-db",
+  "dataSource": "demo",
+  "port": 5432,
+  "metrics": {
+    "rps": {
+      "query": "sum(rate(demo_db_queries_total{service=\"backend-service\"}[5m]))",
+      "unit": "req/s",
+      "direction": "higher-is-better"
+    },
+    "latencyP95": {
+      "query": "histogram_quantile(0.95, sum(rate(demo_db_duration_seconds_bucket{service=\"backend-service\"}[5m])) by (le)) * 1000",
+      "unit": "ms",
+      "direction": "lower-is-better"
+    },
+    "latencyAvg": {
+      "query": "sum(rate(demo_db_duration_seconds_sum{service=\"backend-service\"}[5m])) / sum(rate(demo_db_duration_seconds_count{service=\"backend-service\"}[5m])) * 1000",
+      "unit": "ms",
+      "direction": "lower-is-better"
+    },
+    "errorRate": null,
+    "activeConnections": null,
+    "idleConnections": null,
+    "avgQueryTimeMs": null
+  }
+}

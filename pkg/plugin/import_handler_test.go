@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -45,9 +43,9 @@ func (b *zipBuilder) build() []byte {
 // ─── Minimal valid JSON fixtures ──────────────────────────────────────────────
 
 var (
-	validFlowJSON = []byte(`{"id":"f1","name":"Flow","definition":{"nodes":[],"edges":[]}}`)
-	validNodeJSON = []byte(`{"id":"n1","kind":"eks-service","label":"N","dataSource":"p","namespace":"ns","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
-	validEdgeJSON = []byte(`{"id":"e1","kind":"http-json","source":"a","target":"b","dataSource":"p","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
+	validFlowJSON        = []byte(`{"id":"f1","name":"Flow","definition":{"nodes":[],"edges":[]}}`)
+	validNodeJSON        = []byte(`{"id":"n1","kind":"eks-service","label":"N","dataSource":"p","namespace":"ns","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
+	validEdgeJSON        = []byte(`{"id":"e1","kind":"http-json","source":"a","target":"b","dataSource":"p","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 	validDatasourcesJSON = []byte(`[{"name":"prom","type":"prometheus"}]`)
 	validSlaDefaultsJSON = []byte(`{"node":{"cpu":{"warning":70,"critical":90}}}`)
 )
@@ -55,7 +53,7 @@ var (
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 func TestImportZip_FullImport_AllCategories(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("flows/f1.json", validFlowJSON).
@@ -90,22 +88,20 @@ func TestImportZip_FullImport_AllCategories(t *testing.T) {
 		t.Fatalf("expected 1 sla defaults, got %d", result.SlaDefaults)
 	}
 
-	// Verify files exist on disk.
-	for _, path := range []string{
-		filepath.Join(dir, "flows", "f1.json"),
-		filepath.Join(dir, "templates", "nodes", "n1.json"),
-		filepath.Join(dir, "templates", "edges", "e1.json"),
-		filepath.Join(dir, "datasources.json"),
-		filepath.Join(dir, "sla-defaults.json"),
-	} {
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("expected file on disk at %s: %v", path, err)
-		}
+	// Verify data accessible via bundle.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
+	var bundle TopologyBundle
+	if err := json.Unmarshal(rec.Body.Bytes(), &bundle); err != nil {
+		t.Fatalf("unmarshal bundle: %v", err)
+	}
+	if len(bundle.Flows) != 1 || len(bundle.NodeTemplates) != 1 || len(bundle.EdgeTemplates) != 1 || len(bundle.Datasources) != 1 {
+		t.Fatalf("unexpected bundle: flows=%d nodes=%d edges=%d ds=%d",
+			len(bundle.Flows), len(bundle.NodeTemplates), len(bundle.EdgeTemplates), len(bundle.Datasources))
 	}
 }
 
 func TestImportZip_InvalidFlowSchema_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Missing required "definition" field.
 	invalidFlow := []byte(`{"id":"bad","name":"Bad Flow"}`)
@@ -138,7 +134,7 @@ func TestImportZip_InvalidFlowSchema_Returns400(t *testing.T) {
 }
 
 func TestImportZip_MixedValidAndInvalid_NothingWritten(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// One valid flow plus one invalid node template (missing required fields).
 	invalidNode := []byte(`{"id":"bad-node","kind":"eks-service"}`)
@@ -153,15 +149,15 @@ func TestImportZip_MixedValidAndInvalid_NothingWritten(t *testing.T) {
 		t.Fatalf("expected 400, got %d — %s", rec.Code, rec.Body.String())
 	}
 
-	// Verify that the valid flow was NOT written (atomic: all-or-nothing).
-	flowPath := filepath.Join(dir, "flows", "good.json")
-	if _, err := os.Stat(flowPath); !os.IsNotExist(err) {
-		t.Fatalf("valid flow should NOT have been written when validation failed (err=%v)", err)
+	// Verify the valid flow was NOT written (atomic: all-or-nothing).
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/f1", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("valid flow should NOT have been written when validation failed, got %d", rec.Code)
 	}
 }
 
 func TestImportZip_EmptyZip_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().build()
 
@@ -172,7 +168,7 @@ func TestImportZip_EmptyZip_Returns400(t *testing.T) {
 }
 
 func TestImportZip_NonZipBinary_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Random bytes that are definitely not a valid ZIP.
 	body := []byte("this is not a zip file at all, just random text")
@@ -184,7 +180,7 @@ func TestImportZip_NonZipBinary_Returns400(t *testing.T) {
 }
 
 func TestImportZip_PathTraversal_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("../evil.json", validFlowJSON).
@@ -197,7 +193,7 @@ func TestImportZip_PathTraversal_Returns400(t *testing.T) {
 }
 
 func TestImportZip_FlowOnly_Returns200(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("flows/only.json", validFlowJSON).
@@ -219,14 +215,15 @@ func TestImportZip_FlowOnly_Returns200(t *testing.T) {
 		t.Fatalf("expected zero for other categories, got %+v", result)
 	}
 
-	// Verify flow on disk.
-	if _, err := os.Stat(filepath.Join(dir, "flows", "f1.json")); err != nil {
-		t.Fatalf("flow file not on disk: %v", err)
+	// Verify flow accessible via GET.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/f1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("flow not accessible via GET: %d", rec.Code)
 	}
 }
 
 func TestImportZip_ViewerForbidden(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("flows/f1.json", validFlowJSON).
@@ -238,8 +235,8 @@ func TestImportZip_ViewerForbidden(t *testing.T) {
 	}
 }
 
-func TestImportZip_VerifyFileContents(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+func TestImportZip_VerifyContents(t *testing.T) {
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("flows/f1.json", validFlowJSON).
@@ -252,57 +249,48 @@ func TestImportZip_VerifyFileContents(t *testing.T) {
 		t.Fatalf("expected 200, got %d — %s", rec.Code, rec.Body.String())
 	}
 
-	// Verify flow content on disk matches what was imported.
-	data, err := os.ReadFile(filepath.Join(dir, "flows", "f1.json"))
-	if err != nil {
-		t.Fatalf("read flow file: %v", err)
-	}
+	// Verify flow content.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/f1", nil))
 	var flow struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := json.Unmarshal(data, &flow); err != nil {
+	if err := json.Unmarshal(rec.Body.Bytes(), &flow); err != nil {
 		t.Fatalf("unmarshal flow: %v", err)
 	}
 	if flow.ID != "f1" || flow.Name != "Flow" {
-		t.Fatalf("unexpected flow on disk: %+v", flow)
+		t.Fatalf("unexpected flow: %+v", flow)
 	}
 
 	// Verify node template content.
-	data, err = os.ReadFile(filepath.Join(dir, "templates", "nodes", "n1.json"))
-	if err != nil {
-		t.Fatalf("read node file: %v", err)
-	}
+	rec = do(mux, adminReq(http.MethodGet, "/templates/nodes/n1", nil))
 	var node struct {
 		ID   string `json:"id"`
 		Kind string `json:"kind"`
 	}
-	if err := json.Unmarshal(data, &node); err != nil {
+	if err := json.Unmarshal(rec.Body.Bytes(), &node); err != nil {
 		t.Fatalf("unmarshal node: %v", err)
 	}
 	if node.ID != "n1" || node.Kind != "eks-service" {
-		t.Fatalf("unexpected node on disk: %+v", node)
+		t.Fatalf("unexpected node: %+v", node)
 	}
 
 	// Verify edge template content.
-	data, err = os.ReadFile(filepath.Join(dir, "templates", "edges", "e1.json"))
-	if err != nil {
-		t.Fatalf("read edge file: %v", err)
-	}
+	rec = do(mux, adminReq(http.MethodGet, "/templates/edges/e1", nil))
 	var edge struct {
 		ID   string `json:"id"`
 		Kind string `json:"kind"`
 	}
-	if err := json.Unmarshal(data, &edge); err != nil {
+	if err := json.Unmarshal(rec.Body.Bytes(), &edge); err != nil {
 		t.Fatalf("unmarshal edge: %v", err)
 	}
 	if edge.ID != "e1" || edge.Kind != "http-json" {
-		t.Fatalf("unexpected edge on disk: %+v", edge)
+		t.Fatalf("unexpected edge: %+v", edge)
 	}
 }
 
 func TestImportZip_NestedPaths_Recognised(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Files under a nested prefix like "topologies/flows/..." should be recognized.
 	body := newZipBuilder().
@@ -342,9 +330,7 @@ func TestMatchesPath_RejectsDeeplyNestedPaths(t *testing.T) {
 		t.Error("single-prefix node path should match")
 	}
 
-	// Deeply nested — must NOT match. This was the bug: a path like
-	// "data/old-flows/flows/archived/templates/edges/e1.json" would match
-	// "flows" because strings.Contains found "/flows/" anywhere.
+	// Deeply nested — must NOT match.
 	if matchesPath("data/old-flows/flows/archived/e1.json", "flows") {
 		t.Error("deeply nested path should NOT match flows")
 	}
@@ -359,7 +345,7 @@ func TestMatchesPath_RejectsDeeplyNestedPaths(t *testing.T) {
 }
 
 func TestImportZip_InvalidJSON_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("flows/bad.json", []byte(`{not valid json`)).
@@ -372,7 +358,7 @@ func TestImportZip_InvalidJSON_Returns400(t *testing.T) {
 }
 
 func TestImportZip_InvalidEdgeSchema_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Missing required "source" and "target" fields.
 	invalidEdge := []byte(`{"id":"bad-edge","kind":"http-json"}`)
@@ -399,7 +385,7 @@ func TestImportZip_InvalidEdgeSchema_Returns400(t *testing.T) {
 }
 
 func TestImportZip_MultipleValidationErrors_AllReported(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	invalidFlow := []byte(`{"id":"bad-flow"}`)
 	invalidNode := []byte(`{"id":"bad-node","kind":"eks-service"}`)
@@ -426,7 +412,7 @@ func TestImportZip_MultipleValidationErrors_AllReported(t *testing.T) {
 }
 
 func TestImportZip_NonJsonFilesIgnored(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// ZIP contains a non-JSON file plus a valid flow — should succeed.
 	body := newZipBuilder().
@@ -449,7 +435,7 @@ func TestImportZip_NonJsonFilesIgnored(t *testing.T) {
 }
 
 func TestImportZip_DatasourcesOnly_Returns200(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("datasources.json", validDatasourcesJSON).
@@ -471,14 +457,19 @@ func TestImportZip_DatasourcesOnly_Returns200(t *testing.T) {
 		t.Fatalf("expected zero for other categories, got %+v", result)
 	}
 
-	// Verify on disk.
-	if _, err := os.Stat(filepath.Join(dir, "datasources.json")); err != nil {
-		t.Fatalf("datasources file not on disk: %v", err)
+	// Verify in bundle.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
+	var bundle TopologyBundle
+	if err := json.Unmarshal(rec.Body.Bytes(), &bundle); err != nil {
+		t.Fatalf("unmarshal bundle: %v", err)
+	}
+	if len(bundle.Datasources) != 1 {
+		t.Fatalf("expected 1 datasource in bundle, got %d", len(bundle.Datasources))
 	}
 }
 
 func TestImportZip_AbsolutePath_Returns400(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	body := newZipBuilder().
 		addFile("/flows/evil.json", validFlowJSON).

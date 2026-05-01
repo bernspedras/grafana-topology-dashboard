@@ -1,0 +1,30 @@
+{
+  "kind": "eks-service",
+  "id": "backend-service",
+  "label": "Backend Service",
+  "dataSource": "demo",
+  "namespace": "demo",
+  "metrics": {
+    "cpu": {
+      "query": "demo_cpu_percent{service=\"backend-service\"}",
+      "unit": "percent",
+      "direction": "lower-is-better"
+    },
+    "memory": {
+      "query": "demo_memory_percent{service=\"backend-service\"}",
+      "unit": "percent",
+      "direction": "lower-is-better"
+    },
+    "readyReplicas": {
+      "query": "demo_replicas_ready{service=\"backend-service\"}",
+      "unit": "count",
+      "direction": "higher-is-better"
+    },
+    "desiredReplicas": {
+      "query": "demo_replicas_desired{service=\"backend-service\"}",
+      "unit": "count",
+      "direction": "higher-is-better"
+    }
+  },
+  "deploymentNames": ["backend-service"]
+}

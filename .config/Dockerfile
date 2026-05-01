@@ -26,7 +26,8 @@ RUN if [ "${development}" = "true" ]; then \
     fi
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY setup-service-account.sh /setup-service-account.sh
+RUN chmod +x /entrypoint.sh /setup-service-account.sh
 
 COPY supervisord/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 

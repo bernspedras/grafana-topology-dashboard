@@ -304,10 +304,15 @@ const AppConfig = ({ plugin }: AppConfigProps): React.JSX.Element => {
 
   const onSubmitDs = async (): Promise<void> => {
     const secureJsonData = saToken !== '' ? { serviceAccountToken: saToken } : undefined;
+    // Read the CURRENT jsonData from the Grafana API (not plugin.meta which is
+    // a stale snapshot from page load). This preserves topologyData that was
+    // persisted by the Go backend after the page loaded.
+    const freshSettings = await readPluginJsonData(plugin.meta.id);
     await updatePlugin(plugin.meta.id, {
       enabled,
       pinned,
       jsonData: {
+        ...freshSettings,
         dataSourceMap,
         editAllowList: [...editAllowList],
         baselineWarningPercent: baselineWarning,
@@ -684,4 +689,15 @@ const updatePlugin = async (pluginId: string, data: Partial<PluginMeta<AppSettin
   });
 
   return lastValueFrom(response as never);
+};
+
+/** Read the current jsonData from the Grafana API (not the stale plugin.meta). */
+const readPluginJsonData = async (pluginId: string): Promise<Record<string, unknown>> => {
+  const res = await lastValueFrom(
+    getBackendSrv().fetch<{ jsonData?: Record<string, unknown> }>({
+      url: `/api/plugins/${pluginId}/settings`,
+      method: 'GET',
+    }) as never,
+  );
+  return ((res as { data: { jsonData?: Record<string, unknown> } }).data.jsonData) ?? {};
 };

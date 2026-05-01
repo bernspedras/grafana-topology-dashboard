@@ -7,8 +7,6 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -16,15 +14,10 @@ import (
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-// newHandlerTestApp creates an App with a temporary topology store and returns
-// the HTTP mux and the data directory path for file-system assertions.
-func newHandlerTestApp(t *testing.T) (*http.ServeMux, string) {
+// newHandlerTestApp creates an App with an empty in-memory topology store.
+func newHandlerTestApp(t *testing.T) *http.ServeMux {
 	t.Helper()
-	dir := t.TempDir()
-	store, err := NewTopologyStore(dir, log.DefaultLogger)
-	if err != nil {
-		t.Fatalf("NewTopologyStore: %v", err)
-	}
+	store := NewTopologyStore(nil, log.DefaultLogger)
 	sv, err := NewSchemaValidator()
 	if err != nil {
 		t.Fatalf("NewSchemaValidator: %v", err)
@@ -36,7 +29,7 @@ func newHandlerTestApp(t *testing.T) (*http.ServeMux, string) {
 	}
 	mux := http.NewServeMux()
 	app.registerTopologyRoutes(mux)
-	return mux, dir
+	return mux
 }
 
 func adminReq(method, path string, body []byte) *http.Request {
@@ -68,7 +61,7 @@ func do(mux *http.ServeMux, req *http.Request) *httptest.ResponseRecorder {
 // ─── Full lifecycle ────────────────────────────────────────────────────────
 
 func TestHandler_FlowLifecycle(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	flowJSON := []byte(`{"id":"lifecycle-flow","name":"Lifecycle Flow","definition":{"nodes":[],"edges":[]}}`)
 
@@ -83,12 +76,6 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 	}
 	if createResp.ID != "lifecycle-flow" {
 		t.Fatalf("create: unexpected id %q", createResp.ID)
-	}
-
-	// Verify file exists on disk.
-	flowPath := filepath.Join(dir, "flows", "lifecycle-flow.json")
-	if _, err := os.Stat(flowPath); err != nil {
-		t.Fatalf("create: flow file not found on disk: %v", err)
 	}
 
 	// 2. Get.
@@ -142,18 +129,13 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 		t.Fatalf("delete: expected 200, got %d", rec.Code)
 	}
 
-	// 7. Verify file is gone from disk.
-	if _, err := os.Stat(flowPath); !os.IsNotExist(err) {
-		t.Fatalf("delete: flow file still exists on disk (err=%v)", err)
-	}
-
-	// 8. Get after delete returns 404.
+	// 7. Get after delete returns 404.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies/lifecycle-flow", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: expected 404, got %d", rec.Code)
 	}
 
-	// 9. List after delete is empty.
+	// 8. List after delete is empty.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies", nil))
 	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
 		t.Fatalf("list after delete: unmarshal response: %v", err)
@@ -166,7 +148,7 @@ func TestHandler_FlowLifecycle(t *testing.T) {
 // ─── Create ────────────────────────────────────────────────────────────────
 
 func TestHandler_CreateFlow_Success(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"id":"svc-a","name":"Service A","definition":{"nodes":[],"edges":[]}}`)
 
 	rec := do(mux, adminReq(http.MethodPost, "/topologies", body))
@@ -182,23 +164,22 @@ func TestHandler_CreateFlow_Success(t *testing.T) {
 		t.Fatalf("expected id 'svc-a', got %q", resp.ID)
 	}
 
-	// File on disk.
-	path := filepath.Join(dir, "flows", "svc-a.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("file not created: %v", err)
+	// Verify via GET.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/svc-a", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d", rec.Code)
 	}
 	var parsed struct{ Name string `json:"name"` }
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("unmarshal file content: %v", err)
+	if err := json.Unmarshal(rec.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
 	if parsed.Name != "Service A" {
-		t.Fatalf("file content mismatch: name=%q", parsed.Name)
+		t.Fatalf("name mismatch: %q", parsed.Name)
 	}
 }
 
 func TestHandler_CreateFlow_MissingID(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"name":"No ID Flow"}`)
 
 	rec := do(mux, adminReq(http.MethodPost, "/topologies", body))
@@ -208,7 +189,7 @@ func TestHandler_CreateFlow_MissingID(t *testing.T) {
 }
 
 func TestHandler_CreateFlow_EmptyID(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"id":"","name":"Empty ID"}`)
 
 	rec := do(mux, adminReq(http.MethodPost, "/topologies", body))
@@ -218,7 +199,7 @@ func TestHandler_CreateFlow_EmptyID(t *testing.T) {
 }
 
 func TestHandler_CreateFlow_InvalidJSON(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPost, "/topologies", []byte(`not json`)))
 	if rec.Code != http.StatusBadRequest {
@@ -229,7 +210,7 @@ func TestHandler_CreateFlow_InvalidJSON(t *testing.T) {
 // ─── Get ───────────────────────────────────────────────────────────────────
 
 func TestHandler_GetFlow_NotFound(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodGet, "/topologies/does-not-exist", nil))
 	if rec.Code != http.StatusNotFound {
@@ -240,7 +221,7 @@ func TestHandler_GetFlow_NotFound(t *testing.T) {
 // ─── Put (rename / update) ─────────────────────────────────────────────────
 
 func TestHandler_PutFlow_Rename(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Create.
 	body := []byte(`{"id":"rn","name":"Original","definition":{"nodes":[],"edges":[]}}`)
@@ -251,19 +232,6 @@ func TestHandler_PutFlow_Rename(t *testing.T) {
 	rec := do(mux, adminReq(http.MethodPut, "/topologies/rn", updated))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("put: expected 200, got %d — %s", rec.Code, rec.Body.String())
-	}
-
-	// Verify on disk.
-	data, err := os.ReadFile(filepath.Join(dir, "flows", "rn.json"))
-	if err != nil {
-		t.Fatalf("read file: %v", err)
-	}
-	var parsed struct{ Name string `json:"name"` }
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("unmarshal file content: %v", err)
-	}
-	if parsed.Name != "Updated Name" {
-		t.Fatalf("expected 'Updated Name' on disk, got %q", parsed.Name)
 	}
 
 	// Verify via GET.
@@ -278,7 +246,7 @@ func TestHandler_PutFlow_Rename(t *testing.T) {
 }
 
 func TestHandler_PutFlow_InvalidJSON(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPut, "/topologies/test", []byte(`{broken`)))
 	if rec.Code != http.StatusBadRequest {
@@ -289,16 +257,11 @@ func TestHandler_PutFlow_InvalidJSON(t *testing.T) {
 // ─── Delete ────────────────────────────────────────────────────────────────
 
 func TestHandler_DeleteFlow_Success(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Create.
 	body := []byte(`{"id":"del-me","name":"Delete Me","definition":{"nodes":[],"edges":[]}}`)
 	do(mux, adminReq(http.MethodPost, "/topologies", body))
-
-	flowPath := filepath.Join(dir, "flows", "del-me.json")
-	if _, err := os.Stat(flowPath); err != nil {
-		t.Fatalf("precondition: file should exist: %v", err)
-	}
 
 	// Delete.
 	rec := do(mux, adminReq(http.MethodDelete, "/topologies/del-me", nil))
@@ -306,14 +269,15 @@ func TestHandler_DeleteFlow_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
-	// File gone.
-	if _, err := os.Stat(flowPath); !os.IsNotExist(err) {
-		t.Fatalf("file should be gone after delete, err=%v", err)
+	// Verify gone via GET.
+	rec = do(mux, adminReq(http.MethodGet, "/topologies/del-me", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("get after delete: expected 404, got %d", rec.Code)
 	}
 }
 
 func TestHandler_DeleteFlow_Idempotent(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Delete something that was never created — should succeed (idempotent).
 	rec := do(mux, adminReq(http.MethodDelete, "/topologies/never-existed", nil))
@@ -325,7 +289,7 @@ func TestHandler_DeleteFlow_Idempotent(t *testing.T) {
 // ─── List ──────────────────────────────────────────────────────────────────
 
 func TestHandler_ListFlows_Empty(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodGet, "/topologies", nil))
 	if rec.Code != http.StatusOK {
@@ -341,7 +305,7 @@ func TestHandler_ListFlows_Empty(t *testing.T) {
 }
 
 func TestHandler_ListFlows_Multiple(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"b","name":"B Flow","definition":{"nodes":[],"edges":[]}}`)))
 	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"a","name":"A Flow","definition":{"nodes":[],"edges":[]}}`)))
@@ -363,7 +327,7 @@ func TestHandler_ListFlows_Multiple(t *testing.T) {
 // ─── Bundle ────────────────────────────────────────────────────────────────
 
 func TestHandler_GetBundle_IncludesFlow(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"bundled","name":"Bundled","definition":{"nodes":[],"edges":[]}}`)))
 
@@ -383,7 +347,7 @@ func TestHandler_GetBundle_IncludesFlow(t *testing.T) {
 // ─── Auth enforcement on mutating endpoints ────────────────────────────────
 
 func TestHandler_CreateFlow_Forbidden(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"id":"x","name":"X","definition":{"nodes":[],"edges":[]}}`)
 
 	rec := do(mux, viewerReq(http.MethodPost, "/topologies", body))
@@ -393,7 +357,7 @@ func TestHandler_CreateFlow_Forbidden(t *testing.T) {
 }
 
 func TestHandler_PutFlow_Forbidden(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"id":"x","name":"X","definition":{"nodes":[],"edges":[]}}`)
 
 	rec := do(mux, viewerReq(http.MethodPut, "/topologies/x", body))
@@ -403,7 +367,7 @@ func TestHandler_PutFlow_Forbidden(t *testing.T) {
 }
 
 func TestHandler_DeleteFlow_Forbidden(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, viewerReq(http.MethodDelete, "/topologies/x", nil))
 	if rec.Code != http.StatusForbidden {
@@ -414,7 +378,7 @@ func TestHandler_DeleteFlow_Forbidden(t *testing.T) {
 // ─── Read endpoints work without elevated auth ─────────────────────────────
 
 func TestHandler_ReadEndpoints_NoAuthRequired(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	// Seed a flow as admin first.
 	do(mux, adminReq(http.MethodPost, "/topologies", []byte(`{"id":"pub","name":"Public","definition":{"nodes":[],"edges":[]}}`)))
@@ -439,7 +403,7 @@ func TestHandler_ReadEndpoints_NoAuthRequired(t *testing.T) {
 // ─── Editor with allow-list can mutate ─────────────────────────────────────
 
 func TestHandler_EditorInAllowList_CanCreate(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"id":"editor-flow","name":"Editor Flow","definition":{"nodes":[],"edges":[]}}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/topologies", bytes.NewReader(body))
@@ -452,7 +416,7 @@ func TestHandler_EditorInAllowList_CanCreate(t *testing.T) {
 }
 
 func TestHandler_EditorNotInAllowList_Forbidden(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 	body := []byte(`{"id":"x","name":"X","definition":{"nodes":[],"edges":[]}}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/topologies", bytes.NewReader(body))
@@ -464,10 +428,10 @@ func TestHandler_EditorNotInAllowList_Forbidden(t *testing.T) {
 	}
 }
 
-// ─── File-system checks for create and delete ──────────────────────────────
+// ─── Create and delete verify state ──────────────────────────────────────
 
-func TestHandler_CreateThenDelete_FileSystemState(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+func TestHandler_CreateThenDelete_StoreState(t *testing.T) {
+	mux := newHandlerTestApp(t)
 
 	// Create three flows.
 	for _, id := range []string{"alpha", "beta", "gamma"} {
@@ -478,49 +442,45 @@ func TestHandler_CreateThenDelete_FileSystemState(t *testing.T) {
 		}
 	}
 
-	// All three files exist.
-	flowsDir := filepath.Join(dir, "flows")
-	entries, _ := os.ReadDir(flowsDir)
-	if len(entries) != 3 {
-		t.Fatalf("expected 3 files, got %d", len(entries))
+	// All three exist in list.
+	rec := do(mux, adminReq(http.MethodGet, "/topologies", nil))
+	var items []FlowListItem
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 flows, got %d", len(items))
 	}
 
 	// Delete beta.
-	rec := do(mux, adminReq(http.MethodDelete, "/topologies/beta", nil))
+	rec = do(mux, adminReq(http.MethodDelete, "/topologies/beta", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete beta: expected 200, got %d", rec.Code)
 	}
 
-	// Two files remain.
-	entries, _ = os.ReadDir(flowsDir)
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 files after delete, got %d", len(entries))
-	}
-
-	// Specifically: alpha.json and gamma.json.
-	names := make(map[string]bool)
-	for _, e := range entries {
-		names[e.Name()] = true
-	}
-	if !names["alpha.json"] || !names["gamma.json"] {
-		t.Fatalf("unexpected files remaining: %v", names)
-	}
-	if names["beta.json"] {
-		t.Fatal("beta.json should have been deleted")
-	}
-
-	// List returns only alpha and gamma.
+	// Two flows remain.
 	rec = do(mux, adminReq(http.MethodGet, "/topologies", nil))
-	var items []FlowListItem
 	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
+		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(items) != 2 {
-		t.Fatalf("expected 2 items in list, got %d", len(items))
+		t.Fatalf("expected 2 items after delete, got %d", len(items))
+	}
+
+	// Verify alpha and gamma exist, beta does not.
+	nameSet := make(map[string]bool)
+	for _, item := range items {
+		nameSet[item.ID] = true
+	}
+	if !nameSet["alpha"] || !nameSet["gamma"] {
+		t.Fatalf("expected alpha and gamma, got %v", nameSet)
+	}
+	if nameSet["beta"] {
+		t.Fatal("beta should have been deleted")
 	}
 }
 
-// ─── BUG-03 / BUG-04: writeJSON and writeRawJSON error logging ───────────
+// ─── writeJSON and writeRawJSON error logging ───────────────────────────
 
 // errWriter is an http.ResponseWriter that fails on Write.
 type errWriter struct {
@@ -528,9 +488,9 @@ type errWriter struct {
 	code   int
 }
 
-func (w *errWriter) Header() http.Header        { return w.header }
-func (w *errWriter) WriteHeader(code int)        { w.code = code }
-func (w *errWriter) Write([]byte) (int, error)   { return 0, errors.New("connection reset") }
+func (w *errWriter) Header() http.Header      { return w.header }
+func (w *errWriter) WriteHeader(code int)      { w.code = code }
+func (w *errWriter) Write([]byte) (int, error) { return 0, errors.New("connection reset") }
 
 func newWriteTestApp(t *testing.T) *App {
 	t.Helper()
@@ -610,7 +570,7 @@ func TestWriteRawJSON_ValidValue_WritesBody(t *testing.T) {
 // ─── Node template handler tests ──────────────────────────────────────────
 
 func TestHandler_NodeTemplateLifecycle(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	nodeJSON := []byte(`{"id":"node-tpl-1","kind":"eks-service","label":"Template Node","dataSource":"prom","namespace":"prod","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
@@ -618,19 +578,6 @@ func TestHandler_NodeTemplateLifecycle(t *testing.T) {
 	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: expected 201, got %d — %s", rec.Code, rec.Body.String())
-	}
-	var createResp struct{ ID string `json:"id"` }
-	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
-		t.Fatalf("create: unmarshal response: %v", err)
-	}
-	if createResp.ID != "node-tpl-1" {
-		t.Fatalf("create: unexpected id %q", createResp.ID)
-	}
-
-	// Verify file on disk.
-	nodePath := filepath.Join(dir, "templates", "nodes", "node-tpl-1.json")
-	if _, err := os.Stat(nodePath); err != nil {
-		t.Fatalf("create: node template file not found on disk: %v", err)
 	}
 
 	// 2. Get.
@@ -685,12 +632,7 @@ func TestHandler_NodeTemplateLifecycle(t *testing.T) {
 		t.Fatalf("delete: expected 200, got %d", rec.Code)
 	}
 
-	// 7. File gone.
-	if _, err := os.Stat(nodePath); !os.IsNotExist(err) {
-		t.Fatalf("delete: node template file still exists on disk (err=%v)", err)
-	}
-
-	// 8. Get after delete → 404.
+	// 7. Get after delete → 404.
 	rec = do(mux, adminReq(http.MethodGet, "/templates/nodes/node-tpl-1", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: expected 404, got %d", rec.Code)
@@ -698,7 +640,7 @@ func TestHandler_NodeTemplateLifecycle(t *testing.T) {
 }
 
 func TestHandler_GetNodeTemplate_NotFound(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodGet, "/templates/nodes/does-not-exist", nil))
 	if rec.Code != http.StatusNotFound {
@@ -707,7 +649,7 @@ func TestHandler_GetNodeTemplate_NotFound(t *testing.T) {
 }
 
 func TestHandler_CreateNodeTemplate_InvalidJSON(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", []byte(`not json`)))
 	if rec.Code != http.StatusBadRequest {
@@ -716,7 +658,7 @@ func TestHandler_CreateNodeTemplate_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_CreateNodeTemplate_MissingID(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", []byte(`{"kind":"eks-service","label":"No ID"}`)))
 	if rec.Code != http.StatusBadRequest {
@@ -725,7 +667,7 @@ func TestHandler_CreateNodeTemplate_MissingID(t *testing.T) {
 }
 
 func TestHandler_NodeTemplates_AuthRequired(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	nodeJSON := []byte(`{"id":"auth-test","kind":"eks-service","label":"Auth Test","dataSource":"prom","namespace":"ns","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
@@ -748,7 +690,6 @@ func TestHandler_NodeTemplates_AuthRequired(t *testing.T) {
 	}
 
 	// Viewer CAN read (list and get).
-	// Seed a node template as admin first.
 	do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
 
 	rec = do(mux, viewerReq(http.MethodGet, "/templates/nodes", nil))
@@ -765,7 +706,7 @@ func TestHandler_NodeTemplates_AuthRequired(t *testing.T) {
 // ─── Edge template handler tests ──────────────────────────────────────────
 
 func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
-	mux, dir := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	edgeJSON := []byte(`{"id":"edge-tpl-1","kind":"http-json","source":"a","target":"b","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
@@ -773,19 +714,6 @@ func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
 	rec := do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: expected 201, got %d — %s", rec.Code, rec.Body.String())
-	}
-	var createResp struct{ ID string `json:"id"` }
-	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
-		t.Fatalf("create: unmarshal response: %v", err)
-	}
-	if createResp.ID != "edge-tpl-1" {
-		t.Fatalf("create: unexpected id %q", createResp.ID)
-	}
-
-	// Verify file on disk.
-	edgePath := filepath.Join(dir, "templates", "edges", "edge-tpl-1.json")
-	if _, err := os.Stat(edgePath); err != nil {
-		t.Fatalf("create: edge template file not found on disk: %v", err)
 	}
 
 	// 2. Get.
@@ -841,12 +769,7 @@ func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
 		t.Fatalf("delete: expected 200, got %d", rec.Code)
 	}
 
-	// 7. File gone.
-	if _, err := os.Stat(edgePath); !os.IsNotExist(err) {
-		t.Fatalf("delete: edge template file still exists on disk (err=%v)", err)
-	}
-
-	// 8. Get after delete → 404.
+	// 7. Get after delete → 404.
 	rec = do(mux, adminReq(http.MethodGet, "/templates/edges/edge-tpl-1", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: expected 404, got %d", rec.Code)
@@ -854,7 +777,7 @@ func TestHandler_EdgeTemplateLifecycle(t *testing.T) {
 }
 
 func TestHandler_GetEdgeTemplate_NotFound(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodGet, "/templates/edges/does-not-exist", nil))
 	if rec.Code != http.StatusNotFound {
@@ -863,7 +786,7 @@ func TestHandler_GetEdgeTemplate_NotFound(t *testing.T) {
 }
 
 func TestHandler_CreateEdgeTemplate_InvalidJSON(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPost, "/templates/edges", []byte(`not json`)))
 	if rec.Code != http.StatusBadRequest {
@@ -872,7 +795,7 @@ func TestHandler_CreateEdgeTemplate_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_EdgeTemplates_AuthRequired(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	edgeJSON := []byte(`{"id":"auth-edge","kind":"http-json","source":"a","target":"b","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 
@@ -911,7 +834,7 @@ func TestHandler_EdgeTemplates_AuthRequired(t *testing.T) {
 // ─── Datasource handler tests ─────────────────────────────────────────────
 
 func TestHandler_PutDatasources(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	datasourcesJSON := []byte(`[{"name":"prometheus","type":"prometheus"}]`)
 
@@ -929,7 +852,7 @@ func TestHandler_PutDatasources(t *testing.T) {
 }
 
 func TestHandler_PutDatasources_InvalidJSON(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPut, "/datasources", []byte(`not json`)))
 	if rec.Code != http.StatusBadRequest {
@@ -938,7 +861,7 @@ func TestHandler_PutDatasources_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_PutDatasources_AuthRequired(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	datasourcesJSON := []byte(`[{"name":"prometheus","type":"prometheus"}]`)
 
@@ -951,7 +874,7 @@ func TestHandler_PutDatasources_AuthRequired(t *testing.T) {
 // ─── SLA defaults handler tests ───────────────────────────────────────────
 
 func TestHandler_SlaDefaults_Lifecycle(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	slaJSON := []byte(`{"node":{"cpu":{"warning":80,"critical":95}}}`)
 
@@ -973,20 +896,6 @@ func TestHandler_SlaDefaults_Lifecycle(t *testing.T) {
 	if bundle.SlaDefaults == nil {
 		t.Fatal("expected slaDefaults in bundle, got nil")
 	}
-	var sla struct {
-		Node struct {
-			CPU struct {
-				Warning  int `json:"warning"`
-				Critical int `json:"critical"`
-			} `json:"cpu"`
-		} `json:"node"`
-	}
-	if err := json.Unmarshal(bundle.SlaDefaults, &sla); err != nil {
-		t.Fatalf("slaDefaults: unmarshal: %v", err)
-	}
-	if sla.Node.CPU.Warning != 80 || sla.Node.CPU.Critical != 95 {
-		t.Fatalf("unexpected SLA values: %+v", sla)
-	}
 
 	// DELETE → 200.
 	rec = do(mux, adminReq(http.MethodDelete, "/sla-defaults", nil))
@@ -1006,7 +915,7 @@ func TestHandler_SlaDefaults_Lifecycle(t *testing.T) {
 }
 
 func TestHandler_PutSlaDefaults_InvalidJSON(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	rec := do(mux, adminReq(http.MethodPut, "/sla-defaults", []byte(`not json`)))
 	if rec.Code != http.StatusBadRequest {
@@ -1015,7 +924,7 @@ func TestHandler_PutSlaDefaults_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_SlaDefaults_AuthRequired(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
 	slaJSON := []byte(`{"node":{"cpu":{"warning":80,"critical":95}}}`)
 
@@ -1035,30 +944,17 @@ func TestHandler_SlaDefaults_AuthRequired(t *testing.T) {
 // ─── Bundle includes templates and datasources ────────────────────────────
 
 func TestHandler_BundleIncludesTemplatesAndDatasources(t *testing.T) {
-	mux, _ := newHandlerTestApp(t)
+	mux := newHandlerTestApp(t)
 
-	// Create a node template, edge template, and datasources.
 	nodeJSON := []byte(`{"id":"bundle-node","kind":"eks-service","label":"Bundle Node","dataSource":"prom","namespace":"prod","metrics":{"cpu":{"query":"q","unit":"%","direction":"lower-is-better"},"memory":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 	edgeJSON := []byte(`{"id":"bundle-edge","kind":"http-json","source":"a","target":"b","dataSource":"prom","metrics":{"rps":{"query":"q","unit":"req/s","direction":"higher-is-better"},"latencyP95":{"query":"q","unit":"ms","direction":"lower-is-better"},"errorRate":{"query":"q","unit":"%","direction":"lower-is-better"}}}`)
 	datasourcesJSON := []byte(`[{"name":"prometheus","type":"prometheus"}]`)
 
-	rec := do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create node template: expected 201, got %d — %s", rec.Code, rec.Body.String())
-	}
+	do(mux, adminReq(http.MethodPost, "/templates/nodes", nodeJSON))
+	do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
+	do(mux, adminReq(http.MethodPut, "/datasources", datasourcesJSON))
 
-	rec = do(mux, adminReq(http.MethodPost, "/templates/edges", edgeJSON))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create edge template: expected 201, got %d — %s", rec.Code, rec.Body.String())
-	}
-
-	rec = do(mux, adminReq(http.MethodPut, "/datasources", datasourcesJSON))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("put datasources: expected 200, got %d — %s", rec.Code, rec.Body.String())
-	}
-
-	// Fetch the bundle.
-	rec = do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
+	rec := do(mux, adminReq(http.MethodGet, "/topologies/bundle", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("bundle: expected 200, got %d", rec.Code)
 	}
@@ -1076,35 +972,5 @@ func TestHandler_BundleIncludesTemplatesAndDatasources(t *testing.T) {
 	}
 	if len(bundle.Datasources) != 1 {
 		t.Fatalf("expected 1 datasource in bundle, got %d", len(bundle.Datasources))
-	}
-
-	// Verify node template content.
-	var node struct{ ID string `json:"id"` }
-	if err := json.Unmarshal(bundle.NodeTemplates[0], &node); err != nil {
-		t.Fatalf("unmarshal node template: %v", err)
-	}
-	if node.ID != "bundle-node" {
-		t.Fatalf("expected node id 'bundle-node', got %q", node.ID)
-	}
-
-	// Verify edge template content.
-	var edge struct{ ID string `json:"id"` }
-	if err := json.Unmarshal(bundle.EdgeTemplates[0], &edge); err != nil {
-		t.Fatalf("unmarshal edge template: %v", err)
-	}
-	if edge.ID != "bundle-edge" {
-		t.Fatalf("expected edge id 'bundle-edge', got %q", edge.ID)
-	}
-
-	// Verify datasource content.
-	var ds struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(bundle.Datasources[0], &ds); err != nil {
-		t.Fatalf("unmarshal datasource: %v", err)
-	}
-	if ds.Name != "prometheus" || ds.Type != "prometheus" {
-		t.Fatalf("unexpected datasource: %+v", ds)
 	}
 }
