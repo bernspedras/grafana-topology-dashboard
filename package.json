@@ -1,6 +1,6 @@
 {
   "name": "bernspedras-topology-app",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "scripts": {
     "build": "go run github.com/magefile/mage -v build:linux build:linuxARM64 && webpack -c ./.config/webpack/webpack.config.ts --env production",
     "build:frontend": "webpack -c ./.config/webpack/webpack.config.ts --env production",
